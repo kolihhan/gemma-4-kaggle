@@ -27,8 +27,21 @@ jobs:
         with:
           python-version: "3.12"
       - name: Compile Python tools
-        run: python -m py_compile scripts/mirror_kaggle_to_release.py scripts/restore_full_dataset.py
+        run: python -m py_compile scripts/mirror_kaggle_to_release.py scripts/restore_full_dataset.py scripts/analyze_tasks.py
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
+      - name: Analyze real public task corpus
+        run: |
+          python scripts/analyze_tasks.py tasks.jsonl --per-repo 3 --summary-json /tmp/task-summary.json --sample-json /tmp/task-sample.json
+          python - <<'PY'
+          import json
+          summary = json.load(open('/tmp/task-summary.json'))
+          sample = json.load(open('/tmp/task-sample.json'))
+          assert summary['task_count'] == 129, summary['task_count']
+          assert len(summary['repos']) == 4, summary['repos']
+          assert len(sample) == 12, len(sample)
+          print(json.dumps(summary, indent=2))
+          print('sample_instance_ids=', [x['instance_id'] for x in sample])
+          PY
       - name: Smoke-test restore CLI
         run: python scripts/restore_full_dataset.py --help
