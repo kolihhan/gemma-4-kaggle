@@ -109,12 +109,12 @@ class SubmissionLayoutTests(unittest.TestCase):
         self.assertNotIn("preserve the **smallest defensible patch**", prompt)
         self.assertNotIn("call `submit_patch` as your final tool action to terminate this task once", prompt)
 
-    def test_sampling_starts_from_official_example_values(self):
+    def test_sampling_uses_bounded_12b_thinking_budget(self):
         text = (SUBMISSION / "configs" / "sampling.yaml").read_text(encoding="utf-8")
         self.assertIn("temperature: 0.2", text)
         self.assertIn("top_p: 0.95", text)
         self.assertIn("max_output_tokens: 16384", text)
-        self.assertIn("thinking_budget: 4096", text)
+        self.assertIn("thinking_budget: 1024", text)
         self.assertIn("include_thoughts: true", text)
 
     def test_eval_budget_is_explicitly_bounded(self):
