@@ -1,0 +1,185 @@
+name: Run private E4B one-task smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/run-e4b-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gemma4-e4b-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-e4b-smoke
+      KERNEL_DIR: /tmp/gemma4-e4b-smoke
+      OUTPUT_DIR: /tmp/gemma4-e4b-smoke-output
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Kaggle CLI
+        run: python -m pip install --disable-pip-version-check --upgrade kaggle
+
+      - name: Render private Kaggle smoke kernel from canonical submission
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$KERNEL_DIR" "$OUTPUT_DIR"
+          mkdir -p "$KERNEL_DIR" "$OUTPUT_DIR"
+          python - <<'PY'
+          import base64
+          import json
+          import os
+          from pathlib import Path
+
+          repo = Path.cwd()
+          submission = repo / "submission"
+          runtime_template = repo / "kaggle" / "smoke_runtime.py"
+          kernel_dir = Path(os.environ["KERNEL_DIR"])
+
+          payload = {}
+          for path in sorted(submission.rglob("*")):
+              if path.is_file():
+                  relative = path.relative_to(submission).as_posix()
+                  payload[relative] = path.read_text(encoding="utf-8")
+
+          if "agent.yaml" not in payload:
+              raise SystemExit("canonical submission is missing agent.yaml")
+
+          encoded = base64.b64encode(
+              json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+          ).decode("ascii")
+
+          template = runtime_template.read_text(encoding="utf-8")
+          placeholder = "__SUBMISSION_PAYLOAD_B64__"
+          if template.count(placeholder) != 2:
+              # One occurrence is the constant value and one is the defensive runtime check.
+              raise SystemExit(f"unexpected smoke runtime placeholder count: {template.count(placeholder)}")
+          rendered = template.replace(placeholder, encoded)
+          (kernel_dir / "smoke_e4b.py").write_text(rendered, encoding="utf-8")
+
+          metadata = {
+              "id": "kolihhan/gemma4-e4b-smoke",
+              "title": "Gemma 4 E4B One-Task Smoke",
+              "code_file": "smoke_e4b.py",
+              "language": "python",
+              "kernel_type": "script",
+              "is_private": True,
+              "enable_gpu": True,
+              "enable_tpu": False,
+              "enable_internet": False,
+              "machine_shape": "NvidiaL4",
+              "dataset_sources": ["metric/gemma-4-developer-agent-wheelhouse"],
+              "competition_sources": ["gemma-4-developer-agent"],
+              "kernel_sources": [],
+              "model_sources": [
+                  "google/gemma-4/Other/gemma-4-e4b-it-qat-w4a16-ct/2"
+              ],
+          }
+          (kernel_dir / "kernel-metadata.json").write_text(
+              json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
+          )
+
+          print("rendered_submission_files=", sorted(payload))
+          print("rendered_runtime_bytes=", (kernel_dir / "smoke_e4b.py").stat().st_size)
+          print((kernel_dir / "kernel-metadata.json").read_text(encoding="utf-8"))
+          PY
+
+      - name: Push private Kaggle L4 kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle kernels push -p "$KERNEL_DIR" --accelerator NvidiaL4 -t 3600
+
+      - name: Poll Kaggle kernel to terminal state
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 150); do
+            status_output="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            printf '[%03d] %s\n' "$attempt" "$status_output"
+            lower="$(printf '%s' "$status_output" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then
+              terminal="complete"
+              break
+            fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then
+              terminal="error"
+              break
+            fi
+            sleep 25
+          done
+          if [[ -z "$terminal" ]]; then
+            terminal="timeout"
+          fi
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          echo "Kaggle terminal state: $terminal"
+
+      - name: Collect Kaggle logs and outputs
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          mkdir -p "$OUTPUT_DIR"
+          kaggle kernels logs "$KERNEL_REF" > "$OUTPUT_DIR/kernel.log" 2>&1
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o > "$OUTPUT_DIR/output-download.log" 2>&1
+          echo "Collected files:"
+          find "$OUTPUT_DIR" -maxdepth 3 -type f -printf '%P %s bytes\n' | sort
+          if [[ -f "$OUTPUT_DIR/smoke_result.json" ]]; then
+            echo "--- smoke_result.json ---"
+            cat "$OUTPUT_DIR/smoke_result.json"
+          fi
+          if [[ -f "$OUTPUT_DIR/smoke_patch.diff" ]]; then
+            echo "--- smoke_patch.diff (first 200 lines) ---"
+            sed -n '1,200p' "$OUTPUT_DIR/smoke_patch.diff"
+          fi
+          echo "--- kernel.log tail ---"
+          tail -n 200 "$OUTPUT_DIR/kernel.log" || true
+
+      - name: Assert smoke produced a structured result
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.poll.outputs.terminal }}" != "complete" ]]; then
+            echo "Kaggle kernel did not complete successfully: ${{ steps.poll.outputs.terminal }}" >&2
+            exit 1
+          fi
+          test -f "$OUTPUT_DIR/smoke_result.json"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          result_path = Path(os.environ["OUTPUT_DIR"]) / "smoke_result.json"
+          result = json.loads(result_path.read_text(encoding="utf-8"))
+          print(json.dumps(result, indent=2, sort_keys=True))
+          assert result.get("instance_id") == "httpx_3672", result
+          assert result.get("model") == "gemma-4-e4b-it-qat-w4a16-ct", result
+          if result.get("status") != "completed":
+              raise SystemExit(f"smoke runtime error: {result}")
+          PY
+
+      - name: Upload smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemma4-e4b-smoke-evidence
+          path: /tmp/gemma4-e4b-smoke-output
+          if-no-files-found: warn
+          retention-days: 14
