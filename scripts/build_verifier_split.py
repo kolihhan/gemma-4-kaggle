@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Build a deterministic leakage-safe train/holdout split for verifier LoRA v0."""
+"""Build and maintain a deterministic leakage-safe verifier LoRA v0 split."""
 
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 from collections import Counter, defaultdict
@@ -72,6 +73,21 @@ def _stable_key(instance_id: str) -> tuple[str, str]:
     return digest, instance_id
 
 
+def _bucket_sort_key(bucket: str) -> int:
+    try:
+        return PATCH_BUCKET_ORDER.index(bucket)
+    except ValueError:
+        return len(PATCH_BUCKET_ORDER)
+
+
+def _manifest_sort_key(item: dict) -> tuple[str, int, str]:
+    return (
+        str(item.get("repo") or ""),
+        _bucket_sort_key(str(item.get("patch_bucket") or "")),
+        str(item.get("instance_id") or ""),
+    )
+
+
 def _manifest_item(task: dict) -> dict[str, str]:
     return {
         "instance_id": str(task.get("instance_id") or ""),
@@ -105,6 +121,109 @@ def _choose_holdout(candidates: list[dict], quota: int, repo: str) -> list[dict]
         if not progressed:
             raise RuntimeError(f"unable to satisfy holdout quota for {repo}")
     return selected
+
+
+def _validate_manifest_item(item: dict, *, where: str) -> None:
+    if not isinstance(item, dict):
+        raise ValueError(f"{where} item must be an object")
+    for key in ("instance_id", "repo", "patch_bucket"):
+        if not str(item.get(key) or ""):
+            raise ValueError(f"{where} item missing {key}: {item!r}")
+
+
+def replace_confounded_holdout(split: dict, confounded_ids: set[str]) -> dict:
+    """Replace failed gold-control holdout slots from the current train pool.
+
+    Each replacement must match the failed task's repository and patch-size
+    bucket. Selection is the stable SHA-256 minimum among current training
+    candidates for that exact slot. Failed holdout tasks move permanently to
+    ``excluded`` and never re-enter training.
+    """
+    if split.get("version") != VERSION:
+        raise ValueError(f"unexpected split version: {split.get('version')!r}")
+    confounded = {str(value) for value in confounded_ids if str(value)}
+    if not confounded:
+        return copy.deepcopy(split)
+
+    result = copy.deepcopy(split)
+    holdout = list(result.get("holdout") or [])
+    train = list(result.get("train") or [])
+    excluded = list(result.get("excluded") or [])
+    for item in holdout:
+        _validate_manifest_item(item, where="holdout")
+    for item in train:
+        _validate_manifest_item(item, where="train")
+    for item in excluded:
+        _validate_manifest_item(item, where="excluded")
+
+    holdout_by_id = {str(item["instance_id"]): item for item in holdout}
+    missing = sorted(confounded - set(holdout_by_id))
+    if missing:
+        raise ValueError(f"confounded id(s) are not in current holdout: {missing}")
+
+    replacement_log: list[dict[str, str]] = []
+    for failed_id in sorted(confounded, key=lambda value: _manifest_sort_key(holdout_by_id[value])):
+        failed = holdout_by_id[failed_id]
+        repo = str(failed["repo"])
+        bucket = str(failed["patch_bucket"])
+        candidates = [
+            item
+            for item in train
+            if str(item.get("repo")) == repo and str(item.get("patch_bucket")) == bucket
+        ]
+        if not candidates:
+            raise ValueError(
+                f"no same repo/bucket replacement candidate for {failed_id}: {repo} / {bucket}"
+            )
+        replacement = min(candidates, key=lambda item: _stable_key(str(item["instance_id"])))
+        replacement_id = str(replacement["instance_id"])
+
+        train = [item for item in train if str(item.get("instance_id")) != replacement_id]
+        holdout = [item for item in holdout if str(item.get("instance_id")) != failed_id]
+        holdout.append(copy.deepcopy(replacement))
+        excluded.append({**copy.deepcopy(failed), "reason": "gold_control_confounded"})
+        replacement_log.append(
+            {
+                "from": failed_id,
+                "to": replacement_id,
+                "repo": repo,
+                "patch_bucket": bucket,
+            }
+        )
+
+    holdout.sort(key=_manifest_sort_key)
+    train.sort(key=_manifest_sort_key)
+    excluded.sort(key=_manifest_sort_key)
+
+    holdout_repo_counts = Counter(str(item["repo"]) for item in holdout)
+    total_input = int((result.get("counts") or {}).get("total_input") or (len(holdout) + len(train) + len(excluded)))
+    selection = dict(result.get("selection") or {})
+    rounds = list(selection.get("gold_control_replacement_rounds") or [])
+    rounds.append(
+        {
+            "round": len(rounds) + 1,
+            "reason": "gold_control_confounded",
+            "replacements": replacement_log,
+        }
+    )
+    selection["gold_control_replacement_rounds"] = rounds
+
+    result.update(
+        {
+            "selection": selection,
+            "holdout": holdout,
+            "train": train,
+            "excluded": excluded,
+            "counts": {
+                "total_input": total_input,
+                "train": len(train),
+                "holdout": len(holdout),
+                "excluded": len(excluded),
+                "holdout_by_repo": dict(sorted(holdout_repo_counts.items())),
+            },
+        }
+    )
+    return result
 
 
 def build_split(
@@ -147,10 +266,10 @@ def build_split(
     ]
 
     holdout_manifest = [_manifest_item(task) for task in holdout_tasks]
-    holdout_manifest.sort(key=lambda item: (item["repo"], PATCH_BUCKET_ORDER.index(item["patch_bucket"]), item["instance_id"]))
+    holdout_manifest.sort(key=_manifest_sort_key)
     train_manifest = [_manifest_item(task) for task in train_tasks]
-    train_manifest.sort(key=lambda item: (item["repo"], item["instance_id"]))
-    excluded_items.sort(key=lambda item: (item["repo"], item["instance_id"]))
+    train_manifest.sort(key=_manifest_sort_key)
+    excluded_items.sort(key=_manifest_sort_key)
 
     holdout_by_repo = Counter(item["repo"] for item in holdout_manifest)
     return {
@@ -176,6 +295,8 @@ def build_split(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("tasks", nargs="?", type=Path, default=Path("tasks.jsonl"))
+    parser.add_argument("--input-manifest", type=Path)
+    parser.add_argument("--replace-confounded", nargs="*", default=[])
     parser.add_argument(
         "--output",
         type=Path,
@@ -183,7 +304,16 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    split = build_split(load_jsonl(args.tasks))
+    if args.input_manifest is not None:
+        if not args.replace_confounded:
+            parser.error("--input-manifest requires one or more --replace-confounded IDs")
+        split = json.loads(args.input_manifest.read_text(encoding="utf-8"))
+        split = replace_confounded_holdout(split, set(args.replace_confounded))
+    else:
+        if args.replace_confounded:
+            parser.error("--replace-confounded requires --input-manifest")
+        split = build_split(load_jsonl(args.tasks))
+
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(split, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
