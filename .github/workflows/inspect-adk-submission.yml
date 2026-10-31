@@ -22,7 +22,7 @@ jobs:
           python-version: "3.12"
       - name: Install Kaggle CLI
         run: python -m pip install --disable-pip-version-check --upgrade kaggle
-      - name: Download only current adk-submission wheel and inspect nested model discovery
+      - name: Download current adk-submission wheel and inspect include semantics
         shell: bash
         run: |
           set -euo pipefail
@@ -31,17 +31,13 @@ jobs:
           kaggle datasets files metric/gemma-4-developer-agent-wheelhouse --page-size 200 > /tmp/wheel-files.txt
           wheel="$(awk 'tolower($0) ~ /adk[_-]submission/ && $0 ~ /\.whl/ {print $1; exit}' /tmp/wheel-files.txt)"
           test -n "$wheel"
-          echo "wheel=$wheel"
           kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel" -p /tmp/adk-wheel --unzip
           actual="$(find /tmp/adk-wheel -type f -name '*adk*submission*.whl' | head -n1)"
           test -n "$actual"
           python -m zipfile -e "$actual" /tmp/adk-src
 
-          echo '--- discover_declared_models ---'
-          sed -n '640,805p' /tmp/adk-src/adk_submission/discovery.py
-          echo '--- CompilationContext.resolve_sub_config_path ---'
-          sed -n '80,135p' /tmp/adk-src/adk_submission/context.py
-          echo '--- workflow compiler ---'
-          sed -n '215,275p' /tmp/adk-src/adk_submission/compiler.py
-          sed -n '35,90p' /tmp/adk-src/adk_submission/builders/workflows.py
-          sed -n '35,85p' /tmp/adk-src/adk_submission/builders/sub_agents.py
+          echo '--- yaml_loader include implementation ---'
+          grep -nE 'include|construct|current|base|root' /tmp/adk-src/adk_submission/yaml_loader.py | head -n 220
+          sed -n '1,280p' /tmp/adk-src/adk_submission/yaml_loader.py
+          echo '--- documented include examples ---'
+          grep -RniE '!include|include.*prompt|include.*config' /tmp/adk-src/adk_submission | head -n 220
