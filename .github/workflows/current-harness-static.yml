@@ -38,14 +38,12 @@ jobs:
           echo "wheelhouse files:"
           find /tmp/scorer-wheelhouse -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
 
-      - name: Install scorer wheelhouse exactly like official starter
+      - name: Prepare scorer wheelhouse filenames
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           import shutil
-          import subprocess
-          import sys
           from pathlib import Path
 
           src = Path('/tmp/scorer-wheelhouse')
@@ -61,12 +59,35 @@ jobs:
                       target.symlink_to(wheel)
                   except OSError:
                       shutil.copyfile(wheel, target)
-          wheels = sorted(str(p) for p in dst.glob('*.whl'))
-          print('installing wheel_count=', len(wheels))
+          wheels = sorted(dst.glob('*.whl'))
+          print('prepared wheel_count=', len(wheels))
           if not wheels:
               raise SystemExit('no scorer wheels found')
-          subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '--no-deps', '--force-reinstall', *wheels], check=True)
           PY
+
+      - name: Resolve runtime dependencies for vanilla GitHub runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Kaggle's notebook image already contains the base Python/ML dependency stack,
+          # which is why the official starter can install the wheelhouse with --no-deps.
+          # A vanilla GitHub runner does not, so resolve the two competition packages and
+          # their dependencies first while preferring the official wheelhouse versions.
+          python -m pip install --disable-pip-version-check \
+            --find-links /tmp/wheelhouse-fixed \
+            /tmp/wheelhouse-fixed/adk_submission-*.whl \
+            /tmp/wheelhouse-fixed/swegemma-*.whl
+
+      - name: Pin official scorer wheel versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' wheels < <(find /tmp/wheelhouse-fixed -maxdepth 1 -type f -o -type l | grep -z '\.whl$' || true)
+          if [[ ${#wheels[@]} -eq 0 ]]; then
+            echo "no scorer wheels found" >&2
+            exit 1
+          fi
+          python -m pip install -q --no-deps --force-reinstall "${wheels[@]}"
 
       - name: Validate canonical E4B submission with current packages
         shell: bash
