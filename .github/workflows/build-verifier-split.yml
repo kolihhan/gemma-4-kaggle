@@ -1,0 +1,31 @@
+name: Build verifier LoRA split
+
+on:
+  push:
+    branches: [exp/verifier-lora-v0]
+    paths:
+      - "scripts/build_verifier_split.py"
+      - "tasks.jsonl"
+      - ".github/workflows/build-verifier-split.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build split manifest
+        run: python scripts/build_verifier_split.py tasks.jsonl --output /tmp/verifier-lora-split-v0.json
+      - name: Upload split manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: verifier-lora-split-v0
+          path: /tmp/verifier-lora-split-v0.json
+          if-no-files-found: error
+          retention-days: 14
