@@ -1,4 +1,4 @@
-# Read-only status probe for the current coder-verifier experiment.
+# Second read-only status probe for the current coder-verifier experiment.
 name: Probe E4B smoke status
 
 on:
