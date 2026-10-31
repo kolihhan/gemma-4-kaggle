@@ -1,4 +1,4 @@
-name: Inspect current competition wheelhouse
+name: Validate current scorer wheelhouse
 
 on:
   push:
@@ -11,13 +11,13 @@ permissions:
   contents: read
 
 jobs:
-  inspect:
+  validate:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
-      COMPETITION: gemma-4-developer-agent
-      SMOKE_TASK: httpx_3672
+      WHEELHOUSE: metric/gemma-4-developer-agent-wheelhouse
+      MODEL_NAME: gemma-4-e4b-it-qat-w4a16-ct
 
     steps:
       - uses: actions/checkout@v4
@@ -29,84 +29,72 @@ jobs:
       - name: Install Kaggle client
         run: python -m pip install --disable-pip-version-check --upgrade kaggle
 
-      - name: Exhaust inventory and download current wheelhouse
+      - name: Download current official scorer wheelhouse
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/scorer-wheelhouse
+          kaggle datasets download -d "$WHEELHOUSE" -p /tmp/scorer-wheelhouse --unzip
+          echo "wheelhouse files:"
+          find /tmp/scorer-wheelhouse -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
+
+      - name: Install scorer wheelhouse exactly like official starter
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
-          import json
-          import os
+          import shutil
+          import subprocess
+          import sys
           from pathlib import Path
-          from kaggle.api.kaggle_api_extended import KaggleApi
 
-          competition = os.environ["COMPETITION"]
-          smoke_task = os.environ["SMOKE_TASK"]
-          api = KaggleApi()
-          api.authenticate()
-
-          files = []
-          token = None
-          while True:
-              response = api.competition_list_files(competition, page_token=token, page_size=200)
-              files.extend(list(response.files or []))
-              token = getattr(response, "next_page_token", None)
-              if not token:
-                  break
-
-          names = [f.name for f in files]
-          print(f"TOTAL_FILES={len(names)}")
-          print("WHEEL_FILES:")
-          for name in names:
-              if name.startswith("wheels/"):
-                  print(name)
-          print("SAMPLE_SUBMISSION_FILES:")
-          for name in names:
-              if name.startswith("sample_submission/"):
-                  print(name)
-
-          task = None
-          with open("tasks.jsonl", encoding="utf-8") as fh:
-              for line in fh:
-                  row = json.loads(line)
-                  if row.get("instance_id") == smoke_task:
-                      task = row
-                      break
-          if task is None:
-              raise SystemExit(f"missing smoke task {smoke_task}")
-
-          safe = {k: v for k, v in task.items() if k not in {"patch", "test_patch"}}
-          print("SMOKE_TASK_METADATA=", json.dumps(safe, indent=2, sort_keys=True))
-          base_commit = str(task.get("base_commit", ""))
-          repo_short = str(task.get("repo", "")).split("/")[-1].lower()
-          print("SMOKE_RELATED_FILES:")
-          for name in names:
-              low = name.lower()
-              if (base_commit and base_commit in name) or (repo_short and repo_short in low and (low.startswith("snapshots/") or low.startswith("graphs/") or low.startswith("embeddings/"))):
-                  print(name)
-
-          out = Path("/tmp/current-wheelhouse")
-          out.mkdir(parents=True, exist_ok=True)
-          wheel_names = [n for n in names if n.startswith("wheels/") and n.endswith(".whl")]
-          if not wheel_names:
-              raise SystemExit("no wheel files found")
-          for name in wheel_names:
-              print("DOWNLOADING", name)
-              api.competition_download_file(competition, name, path=str(out), force=True, quiet=False)
-
-          print("DOWNLOADED_WHEELS:")
-          for path in sorted(out.rglob("*.whl")):
-              print(path, path.stat().st_size)
+          src = Path('/tmp/scorer-wheelhouse')
+          dst = Path('/tmp/wheelhouse-fixed')
+          dst.mkdir(parents=True, exist_ok=True)
+          for wheel in src.glob('*.whl'):
+              if 'cutlass' in wheel.name.lower():
+                  continue
+              name = wheel.name.replace('cu128', '+cu128') if ('cu128' in wheel.name and '+' not in wheel.name) else wheel.name
+              target = dst / name
+              if not target.exists():
+                  try:
+                      target.symlink_to(wheel)
+                  except OSError:
+                      shutil.copyfile(wheel, target)
+          wheels = sorted(str(p) for p in dst.glob('*.whl'))
+          print('installing wheel_count=', len(wheels))
+          if not wheels:
+              raise SystemExit('no scorer wheels found')
+          subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '--no-deps', '--force-reinstall', *wheels], check=True)
           PY
 
-      - name: Install competition wheels
+      - name: Validate canonical E4B submission with current packages
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -d '' wheels < <(find /tmp/current-wheelhouse -type f -name '*.whl' -print0)
-          printf 'wheel_count=%s\n' "${#wheels[@]}"
-          python -m pip install --disable-pip-version-check "${wheels[@]}"
+          python - <<'PY'
+          import importlib.metadata
+          from pathlib import Path
+          from adk_submission import validate_directory
+          from adk_submission.discovery import discover_declared_models
+          from swegemma.config import build_submission_limits
 
-      - name: Inspect installed harness and E4B compatibility surface
+          submission = Path('submission')
+          limits, generation_constraints = build_submission_limits()
+          validate_directory(submission, limits=limits)
+          models = discover_declared_models(submission)
+          print('declared_models=', sorted(models))
+          assert models == {'gemma-4-e4b-it-qat-w4a16-ct'}, models
+
+          for pkg in ('swegemma', 'adk-submission', 'adk-eval-core', 'google-adk', 'vllm'):
+              try:
+                  print(pkg, importlib.metadata.version(pkg))
+              except importlib.metadata.PackageNotFoundError:
+                  print(pkg, 'NOT_INSTALLED')
+          print('STATIC_E4B_SUBMISSION_VALID=1')
+          PY
+
+      - name: Inspect current package support surface
         shell: bash
         run: |
           set -euo pipefail
@@ -114,18 +102,23 @@ jobs:
           swegemma eval --help
           python - <<'PY'
           import importlib
-          import inspect
           from pathlib import Path
 
-          for package_name in ("swegemma", "adk_submission", "adk_eval_core"):
+          needles = (
+              'gemma-4-e4b-it-qat-w4a16-ct',
+              'gemma-4-e2b-it-qat-w4a16-ct',
+              'gemma-4-12b-it-qat-w4a16-ct',
+              'ALLOWED_MODEL_NAMES',
+          )
+          for package_name in ('swegemma', 'adk_submission'):
               mod = importlib.import_module(package_name)
               root = Path(mod.__file__).resolve().parent
-              print(f"PACKAGE {package_name}: {root}")
-              for py in sorted(root.rglob("*.py")):
-                  text = py.read_text(encoding="utf-8", errors="ignore")
-                  if "gemma-4-e4b-it-qat-w4a16-ct" in text or "ALLOWED_MODEL_NAMES" in text or "validate_directory" in text or "validate_single_declared_model" in text:
-                      print(f"--- {py.relative_to(root)} ---")
-                      for line_no, line in enumerate(text.splitlines(), 1):
-                          if any(term in line for term in ("gemma-4-e4b-it-qat-w4a16-ct", "ALLOWED_MODEL_NAMES", "validate_directory", "validate_single_declared_model")):
-                              print(f"{line_no}: {line}")
+              print('PACKAGE_ROOT', package_name, root)
+              for py in sorted(root.rglob('*.py')):
+                  text = py.read_text(encoding='utf-8', errors='ignore')
+                  hits = [(i, line) for i, line in enumerate(text.splitlines(), 1) if any(n in line for n in needles)]
+                  if hits:
+                      print('---', py.relative_to(root), '---')
+                      for line_no, line in hits:
+                          print(f'{line_no}: {line}')
           PY
