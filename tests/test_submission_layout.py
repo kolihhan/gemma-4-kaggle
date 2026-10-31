@@ -7,42 +7,67 @@ SUBMISSION = ROOT / "submission"
 
 
 class SubmissionLayoutTests(unittest.TestCase):
-    def test_minimal_e4b_baseline_files_exist(self):
+    def test_minimal_e4b_submission_files_exist(self):
         for relative in (
             "agent.yaml",
             "eval_config.yaml",
             "configs/sampling.yaml",
-            "prompts/system.md",
+            "sub_agents/coder.yaml",
+            "sub_agents/verifier.yaml",
+            "prompts/coder.md",
+            "prompts/verifier.md",
         ):
             self.assertTrue((SUBMISSION / relative).is_file(), relative)
 
-    def test_agent_is_single_e4b_agent_with_bounded_edit_tools(self):
-        text = (SUBMISSION / "agent.yaml").read_text(encoding="utf-8")
-        self.assertIn("model: gemma-4-e4b-it-qat-w4a16-ct", text)
-        self.assertNotIn("adapter:", text)
-        self.assertNotIn("sub_agents:", text)
-        for tool in (
-            "run_command",
-            "read_file",
-            "edit_file",
-            "get_status",
-            "submit_patch",
-            "get_code_neighbors",
-            "search_similar_code",
-            "get_code_subgraph",
-        ):
-            self.assertIn(f"- {tool}", text)
-        self.assertNotIn("- write_file", text)
+    def test_root_is_exactly_two_stage_sequential_agent(self):
+        root = (SUBMISSION / "agent.yaml").read_text(encoding="utf-8")
+        self.assertIn("agent_class: SequentialAgent", root)
+        self.assertIn("name: swe_e4b_coder_verifier", root)
+        self.assertEqual(root.count("config_path:"), 2)
+        self.assertIn("config_path: sub_agents/coder.yaml", root)
+        self.assertIn("config_path: sub_agents/verifier.yaml", root)
+        self.assertNotIn("model:", root)
+        self.assertNotIn("submit_patch", root)
 
-    def test_edit_fallback_is_bounded_before_submission(self):
-        prompt = (SUBMISSION / "prompts" / "system.md").read_text(encoding="utf-8")
+    def test_coder_and_verifier_share_e4b_but_only_verifier_can_submit(self):
+        coder = (SUBMISSION / "sub_agents" / "coder.yaml").read_text(encoding="utf-8")
+        verifier = (SUBMISSION / "sub_agents" / "verifier.yaml").read_text(encoding="utf-8")
+
+        for text in (coder, verifier):
+            self.assertIn("model: gemma-4-e4b-it-qat-w4a16-ct", text)
+            self.assertNotIn("adapter:", text)
+            self.assertNotIn("- write_file", text)
+            self.assertIn("- run_command", text)
+            self.assertIn("- read_file", text)
+            self.assertIn("- edit_file", text)
+            self.assertIn("- get_status", text)
+
+        self.assertNotIn("- submit_patch", coder)
+        self.assertIn("- submit_patch", verifier)
+        self.assertIn("{problem_description}", coder)
+        self.assertIn("{problem_description}", verifier)
+
+    def test_coder_keeps_bounded_edit_and_test_policy(self):
+        prompt = (SUBMISSION / "prompts" / "coder.md").read_text(encoding="utf-8")
         for phrase in (
             "After two failed `edit_file` attempts",
             "tiny `run_command` script",
             "assert the exact old text",
             "inspect `git diff`",
-            "targeted verification is failing",
-            "call `submit_patch`",
+            "targeted verification",
+            "Do not submit",
+        ):
+            self.assertIn(phrase, prompt)
+
+    def test_verifier_owns_final_test_repair_and_submit_gate(self):
+        prompt = (SUBMISSION / "prompts" / "verifier.md").read_text(encoding="utf-8")
+        for phrase in (
+            "Start from the existing working tree",
+            "inspect `git diff`",
+            "targeted verification",
+            "one evidence-backed narrow repair",
+            "Do not call `submit_patch` while targeted verification is failing",
+            "call `submit_patch` as your final tool action",
         ):
             self.assertIn(phrase, prompt)
 
