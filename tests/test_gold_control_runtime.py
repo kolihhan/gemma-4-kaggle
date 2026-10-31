@@ -12,7 +12,7 @@ class GoldControlRuntimeContractTests(unittest.TestCase):
 
     def test_gold_control_uses_current_verifier_without_running_agent(self):
         text = RUNTIME.read_text(encoding="utf-8")
-        self.assertIn('CONTROL_TASK_ID = "httpx_3672"', text)
+        self.assertIn('CONTROL_TASK_ID = "rich_3278"', text)
         self.assertIn("verify_task", text)
         self.assertIn("_hydrate_task_from_secret", text)
         self.assertIn("resolve_task_snapshot_paths", text)
