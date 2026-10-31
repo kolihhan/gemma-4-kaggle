@@ -18,17 +18,17 @@ RUNTIME = ROOT / "kaggle" / "gold_control_sweep.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "run-verifier-gold-sweep.yml"
 EXPECTED_HOLDOUT_IDS = {
     "rich_3067",
-    "rich_3064",
+    "rich_3130",
     "rich_3942",
-    "rich_4070",
+    "rich_3061",
     "fastapi_13920",
-    "fastapi_14297",
+    "fastapi_14463",
     "fastapi_14077",
-    "fastapi_14583",
-    "fastapi_14371",
-    "fastapi_15030",
-    "requests_6629",
-    "requests_7505",
+    "fastapi_15023",
+    "fastapi_14605",
+    "fastapi_14851",
+    "requests_6589",
+    "requests_7309",
 }
 
 
@@ -50,7 +50,7 @@ class GoldControlSweepTests(unittest.TestCase):
 
         self.assertNotIn(EMBEDDED_MANIFEST_MARKER, rendered)
         self.assertIn("rich_3067", rendered)
-        self.assertIn("requests_7505", rendered)
+        self.assertIn("requests_7309", rendered)
         compile(rendered, "gold_control_sweep.py", "exec")
 
     def test_workflow_loads_renderer_by_path_not_kaggle_package_import(self):
