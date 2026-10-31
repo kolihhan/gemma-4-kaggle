@@ -27,12 +27,18 @@ class SubmissionLayoutTests(unittest.TestCase):
             "edit_file",
             "write_file",
             "get_status",
-            "submit_patch",
             "get_code_neighbors",
             "search_similar_code",
             "get_code_subgraph",
         ):
             self.assertIn(f"- {tool}", text)
+
+    def test_baseline_uses_harness_patch_recovery_instead_of_premature_submit(self):
+        agent = (SUBMISSION / "agent.yaml").read_text(encoding="utf-8")
+        prompt = (SUBMISSION / "prompts" / "system.md").read_text(encoding="utf-8")
+        self.assertNotIn("- submit_patch", agent)
+        self.assertIn("automatic patch recovery", prompt)
+        self.assertIn("stop with a final response only after targeted verification passes", prompt)
 
     def test_sampling_starts_from_official_example_values(self):
         text = (SUBMISSION / "configs" / "sampling.yaml").read_text(encoding="utf-8")
