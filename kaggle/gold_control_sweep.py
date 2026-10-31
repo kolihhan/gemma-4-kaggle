@@ -31,9 +31,50 @@ _BUNDLED_MANIFEST_PATH = Path(__file__).with_name("verifier-lora-split-v0.json")
 _REPO_MANIFEST_PATH = Path(__file__).resolve().parents[1] / "docs" / "evaluation" / "verifier-lora-split-v0.json"
 HOLDOUT_MANIFEST_PATH = _BUNDLED_MANIFEST_PATH if _BUNDLED_MANIFEST_PATH.is_file() else _REPO_MANIFEST_PATH
 
+# Kaggle script kernels stage only code_file as /kaggle/src/script.py. The
+# workflow replaces the single contiguous marker below with the frozen manifest
+# before pushing the kernel. Keep the exported marker split here so the rendered
+# script contains zero unresolved full markers.
+EMBEDDED_MANIFEST_MARKER = "__VERIFIER_LORA_" + "HOLDOUT_MANIFEST_JSON__"
+EMBEDDED_HOLDOUT_MANIFEST_JSON = "__VERIFIER_LORA_HOLDOUT_MANIFEST_JSON__"
 
-def load_holdout_items(path: Path = HOLDOUT_MANIFEST_PATH) -> list[dict[str, str]]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
+
+def render_kernel_source(source_text: str, manifest_text: str) -> str:
+    """Embed the frozen split manifest into the single-file Kaggle runtime."""
+    payload = json.loads(manifest_text)
+    if payload.get("version") != "verifier-lora-v0":
+        raise ValueError(f"unexpected split version: {payload.get('version')!r}")
+    needle = f'EMBEDDED_HOLDOUT_MANIFEST_JSON = "{EMBEDDED_MANIFEST_MARKER}"'
+    if source_text.count(needle) != 1:
+        raise ValueError("gold sweep runtime must contain exactly one manifest marker assignment")
+    return source_text.replace(
+        needle,
+        f"EMBEDDED_HOLDOUT_MANIFEST_JSON = {manifest_text!r}",
+        1,
+    )
+
+
+def _manifest_payload(path: Path | None) -> dict:
+    if path is not None:
+        text = path.read_text(encoding="utf-8")
+    elif _BUNDLED_MANIFEST_PATH.is_file():
+        text = _BUNDLED_MANIFEST_PATH.read_text(encoding="utf-8")
+    elif _REPO_MANIFEST_PATH.is_file():
+        text = _REPO_MANIFEST_PATH.read_text(encoding="utf-8")
+    elif EMBEDDED_HOLDOUT_MANIFEST_JSON != EMBEDDED_MANIFEST_MARKER:
+        text = EMBEDDED_HOLDOUT_MANIFEST_JSON
+    else:
+        raise FileNotFoundError(
+            "holdout manifest unavailable: expected repo/bundled file or rendered embedded manifest"
+        )
+    payload = json.loads(text)
+    if not isinstance(payload, dict):
+        raise ValueError("holdout manifest must be a JSON object")
+    return payload
+
+
+def load_holdout_items(path: Path | None = None) -> list[dict[str, str]]:
+    payload = _manifest_payload(path)
     if payload.get("version") != "verifier-lora-v0":
         raise ValueError(f"unexpected split version: {payload.get('version')!r}")
 
@@ -284,7 +325,7 @@ async def run_sweep() -> dict[str, object]:
         "version": "verifier-lora-v0",
         "status": "completed",
         "control": "gold_reference_patch",
-        "manifest_path": HOLDOUT_MANIFEST_PATH.name,
+        "manifest_source": "embedded" if EMBEDDED_HOLDOUT_MANIFEST_JSON != EMBEDDED_MANIFEST_MARKER else HOLDOUT_MANIFEST_PATH.name,
         **summary,
         "results": results,
     }
