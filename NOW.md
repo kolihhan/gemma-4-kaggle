@@ -27,6 +27,7 @@ Why E4B first:
 - The deterministic `per_repo=3` diagnostic sample has **10 tasks**, not 12, because HTTPX has only one public task.
 - Harness mechanics expose 9 tools: `run_command`, `submit_patch`, `get_status`, `read_file`, `edit_file`, `write_file`, `get_code_neighbors`, `search_similar_code`, `get_code_subgraph`.
 - Sandbox is offline; dependency downloads are not part of the agent strategy.
+- Repo validation CI is green for Python compile, 7 unit/static tests, real 129-task corpus checks, and restore-CLI smoke testing.
 
 ## Canonical artifacts
 
@@ -39,11 +40,18 @@ Why E4B first:
 
 ## Data mirror
 
-- Repository is private.
-- `KAGGLE_API_TOKEN` gate has passed.
-- Full official competition archive is being mirrored to private GitHub Release `kaggle-data-2026-10-31` in 1.8 GB parts.
-- Do **not** mark the mirror complete until all parts are `uploaded` and `manifests/latest.json` records the full archive size + SHA-256.
-- A concurrent-main-update risk was discovered: the current long-running mirror started from an older commit, so its final manifest `git push` may require recovery/rebase even if all Release assets upload correctly.
+**COMPLETE and checksummed.**
+
+- Repository is private; `KAGGLE_API_TOKEN` gate passed.
+- Official Kaggle `download-all` archive was mirrored to private Release `kaggle-data-2026-10-31`.
+- Release assets: **13/13 uploaded** — twelve 1.8 GB parts plus a final 329,290,938-byte part.
+- Archive size: **21,929,290,938 bytes**.
+- Kaggle HTTP Content-Length: **21,929,290,938 bytes** — exact match.
+- Whole-archive SHA-256: `69c4c4c3f98bc5e9b0ff80f8660cd1435f69dcc3a3c041198f4b974da5ffea69`.
+- Durable manifests recovered after the original workflow's expected non-fast-forward manifest-push race: `manifests/latest.json` and `manifests/kaggle-data-2026-10-31.json`.
+- Future mirror manifest commits now fetch/rebase latest `main` before pushing, so concurrent repo work should not repeat that race.
+- The initial Kaggle CLI inventory listing was paginated, so its first-page count is intentionally discarded. This does not affect archive integrity or restoration; an exhaustive file inventory has not yet been regenerated.
+- Private-repo restore auth path and CLI are smoke-tested. A full 21.9 GB re-download/restore has **not** been performed in CI.
 
 ## Score status
 
@@ -51,12 +59,11 @@ Why E4B first:
 
 ## Next experiment order
 
-1. Finish/verify the private full-data mirror and recover the manifest if the final push races with newer commits.
-2. Validate the baseline submission against the **current** competition wheelhouse/scorer, especially E4B model acceptance.
-3. Run a smoke task end-to-end.
-4. Run the deterministic 10-task public diagnostic sample.
-5. Classify failures with `docs/evaluation/failure-taxonomy.md`.
-6. Only then choose the next intervention: graph policy, test/repair policy, context handling, sub-agent, or LoRA.
+1. Validate `submission/` against the **current** competition wheelhouse/scorer, especially E4B model acceptance.
+2. Run one public task end-to-end.
+3. Run the deterministic 10-task public diagnostic sample.
+4. Classify failures with `docs/evaluation/failure-taxonomy.md`.
+5. Only then choose the next intervention: graph policy, test/repair policy, context handling, sub-agent, or LoRA.
 
 ## Stop conditions
 
