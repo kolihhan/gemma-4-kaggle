@@ -40,6 +40,14 @@ ROUND1_CONFOUNDED_IDS = {
     "requests_7505",
 }
 
+ROUND2_CONFOUNDED_IDS = {
+    "rich_3130",
+    "fastapi_15023",
+    "fastapi_14605",
+    "requests_6589",
+    "requests_7309",
+}
+
 
 def patch_with_changed_lines(lines: int) -> str:
     if lines <= 0:
@@ -148,6 +156,39 @@ class VerifierSplitTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "same repo/bucket"):
             replace_confounded_holdout(split, {"bad"})
 
+    def test_exhausted_bucket_fallback_is_explicit_same_repo_and_deterministic(self):
+        split = {
+            "version": "verifier-lora-v0",
+            "selection": {},
+            "holdout": [{"instance_id": "bad", "repo": "repo/a", "patch_bucket": "81+"}],
+            "train": [
+                {"instance_id": "same_repo_small_z", "repo": "repo/a", "patch_bucket": "1-10"},
+                {"instance_id": "same_repo_small_a", "repo": "repo/a", "patch_bucket": "1-10"},
+                {"instance_id": "wrong_repo", "repo": "repo/b", "patch_bucket": "81+"},
+            ],
+            "excluded": [],
+            "counts": {"total_input": 4, "train": 3, "holdout": 1, "excluded": 0, "holdout_by_repo": {"repo/a": 1}},
+        }
+
+        replaced = replace_confounded_holdout(split, {"bad"}, allow_same_repo_fallback=True)
+        reversed_train = copy.deepcopy(split)
+        reversed_train["train"].reverse()
+        replaced_reversed = replace_confounded_holdout(
+            reversed_train,
+            {"bad"},
+            allow_same_repo_fallback=True,
+        )
+
+        self.assertEqual(replaced, replaced_reversed)
+        replacement = replaced["holdout"][0]
+        self.assertEqual(replacement["repo"], "repo/a")
+        self.assertEqual(replacement["patch_bucket"], "1-10")
+        self.assertNotEqual(replacement["instance_id"], "wrong_repo")
+        history = replaced["selection"]["gold_control_replacement_rounds"][-1]["replacements"][0]
+        self.assertEqual(history["selection_scope"], "same_repo_fallback")
+        self.assertEqual(history["from_patch_bucket"], "81+")
+        self.assertEqual(history["to_patch_bucket"], "1-10")
+
     def test_round1_real_replacement_contract(self):
         # Reconstruct the immutable initial split from tasks.jsonl rather than
         # reading the mutable current manifest, which advances after each
@@ -168,6 +209,35 @@ class VerifierSplitTests(unittest.TestCase):
         self.assertEqual(replaced["counts"]["train"], 99)
         self.assertEqual(replaced["counts"]["holdout"], 12)
         self.assertEqual(replaced["counts"]["excluded"], 18)
+
+    def test_round2_real_replacement_preserves_repo_quota_with_explicit_fallback(self):
+        split = json.loads(Path("docs/evaluation/verifier-lora-split-v0.json").read_text(encoding="utf-8"))
+        before_repo_counts = Counter(item["repo"] for item in split["holdout"])
+
+        replaced = replace_confounded_holdout(
+            split,
+            ROUND2_CONFOUNDED_IDS,
+            allow_same_repo_fallback=True,
+        )
+
+        holdout_ids = {item["instance_id"] for item in replaced["holdout"]}
+        train_ids = {item["instance_id"] for item in replaced["train"]}
+        excluded_ids = {item["instance_id"] for item in replaced["excluded"]}
+        after_repo_counts = Counter(item["repo"] for item in replaced["holdout"])
+        self.assertEqual(len(holdout_ids), 12)
+        self.assertTrue(ROUND2_CONFOUNDED_IDS.isdisjoint(holdout_ids | train_ids))
+        self.assertTrue(ROUND2_CONFOUNDED_IDS.issubset(excluded_ids))
+        self.assertEqual(before_repo_counts, after_repo_counts)
+        self.assertEqual(replaced["counts"]["train"], 94)
+        self.assertEqual(replaced["counts"]["holdout"], 12)
+        self.assertEqual(replaced["counts"]["excluded"], 23)
+
+        round_history = replaced["selection"]["gold_control_replacement_rounds"][-1]["replacements"]
+        fallback = [item for item in round_history if item["from"] == "requests_7309"]
+        self.assertEqual(len(fallback), 1)
+        self.assertEqual(fallback[0]["selection_scope"], "same_repo_fallback")
+        self.assertEqual(fallback[0]["from_patch_bucket"], "11-30")
+        self.assertEqual(fallback[0]["to_patch_bucket"], "1-10")
 
     def test_current_manifest_preserves_partition_invariants(self):
         split = json.loads(Path("docs/evaluation/verifier-lora-split-v0.json").read_text(encoding="utf-8"))
