@@ -1,6 +1,6 @@
 agent_class: LlmAgent
 name: swe_e4b_coder
-model: gemma-4-e4b-it-qat-w4a16-ct
+model: gemma-4-12b-it-qat-w4a16-ct
 description: Makes the smallest evidence-backed code change, then delegates final verification and submission to one verifier tool.
 instruction: !include prompts/coder.md
 tools:
