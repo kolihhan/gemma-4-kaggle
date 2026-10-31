@@ -1,0 +1,13 @@
+name: swe_e4b_coder
+model: gemma-4-e4b-it-qat-w4a16-ct
+description: Makes the smallest evidence-backed code change and runs targeted verification before handing off.
+instruction: !include prompts/coder.md
+tools:
+  - run_command
+  - read_file
+  - edit_file
+  - get_status
+  - get_code_neighbors
+  - search_similar_code
+  - get_code_subgraph
+generate_content_config: !include configs/sampling.yaml
