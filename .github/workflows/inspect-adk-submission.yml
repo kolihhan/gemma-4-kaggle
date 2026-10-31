@@ -22,25 +22,26 @@ jobs:
           python-version: "3.12"
       - name: Install Kaggle CLI
         run: python -m pip install --disable-pip-version-check --upgrade kaggle
-      - name: Download only current adk-submission wheel and inspect discovery/compiler source
+      - name: Download only current adk-submission wheel and inspect nested model discovery
         shell: bash
         run: |
           set -euo pipefail
+          rm -rf /tmp/adk-wheel /tmp/adk-src
           mkdir -p /tmp/adk-wheel /tmp/adk-src
           kaggle datasets files metric/gemma-4-developer-agent-wheelhouse --page-size 200 > /tmp/wheel-files.txt
-          cat /tmp/wheel-files.txt | grep -i 'adk.submission\|adk_submission' || true
           wheel="$(awk 'tolower($0) ~ /adk[_-]submission/ && $0 ~ /\.whl/ {print $1; exit}' /tmp/wheel-files.txt)"
-          if [[ -z "$wheel" ]]; then
-            echo "Could not locate adk-submission wheel" >&2
-            cat /tmp/wheel-files.txt
-            exit 1
-          fi
+          test -n "$wheel"
           echo "wheel=$wheel"
           kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel" -p /tmp/adk-wheel --unzip
-          actual="$(find /tmp/adk-wheel -type f -name '*adk*submission*.whl' -o -name '*.whl' | head -n1)"
-          echo "actual=$actual"
+          actual="$(find /tmp/adk-wheel -type f -name '*adk*submission*.whl' | head -n1)"
+          test -n "$actual"
           python -m zipfile -e "$actual" /tmp/adk-src
-          echo '--- discovery.py ---'
-          sed -n '1,260p' /tmp/adk-src/adk_submission/discovery.py
-          echo '--- config/compiler references ---'
-          grep -RniE 'SequentialAgent|config_path|discover_declared_models|validate_single_declared_model' /tmp/adk-src/adk_submission | head -n 240
+
+          echo '--- discover_declared_models ---'
+          sed -n '640,805p' /tmp/adk-src/adk_submission/discovery.py
+          echo '--- CompilationContext.resolve_sub_config_path ---'
+          sed -n '80,135p' /tmp/adk-src/adk_submission/context.py
+          echo '--- workflow compiler ---'
+          sed -n '215,275p' /tmp/adk-src/adk_submission/compiler.py
+          sed -n '35,90p' /tmp/adk-src/adk_submission/builders/workflows.py
+          sed -n '35,85p' /tmp/adk-src/adk_submission/builders/sub_agents.py
