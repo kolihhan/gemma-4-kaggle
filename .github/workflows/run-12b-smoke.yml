@@ -3,7 +3,7 @@ name: Run private 12B one-task smoke
 
 on:
   push:
-    branches: [exp/12b-rich3278-ab]
+    branches: [exp/12b-rich3278-ab, exp/12b-thinking1024-rich3278]
     paths:
       - ".github/workflows/run-12b-smoke.yml"
   workflow_dispatch:
