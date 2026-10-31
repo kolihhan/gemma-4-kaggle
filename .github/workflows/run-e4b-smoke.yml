@@ -66,7 +66,7 @@ jobs:
 
           template = runtime_template.read_text(encoding="utf-8")
           placeholder = "__SUBMISSION_PAYLOAD_B64__"
-          if template.count(placeholder) != 2:
+          if template.count(placeholder) != 1:
               raise SystemExit(f"unexpected smoke runtime placeholder count: {template.count(placeholder)}")
           rendered = template.replace(placeholder, encoded)
           (kernel_dir / "smoke_e4b.py").write_text(rendered, encoding="utf-8")
