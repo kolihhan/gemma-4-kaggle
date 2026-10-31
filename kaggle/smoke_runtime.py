@@ -121,7 +121,7 @@ def install_official_wheelhouse() -> None:
 
 
 def materialize_submission() -> None:
-    if SUBMISSION_PAYLOAD_B64 == "__SUBMISSION_PAYLOAD_B64__":
+    if not SUBMISSION_PAYLOAD_B64 or SUBMISSION_PAYLOAD_B64.startswith("_"):
         raise RuntimeError("submission payload placeholder was not rendered")
 
     raw = base64.b64decode(SUBMISSION_PAYLOAD_B64.encode("ascii")).decode("utf-8")
