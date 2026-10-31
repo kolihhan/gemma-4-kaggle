@@ -11,7 +11,7 @@ Build a competitive, evidence-driven Gemma 4 software-engineering agent. Optimiz
 1. `coder` — makes the smallest evidence-backed patch and runs targeted verification; no `submit_patch`, no `write_file`.
 2. `verifier` — independently inspects the existing diff/test evidence, may make at most one narrow repair, and owns final `submit_patch`; no `write_file`.
 
-This is the first justified step beyond the single-agent baseline. It was introduced only after repeated clean-task evidence showed that one E4B agent could make a small patch but still submit despite failed targeted verification.
+The topology is mechanically valid. The current variable under test is the verifier policy: it must verify first, read failing-test evidence before repair, and must not submit a patch that is still known to fail.
 
 ## Verified current facts
 
@@ -39,20 +39,51 @@ This is the first justified step beyond the single-agent baseline. It was introd
 1. **Original baseline:** failed; destructive full-file rewrite, patch about 4 KB. Main failure: F3 EDIT plus F4/F5 repair/submission behavior.
 2. **Soft edit/test guardrails:** failed, but materially improved edit safety; patch shrank to about 817 chars and whole-file rewrite disappeared. Agent still submitted after failed verification.
 3. **Hard no-submit / automatic patch recovery:** regressed; 17 tool calls, about 4.2 KB patch, full-file rewrite returned, then context overflow. Rejected as an intervention.
-4. **Bounded edit tools (`write_file` removed, `submit_patch` restored):** failed but was much cleaner — **319-char / one-line patch, 4 tool calls**, no destructive rewrite. Remaining failure shifted to F2 exact semantics plus F4/F5 test-feedback handling; the agent still submitted after targeted tests failed.
+4. **Bounded edit tools (`write_file` removed, `submit_patch` restored):** failed but was much cleaner — **319-char / one-line patch, 4 tool calls**, no destructive rewrite. Remaining failure shifted to exact semantics plus test-feedback handling.
 
-Conclusion: edit safety is largely addressed. The next bottleneck is independent verification/repair before final submission, which justifies the two-role coder → verifier experiment.
+Conclusion: edit safety is largely addressed. Independent verification is justified; extra agents beyond coder → verifier are not yet justified.
 
-## Sequential coder → verifier status
+## Sequential coder → verifier evidence
+
+### Plumbing
 
 - Canonical root: `submission/agent.yaml` with `agent_class: SequentialAgent`.
 - Canonical sub-agents: `submission/sub_agents/coder.yaml` and `submission/sub_agents/verifier.yaml`.
-- First L4 attempt failed **before agent execution** with `expected only gemma-4-e4b-it-qat-w4a16-ct, got []`.
-- Root cause was submission plumbing, not the architecture: sub-agent YAML files used root-looking `!include prompts/...` and `!include configs/...` paths, but current `adk-submission` resolves includes relative to the including YAML's directory. Model discovery silently skipped those sub-agent configs when loading them failed.
-- TDD regression contract now requires sub-agent-relative includes.
-- Fixed paths are `../prompts/...` and `../configs/...` in both sub-agent configs.
-- Repo validation CI is green after the fix.
-- **Same-task L4 rerun on `rich_3278` is currently pending/in progress.** Do not change coder/verifier prompts, tools, model, or budget until this rerun reaches a structured result.
+- First L4 attempt failed before agent execution with `expected only gemma-4-e4b-it-qat-w4a16-ct, got []`.
+- Root cause: sub-agent `!include` paths were interpreted relative to `submission/sub_agents/`; the resulting load failures made model discovery silently skip both sub-agents.
+- Fixed paths: `../prompts/...` and `../configs/...`.
+- Regression contract now locks this include behavior.
+
+### First mechanically valid coder → verifier run — FAIL
+
+Same task/model/budget (`rich_3278`, E4B):
+
+- duration: **189.34 s**
+- tool calls: **15 / 32**
+- final patch: **320 chars**, one file / one-line regex change
+- `test_exit_code=1`
+- `resolved=false`
+- coder and verifier both executed successfully; the topology and model discovery are valid.
+
+The full trace changed the diagnosis: the verifier did **not** arbitrarily ignore failed tests. The old verifier prompt explicitly instructed it that after one bounded repair, if tests still failed, it should preserve the “smallest defensible patch” and call `submit_patch` to terminate. The verifier followed that instruction almost literally after its second failing test.
+
+Therefore the known-failing submission was a **policy bug in our prompt**, not sufficient evidence of E4B incapacity.
+
+### Verifier policy fix — CI GREEN
+
+The verifier now must:
+
+1. inspect the existing diff before editing;
+2. run the **smallest directly relevant test** rather than starting with the full suite;
+3. read failing-test output and the failing test / nearby assertions before repair;
+4. make at most one evidence-backed narrow repair;
+5. re-run the same targeted verification;
+6. call `submit_patch` **only after targeted verification passes**;
+7. if verification still fails, **do not submit**; finish and let harness patch recovery preserve the working-tree diff.
+
+TDD regression tests cover these rules. Latest repo validation passes compile, all unit tests, the real 129-task corpus gate, and restore CLI smoke.
+
+**Next evidence required:** rerun the exact same `rich_3278` E4B coder → verifier experiment with only this verifier-policy change.
 
 ## HTTPX exclusion
 
@@ -86,11 +117,11 @@ Conclusion: edit safety is largely addressed. The next bottleneck is independent
 
 **NO CLEAN RESOLVED AGENT CASE YET. NO LEADERBOARD SCORE RECORDED.**
 
-Gold `rich_3278` passes, so the next valid evidence is the coder → verifier rerun on that exact task.
+Gold `rich_3278` passes. The next valid evidence is the same-task coder → verifier rerun after the verifier-policy fix.
 
 ## Next step
 
-1. Finish the current `rich_3278` coder → verifier L4 rerun.
-2. If the runtime is mechanically valid, classify the actual coder/verifier outcome from trace + patch + verifier result.
-3. If it resolves, run the fixed clean-task diagnostic sample before adding more architecture.
-4. If it still fails, change only the failure mechanism demonstrated by the trace; do not add LoRA/graph/more agents by default.
+1. Rerun `rich_3278` with the current E4B coder → verifier submission; change no other variable.
+2. Inspect trace for targeted-test selection, failing-test reading, bounded repair, and submit/no-submit behavior.
+3. If it resolves, expand to the fixed clean-task diagnostic sample before adding architecture.
+4. If it still fails after following the corrected policy, compare the same topology with a larger allowed base model before adding a third agent, LoRA, or more graph machinery.
