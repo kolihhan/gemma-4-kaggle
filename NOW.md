@@ -27,7 +27,8 @@ Why E4B first:
 - The deterministic `per_repo=3` diagnostic sample has **10 tasks**, not 12, because HTTPX has only one public task.
 - Harness mechanics expose 9 tools: `run_command`, `submit_patch`, `get_status`, `read_file`, `edit_file`, `write_file`, `get_code_neighbors`, `search_similar_code`, `get_code_subgraph`.
 - Sandbox is offline; dependency downloads are not part of the agent strategy.
-- Repo validation CI is green for Python compile, 7 unit/static tests, real 129-task corpus checks, and restore-CLI smoke testing.
+- Current official scorer wheel is `swegemma 0.2.11`; the private Kaggle smoke path uses the current official scorer wheelhouse and pinned Python 3.12 Kaggle image.
+- Repo validation CI is green for Python compile, **15 unit/static tests**, real 129-task corpus checks, and restore-CLI smoke testing.
 
 ## Canonical artifacts
 
@@ -53,16 +54,34 @@ Why E4B first:
 - The initial Kaggle CLI inventory listing was paginated, so its first-page count is intentionally discarded. This does not affect archive integrity or restoration; an exhaustive file inventory has not yet been regenerated.
 - Private-repo restore auth path and CLI are smoke-tested. A full 21.9 GB re-download/restore has **not** been performed in CI.
 
+## Baseline execution status
+
+### Mechanical E4B smoke — PASS
+
+- Current canonical `submission/` was accepted by the current scorer and ran end-to-end on Kaggle L4 ×4 with E4B tensor parallelism 4.
+- Smoke task: `httpx_3672`.
+- E4B produced a non-empty patch in **96.5 s** with **6 tool calls**; verifier returned `test_exit_code=2`, `resolved=false`.
+- This proves the model/scorer/submission/tool/runtime path works. It is **not** a valid agent-quality score for this task.
+
+### HTTPX gold positive-control — HARNESS-CONFOUNDED
+
+- Exact current `swegemma 0.2.11` verifier was run on the same `httpx_3672` task using its hydrated **gold reference patch**, with no model or agent involved.
+- Gold result: `resolved=false`, `test_exit_code=2`.
+- Failure occurs during test collection: `AttributeError: module 'httpx' has no attribute 'Stream'` in `tests/test_parsers.py`.
+- Therefore `httpx_3672` is excluded from baseline failure taxonomy and from agent-quality conclusions. The earlier apparent F2/F4 interpretation is withdrawn.
+
 ## Score status
 
-**NOT RUN.** No valid E4B local scorer result or Kaggle leaderboard score has been recorded yet.
+**MECHANICAL PATH VERIFIED; NO CLEAN AGENT SCORE YET.**
+
+No Kaggle leaderboard score has been recorded. `httpx_3672` cannot be used as a clean public diagnostic under the current local verifier path because the gold patch fails the same harness test-collection path.
 
 ## Next experiment order
 
-1. Validate `submission/` against the **current** competition wheelhouse/scorer, especially E4B model acceptance.
-2. Run one public task end-to-end.
-3. Run the deterministic 10-task public diagnostic sample.
-4. Classify failures with `docs/evaluation/failure-taxonomy.md`.
+1. Run a gold positive-control on the next deterministic non-HTTPX diagnostic task: **`rich_3278`**.
+2. If gold resolves, run unchanged E4B baseline v0 on **`rich_3278`** and classify only that real agent outcome.
+3. Continue the fixed diagnostic sample across clean tasks; keep `httpx_3672` marked excluded unless the harness changes.
+4. Aggregate repeated failure classes before changing the agent.
 5. Only then choose the next intervention: graph policy, test/repair policy, context handling, sub-agent, or LoRA.
 
 ## Stop conditions
