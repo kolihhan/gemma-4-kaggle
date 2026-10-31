@@ -21,7 +21,7 @@ class SmokeRuntimeContractTests(unittest.TestCase):
 
     def test_runtime_is_exactly_one_public_smoke_task(self):
         text = RUNTIME.read_text(encoding="utf-8")
-        self.assertIn('SMOKE_TASK_ID = "httpx_3672"', text)
+        self.assertIn('SMOKE_TASK_ID = "rich_3278"', text)
         self.assertIn("evaluate_task", text)
         self.assertIn("smoke_result.json", text)
         self.assertNotIn("tasks[:2]", text)
