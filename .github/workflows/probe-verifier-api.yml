@@ -1,0 +1,63 @@
+name: Probe current verifier API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/probe-verifier-api.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      WHEELHOUSE: metric/gemma-4-developer-agent-wheelhouse
+
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Kaggle CLI
+        run: python -m pip install --disable-pip-version-check --upgrade kaggle
+
+      - name: Download current scorer wheelhouse
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/scorer-wheelhouse
+          kaggle datasets download -d "$WHEELHOUSE" -p /tmp/scorer-wheelhouse --unzip
+
+      - name: Read verifier source directly from swegemma wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+
+          wheels = sorted(Path('/tmp/scorer-wheelhouse').glob('swegemma-*.whl'))
+          if len(wheels) != 1:
+              raise SystemExit(f'expected one swegemma wheel, got: {wheels}')
+          wheel = wheels[0]
+          print('WHEEL', wheel.name)
+          with zipfile.ZipFile(wheel) as zf:
+              names = set(zf.namelist())
+              for target in (
+                  'swegemma/harness/verification.py',
+                  'swegemma/sandbox.py',
+                  'swegemma/config.py',
+                  'swegemma/deduplication.py',
+              ):
+                  print(f'===== {target} =====')
+                  if target not in names:
+                      print('MISSING')
+                      continue
+                  text = zf.read(target).decode('utf-8')
+                  print(text)
+          PY
