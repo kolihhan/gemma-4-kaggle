@@ -16,7 +16,7 @@ class SubmissionLayoutTests(unittest.TestCase):
         ):
             self.assertTrue((SUBMISSION / relative).is_file(), relative)
 
-    def test_agent_is_single_e4b_agent_with_official_tools(self):
+    def test_agent_is_single_e4b_agent_with_bounded_edit_tools(self):
         text = (SUBMISSION / "agent.yaml").read_text(encoding="utf-8")
         self.assertIn("model: gemma-4-e4b-it-qat-w4a16-ct", text)
         self.assertNotIn("adapter:", text)
@@ -25,20 +25,26 @@ class SubmissionLayoutTests(unittest.TestCase):
             "run_command",
             "read_file",
             "edit_file",
-            "write_file",
             "get_status",
+            "submit_patch",
             "get_code_neighbors",
             "search_similar_code",
             "get_code_subgraph",
         ):
             self.assertIn(f"- {tool}", text)
+        self.assertNotIn("- write_file", text)
 
-    def test_baseline_uses_harness_patch_recovery_instead_of_premature_submit(self):
-        agent = (SUBMISSION / "agent.yaml").read_text(encoding="utf-8")
+    def test_edit_fallback_is_bounded_before_submission(self):
         prompt = (SUBMISSION / "prompts" / "system.md").read_text(encoding="utf-8")
-        self.assertNotIn("- submit_patch", agent)
-        self.assertIn("automatic patch recovery", prompt)
-        self.assertIn("stop with a final response only after targeted verification passes", prompt)
+        for phrase in (
+            "After two failed `edit_file` attempts",
+            "tiny `run_command` script",
+            "assert the exact old text",
+            "inspect `git diff`",
+            "targeted verification is failing",
+            "call `submit_patch`",
+        ):
+            self.assertIn(phrase, prompt)
 
     def test_sampling_starts_from_official_example_values(self):
         text = (SUBMISSION / "configs" / "sampling.yaml").read_text(encoding="utf-8")
