@@ -1,3 +1,4 @@
+# Current-wheel static validation for the canonical submission.
 name: Validate current scorer wheelhouse
 
 on:
