@@ -1,0 +1,55 @@
+name: Probe current Kaggle harness inputs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/probe-current-harness.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      COMPETITION: gemma-4-developer-agent
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install current Kaggle client
+        run: |
+          python -m pip install --disable-pip-version-check --upgrade kaggle
+          kaggle --version
+
+      - name: Inspect current files API and CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle competitions files --help
+          python - <<'PY'
+          import inspect
+          from kaggle.api.kaggle_api_extended import KaggleApi
+
+          fn = KaggleApi.competition_list_files
+          print("competition_list_files signature:", inspect.signature(fn))
+          print("competition_download_file signature:", inspect.signature(KaggleApi.competition_download_file))
+          try:
+              print(inspect.getsource(fn))
+          except OSError as exc:
+              print("source unavailable:", exc)
+          PY
+
+      - name: Print current competition file inventory page
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle competitions files "$COMPETITION" -v
