@@ -10,7 +10,10 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Iterable
 
-from scripts.analyze_tasks import diff_stats
+try:
+    from scripts.analyze_tasks import diff_stats
+except ModuleNotFoundError:
+    from analyze_tasks import diff_stats
 
 
 VERSION = "verifier-lora-v0"
