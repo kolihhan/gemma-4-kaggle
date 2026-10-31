@@ -22,71 +22,70 @@ jobs:
           python-version: "3.12"
       - name: Install Kaggle CLI
         run: python -m pip install --disable-pip-version-check --upgrade kaggle
-      - name: Download and inspect current adk-submission wheel
+      - name: Download and inspect current scorer wheels
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/adk-wheel /tmp/adk-src /tmp/adk-probe
-          mkdir -p /tmp/adk-wheel /tmp/adk-src /tmp/adk-probe
+          rm -rf /tmp/adk-wheel /tmp/adk-src /tmp/swe-wheel /tmp/swe-src /tmp/adk-probe
+          mkdir -p /tmp/adk-wheel /tmp/adk-src /tmp/swe-wheel /tmp/swe-src /tmp/adk-probe
           kaggle datasets files metric/gemma-4-developer-agent-wheelhouse --page-size 200 > /tmp/wheel-files.txt
-          wheel="$(awk 'tolower($0) ~ /adk[_-]submission/ && $0 ~ /\.whl/ {print $1; exit}' /tmp/wheel-files.txt)"
-          test -n "$wheel"
-          echo "$wheel" > /tmp/adk-probe/wheel-name.txt
-          kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel" -p /tmp/adk-wheel --unzip
-          actual="$(find /tmp/adk-wheel -type f -name '*adk*submission*.whl' | head -n1)"
-          test -n "$actual"
-          python -m zipfile -e "$actual" /tmp/adk-src
+
+          adk_wheel="$(awk 'tolower($0) ~ /adk[_-]submission/ && $0 ~ /\.whl/ {print $1; exit}' /tmp/wheel-files.txt)"
+          swe_wheel="$(awk 'tolower($0) ~ /swegemma/ && $0 ~ /\.whl/ {print $1; exit}' /tmp/wheel-files.txt)"
+          test -n "$adk_wheel"
+          test -n "$swe_wheel"
+          printf 'adk=%s\nswegemma=%s\n' "$adk_wheel" "$swe_wheel" > /tmp/adk-probe/wheel-names.txt
+
+          kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$adk_wheel" -p /tmp/adk-wheel --unzip
+          adk_actual="$(find /tmp/adk-wheel -type f -name '*adk*submission*.whl' | head -n1)"
+          test -n "$adk_actual"
+          python -m zipfile -e "$adk_actual" /tmp/adk-src
           cp -R /tmp/adk-src/adk_submission /tmp/adk-probe/adk_submission
 
+          kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$swe_wheel" -p /tmp/swe-wheel --unzip
+          swe_actual="$(find /tmp/swe-wheel -type f -name '*swegemma*.whl' | head -n1)"
+          test -n "$swe_actual"
+          python -m zipfile -e "$swe_actual" /tmp/swe-src
+          cp -R /tmp/swe-src/swegemma /tmp/adk-probe/swegemma
+
           {
-            echo '=== package files ==='
-            find /tmp/adk-src/adk_submission -maxdepth 2 -type f | sort
+            echo '=== ADK AgentTool / workflows / registries ==='
+            grep -R -n -E 'AgentTool|agent_tool|skip_summarization|SequentialAgent|ParallelAgent|LoopAgent|ToolRegistry|CallbackRegistry|config_path|sub_agents' /tmp/adk-src/adk_submission || true
             echo
-            echo '=== AgentTool / agent_tool references ==='
-            grep -R -n -E 'AgentTool|agent_tool|skip_summarization' /tmp/adk-src/adk_submission || true
-            echo
-            echo '=== SequentialAgent / workflow references ==='
-            grep -R -n -E 'SequentialAgent|ParallelAgent|LoopAgent' /tmp/adk-src/adk_submission || true
-            echo
-            echo '=== ToolRegistry / CallbackRegistry references ==='
-            grep -R -n -E 'ToolRegistry|CallbackRegistry|register.*tool|register.*callback' /tmp/adk-src/adk_submission || true
-            echo
-            echo '=== config / validation references ==='
-            grep -R -n -E 'config_path|sub_agents|callbacks|tools:' /tmp/adk-src/adk_submission || true
+            echo '=== swegemma tool/callback/compiler/evaluator lifecycle ==='
+            grep -R -n -E 'compile_submission|ToolRegistry|CallbackRegistry|submit_patch|submitted|continue your work|EventsCompaction|compaction|evaluate_task|tool_registry|callback_registry' /tmp/swe-src/swegemma || true
           } > /tmp/adk-probe/grep.txt
 
           python - <<'PY' > /tmp/adk-probe/excerpts.txt
           from pathlib import Path
-          root = Path('/tmp/adk-src/adk_submission')
-          needles = (
-              'AgentTool', 'agent_tool', 'skip_summarization',
-              'SequentialAgent', 'ParallelAgent', 'LoopAgent',
-              'ToolRegistry', 'CallbackRegistry', 'config_path', 'sub_agents',
-          )
-          for path in sorted(root.rglob('*.py')):
-              lines = path.read_text(encoding='utf-8', errors='replace').splitlines()
-              hits = [i for i, line in enumerate(lines) if any(n in line for n in needles)]
-              if not hits:
-                  continue
-              print(f'--- {path.relative_to(root)} ---')
-              ranges = []
-              for i in hits:
-                  lo=max(0,i-18); hi=min(len(lines),i+28)
-                  if ranges and lo <= ranges[-1][1]:
-                      ranges[-1] = (ranges[-1][0], max(ranges[-1][1], hi))
-                  else:
-                      ranges.append((lo,hi))
-              for lo, hi in ranges:
-                  for j in range(lo,hi):
-                      print(f'{j+1:04d}: {lines[j]}')
-                  print()
+          specs = [
+              (Path('/tmp/adk-src/adk_submission'), ('AgentTool','agent_tool','SequentialAgent','ToolRegistry','CallbackRegistry','config_path','sub_agents')),
+              (Path('/tmp/swe-src/swegemma'), ('compile_submission','ToolRegistry','CallbackRegistry','submit_patch','submitted','continue your work','EventsCompaction','compaction','evaluate_task','tool_registry','callback_registry')),
+          ]
+          for root, needles in specs:
+              print(f'##### ROOT {root.name} #####')
+              for path in sorted(root.rglob('*.py')):
+                  lines = path.read_text(encoding='utf-8', errors='replace').splitlines()
+                  hits = [i for i, line in enumerate(lines) if any(n in line for n in needles)]
+                  if not hits:
+                      continue
+                  print(f'--- {path.relative_to(root)} ---')
+                  ranges=[]
+                  for i in hits:
+                      lo=max(0,i-20); hi=min(len(lines),i+32)
+                      if ranges and lo <= ranges[-1][1]:
+                          ranges[-1]=(ranges[-1][0], max(ranges[-1][1],hi))
+                      else:
+                          ranges.append((lo,hi))
+                  for lo,hi in ranges:
+                      for j in range(lo,hi): print(f'{j+1:04d}: {lines[j]}')
+                      print()
           PY
 
-          echo "wheel=$wheel"
-          sed -n '1,240p' /tmp/adk-probe/grep.txt
-          sed -n '1,320p' /tmp/adk-probe/excerpts.txt
+          cat /tmp/adk-probe/wheel-names.txt
+          sed -n '1,320p' /tmp/adk-probe/grep.txt
 
-      - name: Upload compiler probe
+      - name: Upload lifecycle probe
         uses: actions/upload-artifact@v4
         with:
           name: adk-lifecycle-probe
