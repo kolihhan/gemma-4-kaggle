@@ -6,84 +6,105 @@ Build a competitive, evidence-driven Gemma 4 software-engineering agent. Optimiz
 
 ## Current decision
 
-**Current experiment:** E4B `SequentialAgent` with exactly two roles:
+**Current candidate topology:** root coder `LlmAgent` + one verifier `AgentTool`.
 
-1. `coder` — makes the smallest evidence-backed patch and runs targeted verification; no `submit_patch`, no `write_file`.
-2. `verifier` — independently inspects the existing diff/test evidence, may make at most one narrow repair, and owns final `submit_patch`; no `write_file`.
+1. Root coder owns inspect → patch → local verification and has no `submit_patch` / `write_file`.
+2. Verifier AgentTool independently inspects the shared working tree, may make at most one narrow repair, and owns `submit_patch`.
+3. Both currently use `gemma-4-e4b-it-qat-w4a16-ct`.
 
-The topology is mechanically valid. The current variable under test is the verifier policy: it must verify first, read failing-test evidence before repair, and must not submit a patch that is still known to fail.
+Why this replaced `SequentialAgent`: the official harness enables event compaction, and current ADK automatic compaction requires a root `LlmAgent` model. A root `SequentialAgent` produced `ValueError: No LlmAgent model available for event compaction summarizer` after a real run. Root `LlmAgent` + verifier AgentTool preserves two roles while giving the compactor a canonical root model.
+
+**Next controlled experiment:** compare the exact same topology/policies on 12B before adding a third agent, LoRA, or more graph machinery. Repeated E4B traces show prompt-only verification discipline is not reliably obeyed.
 
 ## Verified current facts
 
-- Current Kaggle rules permit four base variants: 31B, 12B, E4B, and E2B QAT models.
-- The bundled `HARNESS_README.md` has a stale 31B-only model-list statement; use it for harness mechanics, not current model eligibility.
+- Kaggle currently permits 31B, 12B, E4B, and E2B QAT variants; all agents/sub-agents in one submission must use the same base variant.
 - Public development corpus: **129 tasks** — FastAPI 67 / Rich 48 / Requests 13 / HTTPX 1.
 - Reference changed-line buckets: **1–10: 60 / 11–30: 29 / 31–80: 20 / 81+: 20**.
 - Deterministic `per_repo=3` diagnostic sample has **10 tasks** because HTTPX has only one public task.
 - Current runtime uses the official scorer wheelhouse, pinned Python 3.12 Kaggle image, and L4 ×4 for E4B.
-- Current `adk-submission` wheel observed in the scorer wheelhouse is **0.2.13**.
-- `SequentialAgent` and nested `config_path` sub-agents are supported by the current compiler.
-- `discover_declared_models()` recursively follows nested `config_path` references and collects `model` fields.
-- `!include` paths are resolved **relative to the YAML file containing the include**, not the submission root.
+- Current wheelhouse observed: `adk-submission 0.2.13`, `swegemma 0.2.11`.
+- `!include` paths resolve relative to the YAML file containing the include.
+- `AgentTool` is accepted by the current Kaggle runtime; its exposed tool name is the child agent name.
+- Kaggle staff says 12B needs a vLLM HF override mapping it to `Gemma4ForCausalLM` / `gemma4`; the scorer has this update. Any local 12B smoke must mirror that serving override.
 
-## Clean diagnostic evidence: `rich_3278`
+## Clean diagnostic: `rich_3278`
 
 ### Gold control — PASS
 
-- Exact current verifier with the hydrated reference patch: **23/23 tests pass**, `test_exit_code=0`, `resolved=true`.
+- Hydrated reference patch under the current verifier: **23/23 tests pass**, `test_exit_code=0`, `resolved=true`.
 - Reference patch size: **176 chars**.
 - Therefore `rich_3278` is a clean agent-quality diagnostic.
 
-### Single-agent experiment sequence
+### Single-agent E4B sequence
 
-1. **Original baseline:** failed; destructive full-file rewrite, patch about 4 KB. Main failure: F3 EDIT plus F4/F5 repair/submission behavior.
-2. **Soft edit/test guardrails:** failed, but materially improved edit safety; patch shrank to about 817 chars and whole-file rewrite disappeared. Agent still submitted after failed verification.
-3. **Hard no-submit / automatic patch recovery:** regressed; 17 tool calls, about 4.2 KB patch, full-file rewrite returned, then context overflow. Rejected as an intervention.
-4. **Bounded edit tools (`write_file` removed, `submit_patch` restored):** failed but was much cleaner — **319-char / one-line patch, 4 tool calls**, no destructive rewrite. Remaining failure shifted to exact semantics plus test-feedback handling.
+1. Original baseline: destructive ~4 KB rewrite; F3 EDIT plus F4/F5 repair/submission failure.
+2. Soft guardrails: ~817-char patch; destructive rewrite disappeared, but failed verification still led to submission.
+3. Hard no-submit/recovery: regressed to ~4.2 KB, 17 calls, context overflow; rejected.
+4. Bounded tools (`write_file` removed): **319 chars, 4 calls**, no destructive rewrite. Remaining failure shifted to exact semantics/test-feedback handling.
 
-Conclusion: edit safety is largely addressed. Independent verification is justified; extra agents beyond coder → verifier are not yet justified.
+Conclusion: edit safety improved materially; verification/reasoning is the remaining bottleneck.
 
-## Sequential coder → verifier evidence
+## Two-role E4B evidence
 
-### Plumbing
+### Sequential coder → verifier: mechanically valid but compaction-unsafe
 
-- Canonical root: `submission/agent.yaml` with `agent_class: SequentialAgent`.
-- Canonical sub-agents: `submission/sub_agents/coder.yaml` and `submission/sub_agents/verifier.yaml`.
-- First L4 attempt failed before agent execution with `expected only gemma-4-e4b-it-qat-w4a16-ct, got []`.
-- Root cause: sub-agent `!include` paths were interpreted relative to `submission/sub_agents/`; the resulting load failures made model discovery silently skip both sub-agents.
-- Fixed paths: `../prompts/...` and `../configs/...`.
-- Regression contract now locks this include behavior.
+First valid run after fixing relative `!include` paths:
 
-### First mechanically valid coder → verifier run — FAIL
+- `rich_3278`, E4B
+- **189.34 s**, **15 calls**, **320-char** patch
+- `test_exit_code=1`, `resolved=false`
 
-Same task/model/budget (`rich_3278`, E4B):
+Initial diagnosis changed after trace review: the verifier submitted a known-failing patch because our old verifier prompt explicitly told it to preserve the smallest defensible patch and submit after the bounded repair. That policy bug was removed.
 
-- duration: **189.34 s**
-- tool calls: **15 / 32**
-- final patch: **320 chars**, one file / one-line regex change
+Corrected verifier-policy rerun:
+
+- **142.04 s**, **5 calls**, **568-char** patch
+- `test_exit_code=1`, `resolved=false`
+- verifier still used broad `pytest` instead of the requested targeted gate
+- final patch contained a clear semantic bug (`position = end` before `end` was assigned)
+- after agent execution, current ADK event compaction raised `No LlmAgent model available for event compaction summarizer`
+
+This made root `SequentialAgent` unsuitable for the official compaction-enabled harness.
+
+### Root coder LlmAgent + verifier AgentTool — mechanically PASS, task FAIL
+
+TDD migration:
+
+- RED contract commit: `cc2c8599cf2d4497facd58a24b251153944be7ca`
+- root changed to `LlmAgent`; verifier became an `AgentTool`; redundant coder sub-agent removed
+- standard repo validation after the final wording fix passed compile, all unit/static tests, real 129-task corpus checks, and restore-CLI smoke.
+
+Official Kaggle L4 smoke run `41199444320` on `rich_3278`:
+
+- runtime completed successfully; AgentTool config was accepted
+- verifier AgentTool was actually invoked
+- prior root-Sequential compaction exception did **not** recur
+- duration: **253.37 s**
+- tool calls: **18 / 32**
+- final patch: **275 chars**, one file
 - `test_exit_code=1`
 - `resolved=false`
-- coder and verifier both executed successfully; the topology and model discovery are valid.
 
-The full trace changed the diagnosis: the verifier did **not** arbitrarily ignore failed tests. The old verifier prompt explicitly instructed it that after one bounded repair, if tests still failed, it should preserve the “smallest defensible patch” and call `submit_patch` to terminate. The verifier followed that instruction almost literally after its second failing test.
+Final patch added a broad regex branch:
 
-Therefore the known-failing submission was a **policy bug in our prompt**, not sufficient evidence of E4B incapacity.
+```text
+(?:\x1b[0-?].*) |
+```
 
-### Verifier policy fix — CI GREEN
+Behavioral findings from the trace:
 
-The verifier now must:
+- coder still ran bare `pytest` rather than a narrow targeted check;
+- verifier did inspect `git diff` and read `tests/test_ansi.py`, which is progress;
+- verifier still repeatedly ran bare `pytest` rather than the smallest relevant test;
+- verifier eventually called `submit_patch` even though its immediately preceding verification still had exit code 1;
+- root coder invoked the verifier twice: after the first AgentTool returned without submission, the outer harness issued its normal “continue your work” turn, the root resumed editing, and called the verifier again.
 
-1. inspect the existing diff before editing;
-2. run the **smallest directly relevant test** rather than starting with the full suite;
-3. read failing-test output and the failing test / nearby assertions before repair;
-4. make at most one evidence-backed narrow repair;
-5. re-run the same targeted verification;
-6. call `submit_patch` **only after targeted verification passes**;
-7. if verification still fails, **do not submit**; finish and let harness patch recovery preserve the working-tree diff.
+Conclusion: **the AgentTool topology fixes the compaction/plumbing problem, but E4B still does not reliably follow the verification gate.** More prompt wording is unlikely to be the highest-ROI next intervention.
 
-TDD regression tests cover these rules. Latest repo validation passes compile, all unit tests, the real 129-task corpus gate, and restore CLI smoke.
+## Static current-wheel validation note
 
-**Next evidence required:** rerun the exact same `rich_3278` E4B coder → verifier experiment with only this verifier-policy change.
+GitHub Actions run `41199130515` is **infrastructure-confounded, not a submission failure**. The vanilla runner filled its disk while pip tried to resolve/download a large PyTorch/CUDA/vLLM dependency stack; the actual `validate_directory()` step never ran. Kaggle smoke is the authoritative current-environment validation path for now.
 
 ## HTTPX exclusion
 
@@ -117,11 +138,10 @@ TDD regression tests cover these rules. Latest repo validation passes compile, a
 
 **NO CLEAN RESOLVED AGENT CASE YET. NO LEADERBOARD SCORE RECORDED.**
 
-Gold `rich_3278` passes. The next valid evidence is the same-task coder → verifier rerun after the verifier-policy fix.
+Gold `rich_3278` passes. E4B has now failed it across safer single-agent and two-role configurations; the root-LlmAgent + verifier-AgentTool topology is mechanically viable but E4B policy adherence/semantic accuracy remains weak.
 
 ## Next step
 
-1. Rerun `rich_3278` with the current E4B coder → verifier submission; change no other variable.
-2. Inspect trace for targeted-test selection, failing-test reading, bounded repair, and submit/no-submit behavior.
-3. If it resolves, expand to the fixed clean-task diagnostic sample before adding architecture.
-4. If it still fails after following the corrected policy, compare the same topology with a larger allowed base model before adding a third agent, LoRA, or more graph machinery.
+1. Run `rich_3278` with the **same root coder + verifier AgentTool topology and same prompts/budgets on 12B**, using the official 12B vLLM override.
+2. If 12B materially improves targeted-test adherence or resolves the task, keep the topology and expand to the fixed clean-task sample before adding more architecture.
+3. If 12B fails in the same way, stop spending prompt tokens on this gate and move to a more structural intervention (deterministic verification wrapper/tool policy or training), chosen from repeated trace evidence.
