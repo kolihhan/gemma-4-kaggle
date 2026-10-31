@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "competition": "gemma-4-developer-agent",
+  "mirrored_at_utc": "2026-10-31T06:11:05.416709+00:00",
+  "source": "Kaggle competitions download-all API",
+  "release_tag": "kaggle-data-2026-10-31",
+  "archive_name": "gemma-4-developer-agent.zip",
+  "archive_size": 21929290938,
+  "archive_sha256": "69c4c4c3f98bc5e9b0ff80f8660cd1435f69dcc3a3c041198f4b974da5ffea69",
+  "http_content_length": 21929290938,
+  "inventory": {
+    "file_count": null,
+    "listed_bytes": null,
+    "note": "Initial Kaggle CLI file listing was paginated and the first mirror parser did not exhaust pages. Do not use its first-page count. Archive integrity is established by Content-Length, whole-archive SHA-256, and the Release part hashes below."
+  },
+  "part_size_limit": 1800000000,
+  "parts": [
+    {"name":"gemma-4-developer-agent.zip.part-00001","size":1800000000,"sha256":"f1cce6d756ec7db581366ba14269333005737d5f066fc2cd96bf4bfd97e6afb1"},
+    {"name":"gemma-4-developer-agent.zip.part-00002","size":1800000000,"sha256":"34890f25b509ba2371c1500f260013035a26d5c37fae62ad64e705c56f10478d"},
+    {"name":"gemma-4-developer-agent.zip.part-00003","size":1800000000,"sha256":"e04114ca8f5cb05db84eca749f0b825755720ab356541fcd3d9d68e562746558"},
+    {"name":"gemma-4-developer-agent.zip.part-00004","size":1800000000,"sha256":"fd8bceedd6a8d954e8b0df706353b672c267d44cbb8e773ede3ba7b68f71f0b5"},
+    {"name":"gemma-4-developer-agent.zip.part-00005","size":1800000000,"sha256":"808a36dcc1cd05dac592124e956631c10fdc04cecdfe700e5280f2ddcf70a34b"},
+    {"name":"gemma-4-developer-agent.zip.part-00006","size":1800000000,"sha256":"5a2079534f15269b05fa939dfb32e887114095524cc901e61c1f3077060532a3"},
+    {"name":"gemma-4-developer-agent.zip.part-00007","size":1800000000,"sha256":"10ef6c85bae31bf63686ca8eaf5cbe6054590f6f38d35979c2b4b0a71d58f045"},
+    {"name":"gemma-4-developer-agent.zip.part-00008","size":1800000000,"sha256":"225401169511a942131c5f9104fff9504da9b2875cc43c5d919622940a0f33dc"},
+    {"name":"gemma-4-developer-agent.zip.part-00009","size":1800000000,"sha256":"3f4519579130b6ef16d3792b8441465e3c5c3c0ce2c1be1d1249213b2729547d"},
+    {"name":"gemma-4-developer-agent.zip.part-00010","size":1800000000,"sha256":"29893ce611d4f350c4135ccbf2cc203ebf7db1276a0edec23e795f59a8ab2419"},
+    {"name":"gemma-4-developer-agent.zip.part-00011","size":1800000000,"sha256":"53afd53bb38d7eea9996aa496e1d0d81a34b57b8eeb5ecd0805464d4227a6bc6"},
+    {"name":"gemma-4-developer-agent.zip.part-00012","size":1800000000,"sha256":"ce7bf79a2bdf84ca3059234cb2f3fb21cb343fe02b81c8478e79ccff464f761b"},
+    {"name":"gemma-4-developer-agent.zip.part-00013","size":329290938,"sha256":"80e5440ac42ff754f7fdc4f91fafaf6da277e1b61379e6f1757632c5736d19e3"}
+  ]
+}
