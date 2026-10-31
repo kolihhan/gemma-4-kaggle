@@ -42,14 +42,23 @@ jobs:
           set -euo pipefail
           rm -rf "$KERNEL_DIR" "$OUTPUT_DIR"
           mkdir -p "$KERNEL_DIR" "$OUTPUT_DIR"
-          cp kaggle/gold_control_sweep.py "$KERNEL_DIR/gold_control_sweep.py"
-          cp docs/evaluation/verifier-lora-split-v0.json "$KERNEL_DIR/verifier-lora-split-v0.json"
           python - <<'PY'
           import json
           import os
           from pathlib import Path
 
+          from kaggle.gold_control_sweep import EMBEDDED_MANIFEST_MARKER, render_kernel_source
+
+          root = Path.cwd()
           kernel_dir = Path(os.environ["KERNEL_DIR"])
+          source = (root / "kaggle" / "gold_control_sweep.py").read_text(encoding="utf-8")
+          manifest = (root / "docs" / "evaluation" / "verifier-lora-split-v0.json").read_text(encoding="utf-8")
+          rendered = render_kernel_source(source, manifest)
+          if EMBEDDED_MANIFEST_MARKER in rendered:
+              raise SystemExit("gold sweep manifest marker remained unresolved")
+          compile(rendered, "gold_control_sweep.py", "exec")
+          (kernel_dir / "gold_control_sweep.py").write_text(rendered, encoding="utf-8")
+
           metadata = {
               "id": "kolihhan/gemma-4-verifier-gold-sweep-v0",
               "title": "Gemma 4 Verifier Gold Sweep v0",
