@@ -46,7 +46,7 @@
 - [x] Read personal router and target repository state.
 - [x] Reconcile current Kaggle model announcement with stale bundled `HARNESS_README.md`.
 - [x] Record canonical repo state and baseline design.
-- [ ] Rewrite README as the project entry point after baseline files exist.
+- [x] Rewrite README as the project entry point after baseline files exist.
 
 ### Task 2: Build and verify public corpus analyzer
 
@@ -78,27 +78,28 @@
 - Produces: one baseline submission directory suitable for current-harness validation and first smoke evaluation.
 
 - [x] Write static submission contract tests and verify RED because `submission/` is absent.
-- [ ] Add root E4B `LlmAgent` with all 9 official tools.
-- [ ] Add sample-derived generation config and bounded provisional eval budget.
-- [ ] Add concise evidence/test/repair system prompt.
-- [ ] Verify all repo-tool tests GREEN.
+- [x] Add root E4B `LlmAgent` with all 9 official tools.
+- [x] Add sample-derived generation config and bounded provisional eval budget.
+- [x] Add concise evidence/test/repair system prompt.
+- [x] Verify all repo-tool tests GREEN.
 
 ### Task 4: Verify and harden full-data mirror finalization
 
 **Files:**
 - Modify: `.github/workflows/mirror-full-kaggle-data.yml`
 - Create/update: `manifests/latest.json`
-- Create/update: dated mirror manifest and Kaggle inventory.
+- Create/update: dated mirror manifest.
 - Update: `NOW.md`
 
 **Interfaces:**
 - Produces: reconstructable private full dataset with checksummed Release parts and a durable manifest.
 
-- [ ] Verify all Release parts finish in `uploaded` state.
-- [ ] Confirm full archive byte count and SHA-256 from mirror output.
-- [ ] Recover/rebase manifest commit if the long-running job loses a non-fast-forward race with newer `main` commits.
-- [ ] Patch future manifest push to tolerate concurrent main changes without launching duplicate mirror work.
-- [ ] Verify `scripts/restore_full_dataset.py` can authenticate to the private repo and manifests reference every Release part.
+- [x] Verify all Release parts finish in `uploaded` state.
+- [x] Confirm full archive byte count and SHA-256 from mirror output.
+- [x] Recover the manifest after the long-running job lost a non-fast-forward race with newer `main` commits.
+- [x] Patch future manifest push to fetch/rebase current `main` before pushing.
+- [x] Verify private-repo restore auth path and CLI smoke test; confirm the durable manifest references all 13 Release parts.
+- [ ] Optional later: regenerate an exhaustive Kaggle per-file inventory with pagination. The first CLI listing only represented its first page and is deliberately not treated as authoritative.
 
 ### Task 5: First execution gate
 
