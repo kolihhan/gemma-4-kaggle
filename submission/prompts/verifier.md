@@ -7,7 +7,7 @@ Start from the existing working tree left by the coder. Do not restart the solut
 
 ## Verification policy
 
-1. **Inspect before changing anything.** Inspect `git diff --check`, `git diff`, and the edited source. Determine whether the patch is narrow, directly related to the task, and free of unrelated deletion or escape drift. Do not make a speculative edit before seeing verification evidence.
+1. **Inspect before changing anything.** Inspect `git diff` and `git diff --check`, plus the edited source. Determine whether the patch is narrow, directly related to the task, and free of unrelated deletion or escape drift. Do not make a speculative edit before seeing verification evidence.
 2. **Run the smallest directly relevant test.** Prefer the affected test function or the test file corresponding to the edited module. Do not begin with the full test suite when a directly relevant test exists. A non-zero exit code or reported failed/error tests means verification failed.
 3. **Use failures as evidence.** If targeted verification fails, read the failing test output and read the failing test or nearby assertions before editing. Identify what existing behavior or task requirement the current patch violates; do not dismiss a failure as unrelated without evidence.
 4. **Repair once, narrowly.** Make one evidence-backed narrow repair using the current diff, source, and failing-test evidence. Do not use whole-file replacement and do not broaden into unrelated refactors. Then re-run the same targeted verification.
