@@ -12,28 +12,42 @@ class SubmissionLayoutTests(unittest.TestCase):
             "agent.yaml",
             "eval_config.yaml",
             "configs/sampling.yaml",
-            "sub_agents/coder.yaml",
             "sub_agents/verifier.yaml",
             "prompts/coder.md",
             "prompts/verifier.md",
         ):
             self.assertTrue((SUBMISSION / relative).is_file(), relative)
+        self.assertFalse((SUBMISSION / "sub_agents" / "coder.yaml").exists())
 
-    def test_root_is_exactly_two_stage_sequential_agent(self):
+    def test_root_is_compaction_safe_llm_coder_with_verifier_agent_tool(self):
         root = (SUBMISSION / "agent.yaml").read_text(encoding="utf-8")
-        self.assertIn("agent_class: SequentialAgent", root)
-        self.assertIn("name: swe_e4b_coder_verifier", root)
-        self.assertEqual(root.count("config_path:"), 2)
-        self.assertIn("config_path: sub_agents/coder.yaml", root)
+        self.assertIn("agent_class: LlmAgent", root)
+        self.assertIn("name: swe_e4b_coder", root)
+        self.assertIn("model: gemma-4-e4b-it-qat-w4a16-ct", root)
+        self.assertIn("instruction: !include prompts/coder.md", root)
+        self.assertIn("generate_content_config: !include configs/sampling.yaml", root)
+        for tool in (
+            "- run_command",
+            "- read_file",
+            "- edit_file",
+            "- get_status",
+            "- get_code_neighbors",
+            "- search_similar_code",
+            "- get_code_subgraph",
+        ):
+            self.assertIn(tool, root)
+        self.assertIn("- agent_tool:", root)
         self.assertIn("config_path: sub_agents/verifier.yaml", root)
-        self.assertNotIn("model:", root)
-        self.assertNotIn("submit_patch", root)
+        self.assertIn("skip_summarization: true", root)
+        self.assertNotIn("sub_agents:", root)
+        self.assertNotIn("- submit_patch", root)
+        self.assertNotIn("- write_file", root)
 
-    def test_coder_and_verifier_share_e4b_but_only_verifier_can_submit(self):
-        coder = (SUBMISSION / "sub_agents" / "coder.yaml").read_text(encoding="utf-8")
+    def test_root_and_verifier_share_e4b_but_only_verifier_can_submit(self):
+        root = (SUBMISSION / "agent.yaml").read_text(encoding="utf-8")
         verifier = (SUBMISSION / "sub_agents" / "verifier.yaml").read_text(encoding="utf-8")
 
-        for text in (coder, verifier):
+        for text in (root, verifier):
             self.assertIn("model: gemma-4-e4b-it-qat-w4a16-ct", text)
             self.assertNotIn("adapter:", text)
             self.assertNotIn("- write_file", text)
@@ -41,20 +55,19 @@ class SubmissionLayoutTests(unittest.TestCase):
             self.assertIn("- read_file", text)
             self.assertIn("- edit_file", text)
             self.assertIn("- get_status", text)
-            self.assertIn("generate_content_config: !include ../configs/sampling.yaml", text)
 
-        self.assertNotIn("- submit_patch", coder)
+        self.assertNotIn("- submit_patch", root)
         self.assertIn("- submit_patch", verifier)
-        self.assertIn("instruction: !include ../prompts/coder.md", coder)
+        self.assertIn("generate_content_config: !include configs/sampling.yaml", root)
+        self.assertIn("generate_content_config: !include ../configs/sampling.yaml", verifier)
         self.assertIn("instruction: !include ../prompts/verifier.md", verifier)
 
-    def test_sub_agent_includes_are_relative_to_the_sub_agent_yaml(self):
-        coder = (SUBMISSION / "sub_agents" / "coder.yaml").read_text(encoding="utf-8")
+    def test_verifier_includes_are_relative_to_its_yaml(self):
         verifier = (SUBMISSION / "sub_agents" / "verifier.yaml").read_text(encoding="utf-8")
-        self.assertNotIn("!include prompts/", coder)
-        self.assertNotIn("!include configs/", coder)
         self.assertNotIn("!include prompts/", verifier)
         self.assertNotIn("!include configs/", verifier)
+        self.assertIn("!include ../prompts/verifier.md", verifier)
+        self.assertIn("!include ../configs/sampling.yaml", verifier)
 
     def test_both_prompts_receive_problem_context(self):
         coder = (SUBMISSION / "prompts" / "coder.md").read_text(encoding="utf-8")
@@ -62,7 +75,7 @@ class SubmissionLayoutTests(unittest.TestCase):
         self.assertIn("{problem_description}", coder)
         self.assertIn("{problem_description}", verifier)
 
-    def test_coder_keeps_bounded_edit_and_test_policy(self):
+    def test_coder_keeps_bounded_edit_test_and_verifier_handoff_policy(self):
         prompt = (SUBMISSION / "prompts" / "coder.md").read_text(encoding="utf-8")
         for phrase in (
             "After two failed `edit_file` attempts",
@@ -71,6 +84,7 @@ class SubmissionLayoutTests(unittest.TestCase):
             "inspect `git diff`",
             "targeted verification",
             "Do not submit",
+            "Call `swe_e4b_verifier` exactly once",
         ):
             self.assertIn(phrase, prompt)
 
