@@ -1,3 +1,4 @@
+# Source pinned to Acivar-Digital/gemma4 commit 6c64846dda7ca889b3bb9fbbcde878dbff0f3610
 name: Import lightweight Gemma 4 dataset
 
 on:
