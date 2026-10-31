@@ -131,13 +131,19 @@ def _validate_manifest_item(item: dict, *, where: str) -> None:
             raise ValueError(f"{where} item missing {key}: {item!r}")
 
 
-def replace_confounded_holdout(split: dict, confounded_ids: set[str]) -> dict:
+def replace_confounded_holdout(
+    split: dict,
+    confounded_ids: set[str],
+    *,
+    allow_same_repo_fallback: bool = False,
+) -> dict:
     """Replace failed gold-control holdout slots from the current train pool.
 
-    Each replacement must match the failed task's repository and patch-size
-    bucket. Selection is the stable SHA-256 minimum among current training
-    candidates for that exact slot. Failed holdout tasks move permanently to
-    ``excluded`` and never re-enter training.
+    The default remains strict: each replacement must match the failed task's
+    repository and patch-size bucket. When ``allow_same_repo_fallback`` is
+    explicitly enabled, an exhausted exact bucket may fall back to the stable
+    SHA-256 minimum from the same repository only. Failed holdout tasks move
+    permanently to ``excluded`` and never re-enter training.
     """
     if split.get("version") != VERSION:
         raise ValueError(f"unexpected split version: {split.get('version')!r}")
@@ -171,12 +177,17 @@ def replace_confounded_holdout(split: dict, confounded_ids: set[str]) -> dict:
             for item in train
             if str(item.get("repo")) == repo and str(item.get("patch_bucket")) == bucket
         ]
+        selection_scope = "same_repo_same_bucket"
+        if not candidates and allow_same_repo_fallback:
+            candidates = [item for item in train if str(item.get("repo")) == repo]
+            selection_scope = "same_repo_fallback"
         if not candidates:
             raise ValueError(
                 f"no same repo/bucket replacement candidate for {failed_id}: {repo} / {bucket}"
             )
         replacement = min(candidates, key=lambda item: _stable_key(str(item["instance_id"])))
         replacement_id = str(replacement["instance_id"])
+        replacement_bucket = str(replacement["patch_bucket"])
 
         train = [item for item in train if str(item.get("instance_id")) != replacement_id]
         holdout = [item for item in holdout if str(item.get("instance_id")) != failed_id]
@@ -187,7 +198,9 @@ def replace_confounded_holdout(split: dict, confounded_ids: set[str]) -> dict:
                 "from": failed_id,
                 "to": replacement_id,
                 "repo": repo,
-                "patch_bucket": bucket,
+                "selection_scope": selection_scope,
+                "from_patch_bucket": bucket,
+                "to_patch_bucket": replacement_bucket,
             }
         )
 
@@ -203,6 +216,7 @@ def replace_confounded_holdout(split: dict, confounded_ids: set[str]) -> dict:
         {
             "round": len(rounds) + 1,
             "reason": "gold_control_confounded",
+            "same_repo_fallback_allowed": bool(allow_same_repo_fallback),
             "replacements": replacement_log,
         }
     )
@@ -298,6 +312,11 @@ def main() -> int:
     parser.add_argument("--input-manifest", type=Path)
     parser.add_argument("--replace-confounded", nargs="*", default=[])
     parser.add_argument(
+        "--allow-same-repo-fallback",
+        action="store_true",
+        help="allow exhausted exact buckets to fall back to a deterministic candidate from the same repo",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path("docs/evaluation/verifier-lora-split-v0.json"),
@@ -308,10 +327,16 @@ def main() -> int:
         if not args.replace_confounded:
             parser.error("--input-manifest requires one or more --replace-confounded IDs")
         split = json.loads(args.input_manifest.read_text(encoding="utf-8"))
-        split = replace_confounded_holdout(split, set(args.replace_confounded))
+        split = replace_confounded_holdout(
+            split,
+            set(args.replace_confounded),
+            allow_same_repo_fallback=args.allow_same_repo_fallback,
+        )
     else:
         if args.replace_confounded:
             parser.error("--replace-confounded requires --input-manifest")
+        if args.allow_same_repo_fallback:
+            parser.error("--allow-same-repo-fallback requires --input-manifest and --replace-confounded")
         split = build_split(load_jsonl(args.tasks))
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
