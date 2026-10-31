@@ -169,7 +169,7 @@ jobs:
           result_path = Path(os.environ["OUTPUT_DIR"]) / "smoke_result.json"
           result = json.loads(result_path.read_text(encoding="utf-8"))
           print(json.dumps(result, indent=2, sort_keys=True))
-          assert result.get("instance_id") == "httpx_3672", result
+          assert result.get("instance_id") == "rich_3278", result
           assert result.get("model") == "gemma-4-e4b-it-qat-w4a16-ct", result
           if result.get("status") != "completed":
               raise SystemExit(f"smoke runtime error: {result}")
