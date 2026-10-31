@@ -22,11 +22,35 @@ jobs:
           python-version: "3.12"
       - name: Install Kaggle CLI
         run: python -m pip install --disable-pip-version-check --upgrade kaggle
-      - name: Read current private kernel state
+      - name: Enumerate kernels available to this token
         shell: bash
         run: |
           set +e
-          echo '--- status ---'
+          echo '--- kernels list help ---'
+          kaggle kernels list --help
+          echo '--- list own/user kernels via CLI ---'
+          kaggle kernels list --user kolihhan --sort-by dateRun --page-size 50
+          echo '--- inspect Python API signature and results ---'
+          python - <<'PY'
+          import inspect
+          from kaggle.api.kaggle_api_extended import KaggleApi
+
+          api = KaggleApi()
+          api.authenticate()
+          print('kernels_list signature:', inspect.signature(api.kernels_list))
+          attempts = [
+              {'user': 'kolihhan', 'page_size': 50},
+              {'user': 'kolihhan', 'search': 'gemma4-e4b-smoke', 'page_size': 50},
+              {'search': 'Gemma 4 E4B One-Task Smoke', 'page_size': 50},
+          ]
+          for kwargs in attempts:
+              print('QUERY', kwargs)
+              try:
+                  rows = api.kernels_list(**kwargs)
+                  for row in rows:
+                      print(row)
+              except Exception as exc:
+                  print(type(exc).__name__, exc)
+          PY
+          echo '--- direct status retry ---'
           kaggle kernels status "$KERNEL_REF"
-          echo '--- current logs ---'
-          kaggle kernels logs "$KERNEL_REF"
