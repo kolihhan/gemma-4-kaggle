@@ -1,0 +1,28 @@
+name: Validate mirror and restore tools
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/**"
+      - ".github/workflows/validate-tools.yml"
+  pull_request:
+    paths:
+      - "scripts/**"
+      - ".github/workflows/validate-tools.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile tools
+        run: python -m py_compile scripts/mirror_kaggle_to_release.py scripts/restore_full_dataset.py
+      - name: Smoke-test restore CLI
+        run: python scripts/restore_full_dataset.py --help
