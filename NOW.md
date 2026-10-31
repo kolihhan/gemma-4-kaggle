@@ -10,11 +10,13 @@ Build a competitive, evidence-driven Gemma 4 software-engineering agent. Optimiz
 
 1. Root coder owns inspect → patch → local verification and has no `submit_patch` / `write_file`.
 2. Verifier AgentTool independently inspects the shared working tree, may make at most one narrow repair, and owns `submit_patch`.
-3. Both currently use `gemma-4-e4b-it-qat-w4a16-ct`.
+3. The canonical candidate remains `gemma-4-e4b-it-qat-w4a16-ct`.
 
 Why this replaced `SequentialAgent`: the official harness enables event compaction, and current ADK automatic compaction requires a root `LlmAgent` model. A root `SequentialAgent` produced `ValueError: No LlmAgent model available for event compaction summarizer` after a real run. Root `LlmAgent` + verifier AgentTool preserves two roles while giving the compactor a canonical root model.
 
-**Next controlled experiment:** compare the exact same topology/policies on 12B before adding a third agent, LoRA, or more graph machinery. Repeated E4B traces show prompt-only verification discipline is not reliably obeyed.
+The exact same topology/prompts/budgets were tested on 12B. The 12B model loaded successfully with the official HF override, but under the existing 4096-token thinking budget it timed out before editing or reaching the verifier. Therefore **12B@4096 is rejected as the current candidate**; the failure is throughput/tool-use efficiency, not the E4B verification-gate failure mode.
+
+**Next controlled experiment:** one 12B follow-up on `rich_3278` with the same topology/prompts/time/tool budgets but a lower `thinking_budget` (1024). This isolates whether 12B was defeated by overthinking latency before abandoning the model-size path. Do not add a third agent, LoRA, or graph machinery yet.
 
 ## Verified current facts
 
@@ -22,11 +24,11 @@ Why this replaced `SequentialAgent`: the official harness enables event compacti
 - Public development corpus: **129 tasks** — FastAPI 67 / Rich 48 / Requests 13 / HTTPX 1.
 - Reference changed-line buckets: **1–10: 60 / 11–30: 29 / 31–80: 20 / 81+: 20**.
 - Deterministic `per_repo=3` diagnostic sample has **10 tasks** because HTTPX has only one public task.
-- Current runtime uses the official scorer wheelhouse, pinned Python 3.12 Kaggle image, and L4 ×4 for E4B.
+- Current runtime uses the official scorer wheelhouse, pinned Python 3.12 Kaggle image, and L4 ×4 for E4B/12B smoke runs.
 - Current wheelhouse observed: `adk-submission 0.2.13`, `swegemma 0.2.11`.
 - `!include` paths resolve relative to the YAML file containing the include.
 - `AgentTool` is accepted by the current Kaggle runtime; its exposed tool name is the child agent name.
-- Kaggle staff says 12B needs a vLLM HF override mapping it to `Gemma4ForCausalLM` / `gemma4`; the scorer has this update. Any local 12B smoke must mirror that serving override.
+- Kaggle staff says 12B needs a vLLM HF override mapping it to `Gemma4ForCausalLM` / `gemma4`; the 12B smoke proved that override can boot the model successfully in the current Kaggle environment.
 
 ## Clean diagnostic: `rich_3278`
 
@@ -102,6 +104,36 @@ Behavioral findings from the trace:
 
 Conclusion: **the AgentTool topology fixes the compaction/plumbing problem, but E4B still does not reliably follow the verification gate.** More prompt wording is unlikely to be the highest-ROI next intervention.
 
+## 12B controlled A/B evidence
+
+Exact model-size A/B branch: `exp/12b-rich3278-ab`, draft PR #1. The topology, prompts, sampling config, 5-minute task budget, 32-tool budget, and 64-turn budget were held constant; only E4B → 12B plus the required official 12B vLLM HF override changed.
+
+TDD contract validation:
+
+- RED: 25 tests ran with exactly 4 expected failures while the implementation still referenced E4B / lacked the 12B override.
+- GREEN: compile, all 25 unit/static tests, 129-task corpus gate, and restore-CLI smoke passed after the 12B implementation.
+
+Official Kaggle L4 ×4 smoke run `41206261407` on `rich_3278`:
+
+- 12B vLLM booted successfully with tensor parallel size 4.
+- runtime completed without infrastructure error.
+- duration: **304.35 s** (task timeout)
+- tool calls: **3 / 32**
+- final patch: **0 chars**
+- `test_exit_code=-1`
+- `resolved=false`
+- verifier AgentTool was never reached.
+
+Trace findings:
+
+- the first two real tool calls were only `grep` and `read_file`;
+- after reading `rich/ansi.py`, the model spent a long generation reasoning over the regex and emitted a `read_file` call as ordinary text instead of a parsed tool call;
+- the harness issued its continuation nudge, after which 12B spent another long reasoning pass and performed only one more `read_file`;
+- the task then hit the 5-minute budget with no working-tree modification and no explicit submission;
+- trace totals were **20,130 prompt tokens / 7,416 completion tokens / 27,546 total tokens** across only a few effective actions.
+
+Conclusion: **12B@4096 thinking budget is not viable under the current 5-minute task budget.** This is a different failure from E4B: E4B reaches edit/test/verifier but makes semantic/policy mistakes; 12B consumed the budget before reaching those stages. Do not promote the 12B A/B branch to the canonical candidate.
+
 ## Static current-wheel validation note
 
 GitHub Actions run `41199130515` is **infrastructure-confounded, not a submission failure**. The vanilla runner filled its disk while pip tried to resolve/download a large PyTorch/CUDA/vLLM dependency stack; the actual `validate_directory()` step never ran. Kaggle smoke is the authoritative current-environment validation path for now.
@@ -138,10 +170,11 @@ GitHub Actions run `41199130515` is **infrastructure-confounded, not a submissio
 
 **NO CLEAN RESOLVED AGENT CASE YET. NO LEADERBOARD SCORE RECORDED.**
 
-Gold `rich_3278` passes. E4B has now failed it across safer single-agent and two-role configurations; the root-LlmAgent + verifier-AgentTool topology is mechanically viable but E4B policy adherence/semantic accuracy remains weak.
+Gold `rich_3278` passes. E4B reaches the coding/verification loop but remains semantically unreliable; 12B with the same 4096-token thinking budget timed out before editing. The canonical candidate therefore remains the mechanically viable E4B root-LlmAgent + verifier-AgentTool configuration while one bounded 12B latency follow-up is tested.
 
 ## Next step
 
-1. Run `rich_3278` with the **same root coder + verifier AgentTool topology and same prompts/budgets on 12B**, using the official 12B vLLM override.
-2. If 12B materially improves targeted-test adherence or resolves the task, keep the topology and expand to the fixed clean-task sample before adding more architecture.
-3. If 12B fails in the same way, stop spending prompt tokens on this gate and move to a more structural intervention (deterministic verification wrapper/tool policy or training), chosen from repeated trace evidence.
+1. Keep `main/submission/` on E4B; do not merge the failed 12B A/B candidate.
+2. Run one controlled 12B follow-up on `rich_3278` with `thinking_budget: 1024`, changing no topology, prompt, time, tool, or turn budgets.
+3. If 12B now reaches edit/test/verifier and materially improves over E4B, continue model-size tuning on the fixed clean sample. If it still times out/stalls or remains unresolved without a clear quality gain, stop the 12B path.
+4. Then return to the E4B evidence and test the smallest structural intervention that enforces verification mechanically rather than with more prompt wording.
