@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/probe-e4b-smoke-status.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
