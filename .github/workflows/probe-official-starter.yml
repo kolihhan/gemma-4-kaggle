@@ -33,3 +33,10 @@ jobs:
           cat /tmp/starter/kernel-metadata.json
           echo '--- wheelhouse/model references in notebook ---'
           grep -RniE 'wheelhouse|swegemma|adk-submission|gemma-4-(31b|12b|e4b|e2b)|MODEL_VLLM_EXTRA_ARGS' /tmp/starter || true
+      - name: Probe authenticated kernel metadata identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/account-kernel
+          kaggle kernels init -p /tmp/account-kernel
+          cat /tmp/account-kernel/kernel-metadata.json
