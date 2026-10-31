@@ -74,18 +74,26 @@ class SubmissionLayoutTests(unittest.TestCase):
         ):
             self.assertIn(phrase, prompt)
 
-    def test_verifier_owns_final_test_repair_and_submit_gate(self):
+    def test_verifier_uses_evidence_first_targeted_gate(self):
         prompt = (SUBMISSION / "prompts" / "verifier.md").read_text(encoding="utf-8")
         for phrase in (
             "Start from the existing working tree",
             "inspect `git diff`",
-            "targeted verification",
+            "smallest directly relevant test",
+            "Do not begin with the full test suite",
+            "read the failing test",
             "one evidence-backed narrow repair",
-            "If targeted verification still fails",
-            "smallest defensible patch",
-            "call `submit_patch` as your final tool action",
+            "re-run the same targeted verification",
         ):
             self.assertIn(phrase, prompt)
+
+    def test_verifier_never_submits_a_known_failing_patch(self):
+        prompt = (SUBMISSION / "prompts" / "verifier.md").read_text(encoding="utf-8")
+        self.assertIn("Only call `submit_patch` after targeted verification passes", prompt)
+        self.assertIn("If targeted verification still fails", prompt)
+        self.assertIn("do not call `submit_patch`", prompt)
+        self.assertNotIn("preserve the **smallest defensible patch**", prompt)
+        self.assertNotIn("call `submit_patch` as your final tool action to terminate this task once", prompt)
 
     def test_sampling_starts_from_official_example_values(self):
         text = (SUBMISSION / "configs" / "sampling.yaml").read_text(encoding="utf-8")
