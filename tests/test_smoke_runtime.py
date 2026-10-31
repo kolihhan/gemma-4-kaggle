@@ -26,14 +26,21 @@ class SmokeRuntimeContractTests(unittest.TestCase):
         self.assertIn("smoke_result.json", text)
         self.assertNotIn("tasks[:2]", text)
 
-    def test_runtime_uses_current_e4b_and_official_runtime_shape(self):
+    def test_runtime_uses_current_12b_and_official_runtime_shape(self):
         text = RUNTIME.read_text(encoding="utf-8")
-        self.assertIn('MODEL_NAME = "gemma-4-e4b-it-qat-w4a16-ct"', text)
+        self.assertIn('MODEL_NAME = "gemma-4-12b-it-qat-w4a16-ct"', text)
         self.assertIn("tool_call_parser=\"gemma4\"", text)
         self.assertIn("reasoning_parser=\"gemma4\"", text)
         self.assertIn("max_model_len=32768", text)
         self.assertIn("tensor_parallel_size=tp_size", text)
         self.assertIn("sandbox=\"subprocess\"", text)
+
+    def test_runtime_applies_official_12b_vllm_override(self):
+        text = RUNTIME.read_text(encoding="utf-8")
+        self.assertIn("MODEL_VLLM_EXTRA_ARGS", text)
+        self.assertIn('"architectures": ["Gemma4ForCausalLM"]', text)
+        self.assertIn('"model_type": "gemma4"', text)
+        self.assertIn("extra_args=MODEL_VLLM_EXTRA_ARGS.get(MODEL_NAME, ())", text)
 
     def test_runtime_does_not_read_reference_solution_fields(self):
         text = RUNTIME.read_text(encoding="utf-8")
