@@ -4,15 +4,21 @@ Repository for **Google - The Gemma 4 Developer Agent Competition**.
 
 ## Data layout
 
-Small text artifacts stay in normal Git:
+Small text artifacts currently in Git:
 
 - `tasks.jsonl` — 129 public development tasks
-- `HARNESS_README.md` — official harness guide
+- `HARNESS_README.md` — harness guide
 - `manifests/` — produced by the full-data mirror workflow
 
-The complete competition input is roughly 22+ GB, so it is **not committed as ordinary Git blobs**. GitHub rejects ordinary files over 100 MiB and recommends keeping repositories far smaller than this dataset. The full raw Kaggle archive is therefore mirrored into this repository's **GitHub Releases**, split into parts under 2 GiB each. A manifest records every part's size and SHA-256 plus the checksum of the reconstructed original archive.
+The complete competition input is roughly 22+ GB, so it is **not committed as ordinary Git blobs**. The full raw Kaggle archive is designed to be stored in this repository's **GitHub Releases**, split into parts under 2 GiB each. A manifest records every part's size and SHA-256 plus the checksum of the reconstructed original archive.
 
 Expected competition data includes `docker/`, `embeddings/`, `graphs/`, `sample_submission/`, `sandbox/`, `snapshots/`, `wheels/`, `HARNESS_README.md`, and `tasks.jsonl`.
+
+## Competition-data access rule
+
+**Do not run the full-data mirror while this repository is public.** Kaggle Competition Data must not be redistributed to people who have not accepted the competition rules. The workflow therefore refuses to upload the full dataset unless GitHub reports that this repository is private.
+
+Only grant access to teammates/participants who are permitted to access the competition data under the Kaggle rules.
 
 ## Mirror the complete official data
 
@@ -21,11 +27,12 @@ The workflow is `.github/workflows/mirror-full-kaggle-data.yml`.
 Prerequisites:
 
 1. Join the Kaggle competition and accept its rules.
-2. Generate a Kaggle API token.
-3. Add it to this repository as an Actions secret named `KAGGLE_API_TOKEN`.
-4. Run **Mirror full Gemma 4 Kaggle data** from GitHub Actions.
+2. Make this GitHub repository **private**.
+3. Generate a Kaggle API token.
+4. Add it to this repository as an Actions secret named `KAGGLE_API_TOKEN`.
+5. Run **Mirror full Gemma 4 Kaggle data** from GitHub Actions.
 
-The job streams Kaggle's official `download-all` response directly into GitHub Release parts. It never needs to keep the complete ~22 GB archive on the Actions runner.
+The job streams Kaggle's official `download-all` response directly into private GitHub Release parts. It never needs to keep the complete ~22 GB archive on the Actions runner.
 
 Successful completion writes:
 
