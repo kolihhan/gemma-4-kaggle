@@ -1,0 +1,6 @@
+# Provisional diagnostic budget. Tune from real traces; these are not official recommended values.
+evaluation:
+  timeout_seconds: 300
+  max_tool_calls: 32
+  max_time_minutes: 5
+  max_turns: 64
