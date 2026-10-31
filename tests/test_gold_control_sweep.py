@@ -15,6 +15,7 @@ from kaggle.gold_control_sweep import (
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "kaggle" / "gold_control_sweep.py"
+WORKFLOW = ROOT / ".github" / "workflows" / "run-verifier-gold-sweep.yml"
 EXPECTED_HOLDOUT_IDS = {
     "rich_3067",
     "rich_3064",
@@ -51,6 +52,12 @@ class GoldControlSweepTests(unittest.TestCase):
         self.assertIn("rich_3067", rendered)
         self.assertIn("requests_7505", rendered)
         compile(rendered, "gold_control_sweep.py", "exec")
+
+    def test_workflow_loads_renderer_by_path_not_kaggle_package_import(self):
+        text = WORKFLOW.read_text(encoding="utf-8")
+
+        self.assertIn("runpy.run_path", text)
+        self.assertNotIn("from kaggle.gold_control_sweep import", text)
 
     def test_result_record_hashes_reference_patch_without_exposing_it(self):
         reference_patch = "diff --git a/a.py b/a.py\n+safe\n"
