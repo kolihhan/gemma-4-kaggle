@@ -7,7 +7,7 @@ SUBMISSION = ROOT / "submission"
 
 
 class SubmissionLayoutTests(unittest.TestCase):
-    def test_minimal_e4b_submission_files_exist(self):
+    def test_minimal_12b_submission_files_exist(self):
         for relative in (
             "agent.yaml",
             "eval_config.yaml",
@@ -23,7 +23,7 @@ class SubmissionLayoutTests(unittest.TestCase):
         root = (SUBMISSION / "agent.yaml").read_text(encoding="utf-8")
         self.assertIn("agent_class: LlmAgent", root)
         self.assertIn("name: swe_e4b_coder", root)
-        self.assertIn("model: gemma-4-e4b-it-qat-w4a16-ct", root)
+        self.assertIn("model: gemma-4-12b-it-qat-w4a16-ct", root)
         self.assertIn("instruction: !include prompts/coder.md", root)
         self.assertIn("generate_content_config: !include configs/sampling.yaml", root)
         for tool in (
@@ -43,12 +43,12 @@ class SubmissionLayoutTests(unittest.TestCase):
         self.assertNotIn("- submit_patch", root)
         self.assertNotIn("- write_file", root)
 
-    def test_root_and_verifier_share_e4b_but_only_verifier_can_submit(self):
+    def test_root_and_verifier_share_12b_but_only_verifier_can_submit(self):
         root = (SUBMISSION / "agent.yaml").read_text(encoding="utf-8")
         verifier = (SUBMISSION / "sub_agents" / "verifier.yaml").read_text(encoding="utf-8")
 
         for text in (root, verifier):
-            self.assertIn("model: gemma-4-e4b-it-qat-w4a16-ct", text)
+            self.assertIn("model: gemma-4-12b-it-qat-w4a16-ct", text)
             self.assertNotIn("adapter:", text)
             self.assertNotIn("- write_file", text)
             self.assertIn("- run_command", text)
