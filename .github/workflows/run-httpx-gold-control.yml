@@ -1,4 +1,4 @@
-name: Run HTTPX gold verifier control
+name: Run Rich 3278 gold verifier control
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: gemma4-httpx-gold-control
+  group: gemma4-rich-3278-gold-control
   cancel-in-progress: true
 
 jobs:
@@ -20,9 +20,9 @@ jobs:
     timeout-minutes: 45
     env:
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
-      KERNEL_REF: kolihhan/gemma-4-httpx-gold-control
-      KERNEL_DIR: /tmp/gemma4-httpx-gold-control
-      OUTPUT_DIR: /tmp/gemma4-httpx-gold-control-output
+      KERNEL_REF: kolihhan/gemma-4-rich-3278-gold-control
+      KERNEL_DIR: /tmp/gemma4-rich-3278-gold-control
+      OUTPUT_DIR: /tmp/gemma4-rich-3278-gold-control-output
 
     steps:
       - uses: actions/checkout@v4
@@ -48,8 +48,8 @@ jobs:
 
           kernel_dir = Path(os.environ["KERNEL_DIR"])
           metadata = {
-              "id": "kolihhan/gemma-4-httpx-gold-control",
-              "title": "Gemma 4 HTTPX Gold Verifier Control",
+              "id": "kolihhan/gemma-4-rich-3278-gold-control",
+              "title": "Gemma 4 Rich 3278 Gold Control",
               "code_file": "gold_control.py",
               "language": "python",
               "kernel_type": "script",
@@ -135,7 +135,7 @@ jobs:
           result_path = Path(os.environ["OUTPUT_DIR"]) / "gold_control_result.json"
           result = json.loads(result_path.read_text(encoding="utf-8"))
           print(json.dumps(result, indent=2, sort_keys=True))
-          assert result.get("instance_id") == "httpx_3672", result
+          assert result.get("instance_id") == "rich_3278", result
           assert result.get("control") == "gold_reference_patch", result
           if result.get("status") != "completed":
               raise SystemExit(f"gold control runtime error: {result}")
@@ -145,7 +145,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: gemma4-httpx-gold-control-evidence
-          path: /tmp/gemma4-httpx-gold-control-output
+          name: gemma4-rich-3278-gold-control-evidence
+          path: /tmp/gemma4-rich-3278-gold-control-output
           if-no-files-found: warn
           retention-days: 14
