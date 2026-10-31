@@ -149,7 +149,10 @@ class VerifierSplitTests(unittest.TestCase):
             replace_confounded_holdout(split, {"bad"})
 
     def test_round1_real_replacement_contract(self):
-        split = json.loads(Path("docs/evaluation/verifier-lora-split-v0.json").read_text(encoding="utf-8"))
+        # Reconstruct the immutable initial split from tasks.jsonl rather than
+        # reading the mutable current manifest, which advances after each
+        # successful gold-control replacement round.
+        split = build_split(load_jsonl(Path("tasks.jsonl")), DEFAULT_HOLDOUT_QUOTA, DEFAULT_EXCLUDED_IDS)
         before_slots = Counter((item["repo"], item["patch_bucket"]) for item in split["holdout"])
 
         replaced = replace_confounded_holdout(split, ROUND1_CONFOUNDED_IDS)
@@ -165,6 +168,22 @@ class VerifierSplitTests(unittest.TestCase):
         self.assertEqual(replaced["counts"]["train"], 99)
         self.assertEqual(replaced["counts"]["holdout"], 12)
         self.assertEqual(replaced["counts"]["excluded"], 18)
+
+    def test_current_manifest_preserves_partition_invariants(self):
+        split = json.loads(Path("docs/evaluation/verifier-lora-split-v0.json").read_text(encoding="utf-8"))
+        holdout_ids = {item["instance_id"] for item in split["holdout"]}
+        train_ids = {item["instance_id"] for item in split["train"]}
+        excluded_ids = {item["instance_id"] for item in split["excluded"]}
+
+        self.assertEqual(split["version"], "verifier-lora-v0")
+        self.assertEqual(len(holdout_ids), 12)
+        self.assertFalse(holdout_ids & train_ids)
+        self.assertFalse(holdout_ids & excluded_ids)
+        self.assertFalse(train_ids & excluded_ids)
+        self.assertEqual(len(holdout_ids | train_ids | excluded_ids), split["counts"]["total_input"])
+        self.assertEqual(split["counts"]["holdout"], len(holdout_ids))
+        self.assertEqual(split["counts"]["train"], len(train_ids))
+        self.assertEqual(split["counts"]["excluded"], len(excluded_ids))
 
     def test_real_corpus_contract(self):
         tasks = load_jsonl(Path("tasks.jsonl"))
