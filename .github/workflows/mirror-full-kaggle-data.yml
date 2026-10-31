@@ -27,6 +27,7 @@ jobs:
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
+      REPO_PRIVATE: ${{ github.event.repository.private }}
       COMPETITION: gemma-4-developer-agent
 
     steps:
@@ -45,6 +46,15 @@ jobs:
         run: |
           set -euo pipefail
           python -m py_compile scripts/mirror_kaggle_to_release.py scripts/restore_full_dataset.py
+
+      - name: Require private repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${REPO_PRIVATE:-false}" != "true" ]]; then
+            echo "::error::Refusing to mirror Kaggle Competition Data into a public repository. Make this repository private first so the data is not redistributed to people who have not accepted the competition rules."
+            exit 3
+          fi
 
       - name: Require Kaggle API token
         shell: bash
