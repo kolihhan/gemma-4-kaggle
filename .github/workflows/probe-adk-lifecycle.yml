@@ -1,0 +1,72 @@
+name: Probe current ADK lifecycle compiler
+
+on:
+  push:
+    branches: [research/adk-lifecycle-probe]
+    paths:
+      - ".github/workflows/probe-adk-lifecycle.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Kaggle CLI
+        run: python -m pip install --disable-pip-version-check --upgrade kaggle
+      - name: Download and inspect current adk-submission wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/adk-wheel /tmp/adk-src
+          mkdir -p /tmp/adk-wheel /tmp/adk-src
+          kaggle datasets files metric/gemma-4-developer-agent-wheelhouse --page-size 200 > /tmp/wheel-files.txt
+          wheel="$(awk 'tolower($0) ~ /adk[_-]submission/ && $0 ~ /\.whl/ {print $1; exit}' /tmp/wheel-files.txt)"
+          test -n "$wheel"
+          echo "wheel=$wheel"
+          kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel" -p /tmp/adk-wheel --unzip
+          actual="$(find /tmp/adk-wheel -type f -name '*adk*submission*.whl' | head -n1)"
+          test -n "$actual"
+          python -m zipfile -e "$actual" /tmp/adk-src
+
+          echo '=== package files ==='
+          find /tmp/adk-src/adk_submission -maxdepth 2 -type f | sort
+
+          echo '=== AgentTool / agent_tool references ==='
+          grep -R -n -E 'AgentTool|agent_tool|skip_summarization' /tmp/adk-src/adk_submission || true
+
+          echo '=== SequentialAgent / workflow references ==='
+          grep -R -n -E 'SequentialAgent|ParallelAgent|LoopAgent' /tmp/adk-src/adk_submission || true
+
+          echo '=== ToolRegistry / CallbackRegistry references ==='
+          grep -R -n -E 'ToolRegistry|CallbackRegistry|register.*tool|register.*callback' /tmp/adk-src/adk_submission || true
+
+          echo '=== compiler/config source excerpts around matches ==='
+          python - <<'PY'
+          from pathlib import Path
+          root = Path('/tmp/adk-src/adk_submission')
+          needles = ('AgentTool', 'agent_tool', 'SequentialAgent', 'ToolRegistry', 'CallbackRegistry')
+          for path in sorted(root.rglob('*.py')):
+              lines = path.read_text(encoding='utf-8', errors='replace').splitlines()
+              hits = [i for i, line in enumerate(lines) if any(n in line for n in needles)]
+              if not hits:
+                  continue
+              print(f'--- {path.relative_to(root)} ---')
+              shown = set()
+              for i in hits:
+                  lo=max(0,i-18); hi=min(len(lines),i+28)
+                  key=(lo,hi)
+                  if key in shown: continue
+                  shown.add(key)
+                  for j in range(lo,hi):
+                      print(f'{j+1:04d}: {lines[j]}')
+                  print()
+          PY
