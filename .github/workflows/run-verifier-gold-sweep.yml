@@ -45,16 +45,20 @@ jobs:
           python - <<'PY'
           import json
           import os
+          import runpy
           from pathlib import Path
 
-          from kaggle.gold_control_sweep import EMBEDDED_MANIFEST_MARKER, render_kernel_source
-
           root = Path.cwd()
+          runtime_path = root / "kaggle" / "gold_control_sweep.py"
+          runtime = runpy.run_path(str(runtime_path))
+          render_kernel_source = runtime["render_kernel_source"]
+          embedded_manifest_marker = runtime["EMBEDDED_MANIFEST_MARKER"]
+
           kernel_dir = Path(os.environ["KERNEL_DIR"])
-          source = (root / "kaggle" / "gold_control_sweep.py").read_text(encoding="utf-8")
+          source = runtime_path.read_text(encoding="utf-8")
           manifest = (root / "docs" / "evaluation" / "verifier-lora-split-v0.json").read_text(encoding="utf-8")
           rendered = render_kernel_source(source, manifest)
-          if EMBEDDED_MANIFEST_MARKER in rendered:
+          if embedded_manifest_marker in rendered:
               raise SystemExit("gold sweep manifest marker remained unresolved")
           compile(rendered, "gold_control_sweep.py", "exec")
           (kernel_dir / "gold_control_sweep.py").write_text(rendered, encoding="utf-8")
