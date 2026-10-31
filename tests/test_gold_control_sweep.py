@@ -4,9 +4,11 @@ import unittest
 from pathlib import Path
 
 from kaggle.gold_control_sweep import (
+    EMBEDDED_MANIFEST_MARKER,
     HOLDOUT_MANIFEST_PATH,
     build_result_record,
     load_holdout_items,
+    render_kernel_source,
     summarize_results,
 )
 
@@ -38,6 +40,17 @@ class GoldControlSweepTests(unittest.TestCase):
         self.assertEqual(len(items), 12)
         self.assertEqual(len(ids), len(items))
         self.assertTrue(all(set(item) >= {"instance_id", "repo", "patch_bucket"} for item in items))
+
+    def test_rendered_kernel_embeds_manifest_for_single_script_kaggle_runtime(self):
+        source = RUNTIME.read_text(encoding="utf-8")
+        manifest_text = HOLDOUT_MANIFEST_PATH.read_text(encoding="utf-8")
+
+        rendered = render_kernel_source(source, manifest_text)
+
+        self.assertNotIn(EMBEDDED_MANIFEST_MARKER, rendered)
+        self.assertIn("rich_3067", rendered)
+        self.assertIn("requests_7505", rendered)
+        compile(rendered, "gold_control_sweep.py", "exec")
 
     def test_result_record_hashes_reference_patch_without_exposing_it(self):
         reference_patch = "diff --git a/a.py b/a.py\n+safe\n"
