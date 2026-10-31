@@ -1,8 +1,10 @@
+import copy
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
+from collections import Counter
 from pathlib import Path
 
 from scripts.build_verifier_split import (
@@ -10,6 +12,7 @@ from scripts.build_verifier_split import (
     DEFAULT_HOLDOUT_QUOTA,
     build_split,
     load_jsonl,
+    replace_confounded_holdout,
 )
 
 
@@ -24,6 +27,17 @@ DIAGNOSTIC_IDS = {
     "requests_6592",
     "requests_7502",
     "requests_6757",
+}
+
+ROUND1_CONFOUNDED_IDS = {
+    "rich_3064",
+    "rich_4070",
+    "fastapi_14297",
+    "fastapi_14583",
+    "fastapi_14371",
+    "fastapi_15030",
+    "requests_6629",
+    "requests_7505",
 }
 
 
@@ -80,6 +94,77 @@ class VerifierSplitTests(unittest.TestCase):
         buckets = {item["patch_bucket"] for item in split["holdout"]}
 
         self.assertEqual(buckets, {"1-10", "11-30", "31-80", "81+"})
+
+    def test_replacement_preserves_repo_bucket_and_never_reenters_training(self):
+        split = {
+            "version": "verifier-lora-v0",
+            "selection": {"method": "bucket-round-robin-sha256"},
+            "holdout": [
+                {"instance_id": "keep", "repo": "repo/a", "patch_bucket": "1-10"},
+                {"instance_id": "bad", "repo": "repo/a", "patch_bucket": "11-30"},
+            ],
+            "train": [
+                {"instance_id": "candidate_z", "repo": "repo/a", "patch_bucket": "11-30"},
+                {"instance_id": "candidate_a", "repo": "repo/a", "patch_bucket": "11-30"},
+                {"instance_id": "wrong_bucket", "repo": "repo/a", "patch_bucket": "31-80"},
+                {"instance_id": "wrong_repo", "repo": "repo/b", "patch_bucket": "11-30"},
+            ],
+            "excluded": [],
+            "counts": {"total_input": 6, "train": 4, "holdout": 2, "excluded": 0, "holdout_by_repo": {"repo/a": 2}},
+        }
+
+        replaced = replace_confounded_holdout(split, {"bad"})
+        reversed_train = copy.deepcopy(split)
+        reversed_train["train"].reverse()
+        replaced_reversed = replace_confounded_holdout(reversed_train, {"bad"})
+
+        self.assertEqual(replaced, replaced_reversed)
+        holdout = {item["instance_id"]: item for item in replaced["holdout"]}
+        self.assertIn("keep", holdout)
+        self.assertNotIn("bad", holdout)
+        replacement_ids = set(holdout) - {"keep"}
+        self.assertEqual(len(replacement_ids), 1)
+        replacement = holdout[replacement_ids.pop()]
+        self.assertEqual((replacement["repo"], replacement["patch_bucket"]), ("repo/a", "11-30"))
+
+        train_ids = {item["instance_id"] for item in replaced["train"]}
+        excluded = {item["instance_id"]: item for item in replaced["excluded"]}
+        self.assertNotIn("bad", train_ids)
+        self.assertEqual(excluded["bad"]["reason"], "gold_control_confounded")
+        self.assertEqual(replaced["counts"]["holdout"], 2)
+        self.assertEqual(replaced["counts"]["train"], 3)
+        self.assertEqual(replaced["counts"]["excluded"], 1)
+
+    def test_replacement_fails_loudly_without_same_repo_bucket_candidate(self):
+        split = {
+            "version": "verifier-lora-v0",
+            "selection": {},
+            "holdout": [{"instance_id": "bad", "repo": "repo/a", "patch_bucket": "81+"}],
+            "train": [{"instance_id": "other", "repo": "repo/a", "patch_bucket": "1-10"}],
+            "excluded": [],
+            "counts": {"total_input": 2, "train": 1, "holdout": 1, "excluded": 0, "holdout_by_repo": {"repo/a": 1}},
+        }
+
+        with self.assertRaisesRegex(ValueError, "same repo/bucket"):
+            replace_confounded_holdout(split, {"bad"})
+
+    def test_round1_real_replacement_contract(self):
+        split = json.loads(Path("docs/evaluation/verifier-lora-split-v0.json").read_text(encoding="utf-8"))
+        before_slots = Counter((item["repo"], item["patch_bucket"]) for item in split["holdout"])
+
+        replaced = replace_confounded_holdout(split, ROUND1_CONFOUNDED_IDS)
+
+        holdout_ids = {item["instance_id"] for item in replaced["holdout"]}
+        train_ids = {item["instance_id"] for item in replaced["train"]}
+        excluded_ids = {item["instance_id"] for item in replaced["excluded"]}
+        after_slots = Counter((item["repo"], item["patch_bucket"]) for item in replaced["holdout"])
+        self.assertEqual(len(holdout_ids), 12)
+        self.assertTrue(ROUND1_CONFOUNDED_IDS.isdisjoint(holdout_ids | train_ids))
+        self.assertTrue(ROUND1_CONFOUNDED_IDS.issubset(excluded_ids))
+        self.assertEqual(before_slots, after_slots)
+        self.assertEqual(replaced["counts"]["train"], 99)
+        self.assertEqual(replaced["counts"]["holdout"], 12)
+        self.assertEqual(replaced["counts"]["excluded"], 18)
 
     def test_real_corpus_contract(self):
         tasks = load_jsonl(Path("tasks.jsonl"))
