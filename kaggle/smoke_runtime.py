@@ -25,7 +25,7 @@ from pathlib import Path
 
 SUBMISSION_PAYLOAD_B64 = "__SUBMISSION_PAYLOAD_B64__"
 MODEL_NAME = "gemma-4-e4b-it-qat-w4a16-ct"
-SMOKE_TASK_ID = "httpx_3672"
+SMOKE_TASK_ID = "rich_3278"
 
 DATA_DIR = Path("/kaggle/input/competitions/gemma-4-developer-agent")
 WHEELHOUSE_DIR = Path("/kaggle/input/datasets/metric/gemma-4-developer-agent-wheelhouse")
