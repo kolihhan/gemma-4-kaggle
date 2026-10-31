@@ -1,0 +1,151 @@
+name: Run HTTPX gold verifier control
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/run-httpx-gold-control.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gemma4-httpx-gold-control
+  cancel-in-progress: true
+
+jobs:
+  control:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma-4-httpx-gold-control
+      KERNEL_DIR: /tmp/gemma4-httpx-gold-control
+      OUTPUT_DIR: /tmp/gemma4-httpx-gold-control-output
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Kaggle CLI
+        run: python -m pip install --disable-pip-version-check --upgrade kaggle
+
+      - name: Render private CPU gold-control kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$KERNEL_DIR" "$OUTPUT_DIR"
+          mkdir -p "$KERNEL_DIR" "$OUTPUT_DIR"
+          cp kaggle/gold_control_runtime.py "$KERNEL_DIR/gold_control.py"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          kernel_dir = Path(os.environ["KERNEL_DIR"])
+          metadata = {
+              "id": "kolihhan/gemma-4-httpx-gold-control",
+              "title": "Gemma 4 HTTPX Gold Verifier Control",
+              "code_file": "gold_control.py",
+              "language": "python",
+              "kernel_type": "script",
+              "is_private": True,
+              "enable_gpu": False,
+              "enable_tpu": False,
+              "enable_internet": False,
+              "docker_image": "gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461",
+              "dataset_sources": ["metric/gemma-4-developer-agent-wheelhouse"],
+              "competition_sources": ["gemma-4-developer-agent"],
+              "kernel_sources": [],
+              "model_sources": [],
+          }
+          (kernel_dir / "kernel-metadata.json").write_text(
+              json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
+          )
+          print((kernel_dir / "kernel-metadata.json").read_text(encoding="utf-8"))
+          PY
+
+      - name: Push private Kaggle CPU kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle kernels push -p "$KERNEL_DIR" -t 1800
+
+      - name: Poll Kaggle kernel to terminal state
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 100); do
+            status_output="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            printf '[%03d] %s\n' "$attempt" "$status_output"
+            lower="$(printf '%s' "$status_output" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then
+              terminal="complete"
+              break
+            fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then
+              terminal="error"
+              break
+            fi
+            sleep 20
+          done
+          if [[ -z "$terminal" ]]; then
+            terminal="timeout"
+          fi
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          echo "Kaggle terminal state: $terminal"
+
+      - name: Collect control logs and outputs
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          mkdir -p "$OUTPUT_DIR"
+          kaggle kernels logs "$KERNEL_REF" > "$OUTPUT_DIR/kernel.log" 2>&1
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o > "$OUTPUT_DIR/output-download.log" 2>&1
+          echo "Collected files:"
+          find "$OUTPUT_DIR" -maxdepth 3 -type f -printf '%P %s bytes\n' | sort
+          if [[ -f "$OUTPUT_DIR/gold_control_result.json" ]]; then
+            echo "--- gold_control_result.json ---"
+            cat "$OUTPUT_DIR/gold_control_result.json"
+          fi
+          echo "--- kernel.log tail ---"
+          tail -n 200 "$OUTPUT_DIR/kernel.log" || true
+
+      - name: Assert control executed to a structured result
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.poll.outputs.terminal }}" != "complete" ]]; then
+            echo "Kaggle gold-control kernel did not complete successfully: ${{ steps.poll.outputs.terminal }}" >&2
+            exit 1
+          fi
+          test -f "$OUTPUT_DIR/gold_control_result.json"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          result_path = Path(os.environ["OUTPUT_DIR"]) / "gold_control_result.json"
+          result = json.loads(result_path.read_text(encoding="utf-8"))
+          print(json.dumps(result, indent=2, sort_keys=True))
+          assert result.get("instance_id") == "httpx_3672", result
+          assert result.get("control") == "gold_reference_patch", result
+          if result.get("status") != "completed":
+              raise SystemExit(f"gold control runtime error: {result}")
+          PY
+
+      - name: Upload gold-control evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemma4-httpx-gold-control-evidence
+          path: /tmp/gemma4-httpx-gold-control-output
+          if-no-files-found: warn
+          retention-days: 14
