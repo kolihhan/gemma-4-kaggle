@@ -12,7 +12,7 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     env:
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
       KERNEL_REF: kolihhan/gemma-4-e4b-one-task-smoke
@@ -22,20 +22,8 @@ jobs:
           python-version: "3.12"
       - name: Install Kaggle CLI
         run: python -m pip install --disable-pip-version-check --upgrade kaggle
-      - name: Read canonicalized private kernel state
+      - name: Read private kernel status only
         shell: bash
         run: |
-          set +e
-          echo '--- status ---'
+          set -euo pipefail
           kaggle kernels status "$KERNEL_REF"
-          echo '--- logs ---'
-          kaggle kernels logs "$KERNEL_REF"
-          echo '--- output listing/download ---'
-          rm -rf /tmp/smoke-probe-output
-          mkdir -p /tmp/smoke-probe-output
-          kaggle kernels output "$KERNEL_REF" -p /tmp/smoke-probe-output -o
-          find /tmp/smoke-probe-output -maxdepth 3 -type f -printf '%P %s bytes\n' | sort
-          if [[ -f /tmp/smoke-probe-output/smoke_result.json ]]; then
-            echo '--- smoke_result.json ---'
-            cat /tmp/smoke-probe-output/smoke_result.json
-          fi
