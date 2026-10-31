@@ -1,0 +1,35 @@
+name: Materialize verifier holdout round 2
+
+on:
+  push:
+    branches: [exp/verifier-lora-v0]
+    paths:
+      - ".github/workflows/materialize-verifier-holdout-round2.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Apply deterministic round-1 gold-confounded replacements
+        run: >-
+          python scripts/build_verifier_split.py
+          --input-manifest docs/evaluation/verifier-lora-split-v0.json
+          --replace-confounded
+          rich_3064 rich_4070
+          fastapi_14297 fastapi_14583 fastapi_14371 fastapi_15030
+          requests_6629 requests_7505
+          --output /tmp/verifier-lora-split-v0-round2.json
+      - name: Upload replacement manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: verifier-lora-split-v0-round2
+          path: /tmp/verifier-lora-split-v0-round2.json
+          if-no-files-found: error
+          retention-days: 14
