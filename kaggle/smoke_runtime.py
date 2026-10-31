@@ -1,4 +1,4 @@
-"""Private Kaggle one-task smoke runtime for the canonical E4B submission.
+"""Private Kaggle one-task smoke runtime for the controlled 12B submission.
 
 The GitHub launcher replaces SUBMISSION_PAYLOAD_B64 with a base64-encoded JSON
 mapping built from the repository's canonical submission/ directory. This keeps
@@ -24,7 +24,13 @@ from pathlib import Path
 
 
 SUBMISSION_PAYLOAD_B64 = "__SUBMISSION_PAYLOAD_B64__"
-MODEL_NAME = "gemma-4-e4b-it-qat-w4a16-ct"
+MODEL_NAME = "gemma-4-12b-it-qat-w4a16-ct"
+MODEL_VLLM_EXTRA_ARGS: dict[str, tuple[str, ...]] = {
+    "gemma-4-12b-it-qat-w4a16-ct": (
+        "--hf-overrides",
+        '{"architectures": ["Gemma4ForCausalLM"], "model_type": "gemma4"}',
+    ),
+}
 SMOKE_TASK_ID = "rich_3278"
 
 DATA_DIR = Path("/kaggle/input/competitions/gemma-4-developer-agent")
@@ -199,7 +205,7 @@ def main() -> None:
 
     model_path = Path(f"/kaggle/input/models/google/gemma-4/other/{MODEL_NAME}/2")
     if not model_path.exists():
-        raise FileNotFoundError(f"E4B model weights not found: {model_path}")
+        raise FileNotFoundError(f"12B model weights not found: {model_path}")
 
     adapters = discover_adapters(str(AGENT_DIR), adapter_extensions=ALLOWED_ADAPTER_EXTENSIONS)
     adapter_map = getattr(adapters, "adapters", None) or {}
@@ -244,7 +250,7 @@ def main() -> None:
             scheduler_reserve_full_isl=False,
             tensor_parallel_size=tp_size,
             startup_timeout=60 * 20,
-            extra_args=(),
+            extra_args=MODEL_VLLM_EXTRA_ARGS.get(MODEL_NAME, ()),
         )
         server = VllmServer(vllm_config, adapter_manifest=adapters)
         server.start()
