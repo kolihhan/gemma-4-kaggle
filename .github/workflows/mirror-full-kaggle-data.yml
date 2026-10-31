@@ -1,0 +1,110 @@
+name: Mirror full Gemma 4 Kaggle data
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mirror-full-kaggle-data.yml"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag; leave blank for kaggle-data-YYYY-MM-DD"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gemma-4-full-data-mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      COMPETITION: gemma-4-developer-agent
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate mirror scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/mirror_kaggle_to_release.py scripts/restore_full_dataset.py
+
+      - name: Require Kaggle API token
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${KAGGLE_API_TOKEN:-}" ]]; then
+            echo "::error::Missing repository secret KAGGLE_API_TOKEN. Generate a Kaggle API token after joining the competition, then add it under Settings > Secrets and variables > Actions."
+            exit 2
+          fi
+
+      - name: Install Kaggle client
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --upgrade kaggle requests
+          kaggle --version
+
+      - name: Choose release tag
+        id: tag
+        shell: bash
+        env:
+          INPUT_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${INPUT_TAG:-}" ]]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="kaggle-data-$(date -u +%Y-%m-%d)"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Using release tag: $TAG"
+
+      - name: Stream Kaggle archive into GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p manifests
+          python scripts/mirror_kaggle_to_release.py \
+            --competition "$COMPETITION" \
+            --repo "$REPO" \
+            --release-tag "${{ steps.tag.outputs.tag }}" \
+            --manifest-output manifests/latest.json \
+            --file-list-output manifests/kaggle-files.csv
+
+      - name: Record immutable dated manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp manifests/latest.json "manifests/${{ steps.tag.outputs.tag }}.json"
+
+      - name: Commit manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifests/
+          if git diff --cached --quiet; then
+            echo "No manifest changes to commit"
+            exit 0
+          fi
+          git commit -m "Record full Gemma 4 Kaggle data mirror"
+          git push
