@@ -41,9 +41,16 @@ class SubmissionLayoutTests(unittest.TestCase):
             self.assertIn("- read_file", text)
             self.assertIn("- edit_file", text)
             self.assertIn("- get_status", text)
+            self.assertIn("generate_content_config: !include configs/sampling.yaml", text)
 
         self.assertNotIn("- submit_patch", coder)
         self.assertIn("- submit_patch", verifier)
+        self.assertIn("instruction: !include prompts/coder.md", coder)
+        self.assertIn("instruction: !include prompts/verifier.md", verifier)
+
+    def test_both_prompts_receive_problem_context(self):
+        coder = (SUBMISSION / "prompts" / "coder.md").read_text(encoding="utf-8")
+        verifier = (SUBMISSION / "prompts" / "verifier.md").read_text(encoding="utf-8")
         self.assertIn("{problem_description}", coder)
         self.assertIn("{problem_description}", verifier)
 
@@ -66,7 +73,8 @@ class SubmissionLayoutTests(unittest.TestCase):
             "inspect `git diff`",
             "targeted verification",
             "one evidence-backed narrow repair",
-            "Do not call `submit_patch` while targeted verification is failing",
+            "If targeted verification still fails",
+            "smallest defensible patch",
             "call `submit_patch` as your final tool action",
         ):
             self.assertIn(phrase, prompt)
