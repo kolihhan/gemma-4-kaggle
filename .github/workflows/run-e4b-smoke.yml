@@ -1,4 +1,4 @@
-# Connector-safe manual run: sequential coder-verifier after include-path fix.
+# Connector-safe manual run: sequential coder-verifier with evidence-first verifier gate.
 name: Run private E4B one-task smoke
 
 on:
