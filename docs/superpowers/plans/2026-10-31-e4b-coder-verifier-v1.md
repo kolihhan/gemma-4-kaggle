@@ -4,7 +4,7 @@
 
 **Goal:** Replace the single-agent E4B diagnostic with the smallest two-stage coder→verifier experiment so only a verifier can submit a patch.
 
-**Architecture:** A root `SequentialAgent` runs two E4B `LlmAgent`s against the same task workspace. The coder can inspect/edit/test but cannot submit; the verifier independently checks the current diff and targeted tests, may make one narrow evidence-backed repair, and exclusively owns `submit_patch`.
+**Architecture:** A root `SequentialAgent` runs two E4B `LlmAgent`s against the same task workspace. The coder can inspect/edit/test but cannot submit; the verifier independently checks the current diff and targeted tests, may make one narrow evidence-backed repair, and exclusively owns `submit_patch`. If the bounded repair still fails, the verifier terminates once with the smallest defensible patch rather than allowing the harness to nudge and rerun the full sequence.
 
 **Tech Stack:** `adk-submission` declarative YAML, `swegemma` harness tools, Python `unittest`, GitHub Actions/Kaggle L4 smoke path.
 
@@ -24,7 +24,7 @@
 - Both child agents must receive task context via `{problem_description}` even though the root is non-LLM.
 - Coder must not terminate the session via `submit_patch`.
 - Verifier must inspect/test the coder’s existing workspace rather than starting a separate solution path.
-- Verifier repair must remain narrow; no whole-file fallback.
+- Verifier repair must remain narrow; no whole-file fallback or repeated sequential reruns.
 
 ---
 
@@ -38,8 +38,8 @@
 - Consumes: current single-agent `submission/` layout.
 - Produces: a failing contract for root SequentialAgent, coder/verifier files, and exclusive verifier submit ownership.
 
-- [ ] **Step 1: Write the failing layout test** asserting root `agent_class: SequentialAgent`, exactly the coder/verifier config paths, both E4B child configs, no `write_file`, no coder `submit_patch`, verifier `submit_patch` present.
-- [ ] **Step 2: Run repo validation and verify RED** — expected failure because the current root is one `LlmAgent` and child files do not exist.
+- [x] **Step 1: Write the failing layout test** asserting root `agent_class: SequentialAgent`, exactly the coder/verifier config paths, both E4B child configs, no `write_file`, no coder `submit_patch`, verifier `submit_patch` present.
+- [x] **Step 2: Run repo validation and verify RED** — failed at the unit-test step because the current root is one `LlmAgent` and child files do not exist.
 
 ### Task 2: Implement the minimal coder→verifier submission
 
@@ -53,11 +53,11 @@
 
 **Interfaces:**
 - Consumes: `{problem_description}`, existing shared `/workspace`, official harness tools.
-- Produces: coder changes in the working tree; verifier final verified patch via `submit_patch`.
+- Produces: coder changes in the working tree; verifier final patch via `submit_patch` after an independent verification/repair gate.
 
 - [ ] **Step 1: Replace root config with a two-child `SequentialAgent`.**
 - [ ] **Step 2: Add coder config/prompt** with bounded edit policy, targeted test requirement, no submission tool.
-- [ ] **Step 3: Add verifier config/prompt** that begins from `git diff`, re-runs targeted verification, permits at most one evidence-backed narrow repair cycle, and submits only after passing verification.
+- [ ] **Step 3: Add verifier config/prompt** that begins from `git diff`, re-runs targeted verification, permits at most one evidence-backed narrow repair cycle, and owns final termination. Prefer a passing verified patch; if still failing and no concrete next repair remains, strip clearly regressive extra changes and submit the smallest defensible patch once so the outer harness does not restart the whole sequence.
 - [ ] **Step 4: Run repo validation and verify GREEN** — expected all existing + new unit/static tests pass.
 
 ### Task 3: Run the same clean `rich_3278` diagnostic
