@@ -1,4 +1,4 @@
-"""Verifier-only positive control for the public httpx_3672 task.
+"""Verifier-only positive control for the public rich_3278 task.
 
 This runtime never invokes a model or submission agent. It feeds the task's
 reference patch directly into the current official swegemma verifier so we can
@@ -21,7 +21,7 @@ import traceback
 from pathlib import Path
 
 
-CONTROL_TASK_ID = "httpx_3672"
+CONTROL_TASK_ID = "rich_3278"
 DATA_DIR = Path("/kaggle/input/competitions/gemma-4-developer-agent")
 WHEELHOUSE_DIR = Path("/kaggle/input/datasets/metric/gemma-4-developer-agent-wheelhouse")
 WORKING_DIR = Path("/kaggle/working")
