@@ -26,47 +26,70 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/adk-wheel /tmp/adk-src
-          mkdir -p /tmp/adk-wheel /tmp/adk-src
+          rm -rf /tmp/adk-wheel /tmp/adk-src /tmp/adk-probe
+          mkdir -p /tmp/adk-wheel /tmp/adk-src /tmp/adk-probe
           kaggle datasets files metric/gemma-4-developer-agent-wheelhouse --page-size 200 > /tmp/wheel-files.txt
           wheel="$(awk 'tolower($0) ~ /adk[_-]submission/ && $0 ~ /\.whl/ {print $1; exit}' /tmp/wheel-files.txt)"
           test -n "$wheel"
-          echo "wheel=$wheel"
+          echo "$wheel" > /tmp/adk-probe/wheel-name.txt
           kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel" -p /tmp/adk-wheel --unzip
           actual="$(find /tmp/adk-wheel -type f -name '*adk*submission*.whl' | head -n1)"
           test -n "$actual"
           python -m zipfile -e "$actual" /tmp/adk-src
+          cp -R /tmp/adk-src/adk_submission /tmp/adk-probe/adk_submission
 
-          echo '=== package files ==='
-          find /tmp/adk-src/adk_submission -maxdepth 2 -type f | sort
+          {
+            echo '=== package files ==='
+            find /tmp/adk-src/adk_submission -maxdepth 2 -type f | sort
+            echo
+            echo '=== AgentTool / agent_tool references ==='
+            grep -R -n -E 'AgentTool|agent_tool|skip_summarization' /tmp/adk-src/adk_submission || true
+            echo
+            echo '=== SequentialAgent / workflow references ==='
+            grep -R -n -E 'SequentialAgent|ParallelAgent|LoopAgent' /tmp/adk-src/adk_submission || true
+            echo
+            echo '=== ToolRegistry / CallbackRegistry references ==='
+            grep -R -n -E 'ToolRegistry|CallbackRegistry|register.*tool|register.*callback' /tmp/adk-src/adk_submission || true
+            echo
+            echo '=== config / validation references ==='
+            grep -R -n -E 'config_path|sub_agents|callbacks|tools:' /tmp/adk-src/adk_submission || true
+          } > /tmp/adk-probe/grep.txt
 
-          echo '=== AgentTool / agent_tool references ==='
-          grep -R -n -E 'AgentTool|agent_tool|skip_summarization' /tmp/adk-src/adk_submission || true
-
-          echo '=== SequentialAgent / workflow references ==='
-          grep -R -n -E 'SequentialAgent|ParallelAgent|LoopAgent' /tmp/adk-src/adk_submission || true
-
-          echo '=== ToolRegistry / CallbackRegistry references ==='
-          grep -R -n -E 'ToolRegistry|CallbackRegistry|register.*tool|register.*callback' /tmp/adk-src/adk_submission || true
-
-          echo '=== compiler/config source excerpts around matches ==='
-          python - <<'PY'
+          python - <<'PY' > /tmp/adk-probe/excerpts.txt
           from pathlib import Path
           root = Path('/tmp/adk-src/adk_submission')
-          needles = ('AgentTool', 'agent_tool', 'SequentialAgent', 'ToolRegistry', 'CallbackRegistry')
+          needles = (
+              'AgentTool', 'agent_tool', 'skip_summarization',
+              'SequentialAgent', 'ParallelAgent', 'LoopAgent',
+              'ToolRegistry', 'CallbackRegistry', 'config_path', 'sub_agents',
+          )
           for path in sorted(root.rglob('*.py')):
               lines = path.read_text(encoding='utf-8', errors='replace').splitlines()
               hits = [i for i, line in enumerate(lines) if any(n in line for n in needles)]
               if not hits:
                   continue
               print(f'--- {path.relative_to(root)} ---')
-              shown = set()
+              ranges = []
               for i in hits:
                   lo=max(0,i-18); hi=min(len(lines),i+28)
-                  key=(lo,hi)
-                  if key in shown: continue
-                  shown.add(key)
+                  if ranges and lo <= ranges[-1][1]:
+                      ranges[-1] = (ranges[-1][0], max(ranges[-1][1], hi))
+                  else:
+                      ranges.append((lo,hi))
+              for lo, hi in ranges:
                   for j in range(lo,hi):
                       print(f'{j+1:04d}: {lines[j]}')
                   print()
           PY
+
+          echo "wheel=$wheel"
+          sed -n '1,240p' /tmp/adk-probe/grep.txt
+          sed -n '1,320p' /tmp/adk-probe/excerpts.txt
+
+      - name: Upload compiler probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: adk-lifecycle-probe
+          path: /tmp/adk-probe
+          if-no-files-found: error
+          retention-days: 14
