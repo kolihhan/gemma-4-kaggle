@@ -41,12 +41,20 @@ class SubmissionLayoutTests(unittest.TestCase):
             self.assertIn("- read_file", text)
             self.assertIn("- edit_file", text)
             self.assertIn("- get_status", text)
-            self.assertIn("generate_content_config: !include configs/sampling.yaml", text)
+            self.assertIn("generate_content_config: !include ../configs/sampling.yaml", text)
 
         self.assertNotIn("- submit_patch", coder)
         self.assertIn("- submit_patch", verifier)
-        self.assertIn("instruction: !include prompts/coder.md", coder)
-        self.assertIn("instruction: !include prompts/verifier.md", verifier)
+        self.assertIn("instruction: !include ../prompts/coder.md", coder)
+        self.assertIn("instruction: !include ../prompts/verifier.md", verifier)
+
+    def test_sub_agent_includes_are_relative_to_the_sub_agent_yaml(self):
+        coder = (SUBMISSION / "sub_agents" / "coder.yaml").read_text(encoding="utf-8")
+        verifier = (SUBMISSION / "sub_agents" / "verifier.yaml").read_text(encoding="utf-8")
+        self.assertNotIn("!include prompts/", coder)
+        self.assertNotIn("!include configs/", coder)
+        self.assertNotIn("!include prompts/", verifier)
+        self.assertNotIn("!include configs/", verifier)
 
     def test_both_prompts_receive_problem_context(self):
         coder = (SUBMISSION / "prompts" / "coder.md").read_text(encoding="utf-8")
