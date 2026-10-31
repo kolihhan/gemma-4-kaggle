@@ -1,0 +1,32 @@
+name: Probe E4B smoke status
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/probe-e4b-smoke-status.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-e4b-smoke
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Kaggle CLI
+        run: python -m pip install --disable-pip-version-check --upgrade kaggle
+      - name: Read current private kernel state
+        shell: bash
+        run: |
+          set +e
+          echo '--- status ---'
+          kaggle kernels status "$KERNEL_REF"
+          echo '--- current logs ---'
+          kaggle kernels logs "$KERNEL_REF"
