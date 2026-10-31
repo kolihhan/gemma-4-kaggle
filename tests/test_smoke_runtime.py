@@ -15,6 +15,10 @@ class SmokeRuntimeContractTests(unittest.TestCase):
         self.assertIn("validate_directory", text)
         self.assertIn("discover_declared_models", text)
 
+    def test_payload_template_marker_occurs_exactly_once(self):
+        text = RUNTIME.read_text(encoding="utf-8")
+        self.assertEqual(text.count("__SUBMISSION_PAYLOAD_B64__"), 1)
+
     def test_runtime_is_exactly_one_public_smoke_task(self):
         text = RUNTIME.read_text(encoding="utf-8")
         self.assertIn('SMOKE_TASK_ID = "httpx_3672"', text)
