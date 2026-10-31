@@ -1,0 +1,9 @@
+# Full Kaggle data is mirrored in GitHub Releases, not Git blobs.
+data/
+downloads/
+*.zip
+*.part-*
+
+# Local Python state
+__pycache__/
+*.pyc
