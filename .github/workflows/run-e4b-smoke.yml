@@ -1,3 +1,4 @@
+# Connector-safe manual runs are triggered by a workflow-file commit when workflow_dispatch is unavailable.
 name: Run private E4B one-task smoke
 
 on:
