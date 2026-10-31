@@ -39,7 +39,8 @@ jobs:
           sample = json.load(open('/tmp/task-sample.json'))
           assert summary['task_count'] == 129, summary['task_count']
           assert len(summary['repos']) == 4, summary['repos']
-          assert len(sample) == 12, len(sample)
+          expected_sample = sum(min(3, count) for count in summary['repos'].values())
+          assert len(sample) == expected_sample, (len(sample), expected_sample)
           print(json.dumps(summary, indent=2))
           print('sample_instance_ids=', [x['instance_id'] for x in sample])
           PY
