@@ -1,4 +1,4 @@
-# Connector-safe manual run: hard no-submit lifecycle experiment.
+# Connector-safe manual run: bounded edit-tools experiment.
 name: Run private E4B one-task smoke
 
 on:
