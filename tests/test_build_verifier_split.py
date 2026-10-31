@@ -1,4 +1,7 @@
 import json
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -92,6 +95,27 @@ class VerifierSplitTests(unittest.TestCase):
 
         # The manifest must remain JSON serializable for durable repo storage.
         json.dumps(split, sort_keys=True)
+
+    def test_cli_runs_from_repo_root_and_writes_manifest(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "split.json"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/build_verifier_split.py",
+                    "tasks.jsonl",
+                    "--output",
+                    str(output),
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                text=True,
+                capture_output=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["version"], "verifier-lora-v0")
+            self.assertEqual(payload["counts"]["holdout"], 12)
 
 
 if __name__ == "__main__":
