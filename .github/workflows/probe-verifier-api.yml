@@ -33,7 +33,7 @@ jobs:
           mkdir -p /tmp/scorer-wheelhouse
           kaggle datasets download -d "$WHEELHOUSE" -p /tmp/scorer-wheelhouse --unzip
 
-      - name: Read verifier source directly from swegemma wheel
+      - name: Read current verifier and sandbox wiring from swegemma wheel
         shell: bash
         run: |
           set -euo pipefail
@@ -47,17 +47,11 @@ jobs:
           wheel = wheels[0]
           print('WHEEL', wheel.name)
           with zipfile.ZipFile(wheel) as zf:
-              names = set(zf.namelist())
-              for target in (
-                  'swegemma/harness/verification.py',
-                  'swegemma/sandbox.py',
-                  'swegemma/config.py',
-                  'swegemma/deduplication.py',
-              ):
-                  print(f'===== {target} =====')
-                  if target not in names:
-                      print('MISSING')
-                      continue
-                  text = zf.read(target).decode('utf-8')
-                  print(text)
+              names = sorted(zf.namelist())
+              for name in names:
+                  if name == 'swegemma/evaluate.py' or name.startswith('swegemma/sandbox/'):
+                      if not name.endswith('.py'):
+                          continue
+                      print(f'===== {name} =====')
+                      print(zf.read(name).decode('utf-8'))
           PY
