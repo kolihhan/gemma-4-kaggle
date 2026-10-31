@@ -1,6 +1,17 @@
-agent_class: SequentialAgent
-name: swe_e4b_coder_verifier
-description: Runs a bounded coding pass followed by an independent verification and submission gate.
-sub_agents:
-  - config_path: sub_agents/coder.yaml
-  - config_path: sub_agents/verifier.yaml
+agent_class: LlmAgent
+name: swe_e4b_coder
+model: gemma-4-e4b-it-qat-w4a16-ct
+description: Makes the smallest evidence-backed code change, then delegates final verification and submission to one verifier tool.
+instruction: !include prompts/coder.md
+tools:
+  - run_command
+  - read_file
+  - edit_file
+  - get_status
+  - get_code_neighbors
+  - search_similar_code
+  - get_code_subgraph
+  - agent_tool:
+      config_path: sub_agents/verifier.yaml
+      skip_summarization: true
+generate_content_config: !include configs/sampling.yaml
