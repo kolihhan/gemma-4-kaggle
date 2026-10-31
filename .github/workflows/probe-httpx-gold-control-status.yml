@@ -16,14 +16,35 @@ jobs:
     env:
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
       KERNEL_REF: kolihhan/gemma-4-httpx-gold-verifier-control
+      OUTPUT_DIR: /tmp/httpx-gold-control-output
     steps:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Install Kaggle CLI
         run: python -m pip install --disable-pip-version-check --upgrade kaggle
-      - name: Read private kernel status only
+      - name: Read private kernel status
         shell: bash
         run: |
           set -euo pipefail
           kaggle kernels status "$KERNEL_REF"
+      - name: Collect completed control evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$OUTPUT_DIR"
+          mkdir -p "$OUTPUT_DIR"
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o
+          kaggle kernels logs "$KERNEL_REF" > "$OUTPUT_DIR/kernel.log" 2>&1 || true
+          echo "Collected files:"
+          find "$OUTPUT_DIR" -maxdepth 3 -type f -printf '%P %s bytes\n' | sort
+          echo "--- gold_control_result.json ---"
+          cat "$OUTPUT_DIR/gold_control_result.json"
+          echo "--- kernel.log tail ---"
+          tail -n 160 "$OUTPUT_DIR/kernel.log" || true
+      - name: Upload control evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemma4-httpx-gold-control-evidence-recovered
+          path: /tmp/httpx-gold-control-output
+          retention-days: 14
