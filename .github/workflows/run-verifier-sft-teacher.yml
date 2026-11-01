@@ -12,9 +12,6 @@ on:
       - "kaggle/verifier_sft_teacher_runtime.py"
       - "scripts/render_verifier_sft_teacher.py"
       - "scripts/build_verifier_sft.py"
-      - "submission/prompts/verifier.md"
-      - "submission/configs/sampling.yaml"
-      - "submission/eval_config.yaml"
       - ".github/workflows/run-verifier-sft-teacher.yml"
   workflow_dispatch:
 
@@ -28,11 +25,12 @@ concurrency:
 jobs:
   teacher:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 90
     env:
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
       TEACHER_BUILD_ID: ${{ github.sha }}
       KERNEL_REF: kolihhan/gemma-4-verifier-sft-teacher-v0-${{ github.run_id }}
+      KERNEL_TITLE: Gemma 4 Verifier SFT Teacher v0 ${{ github.run_id }}
       KERNEL_DIR: /tmp/gemma4-verifier-sft-teacher-v0
       OUTPUT_DIR: /tmp/gemma4-verifier-sft-teacher-v0-output
 
@@ -48,14 +46,13 @@ jobs:
           python -m pip install --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
           python -c "import kaggle, six"
 
-      - name: Render private deterministic SFT teacher kernel
+      - name: Render private model-free deterministic SFT teacher kernel
         shell: bash
         run: |
           set -euo pipefail
           rm -rf "$KERNEL_DIR" "$OUTPUT_DIR"
           mkdir -p "$KERNEL_DIR" "$OUTPUT_DIR"
           python - <<'PY'
-          import base64
           import json
           import os
           from pathlib import Path
@@ -63,7 +60,6 @@ jobs:
           from scripts.render_verifier_sft_teacher import bundle_runtime
 
           repo = Path.cwd()
-          submission = repo / "submission"
           runtime_template = repo / "kaggle" / "verifier_sft_teacher_runtime.py"
           helper = repo / "kaggle" / "verifier_gold_teacher_supervision.py"
           gold_runtime = repo / "kaggle" / "verifier_gold_teacher_runtime.py"
@@ -73,16 +69,7 @@ jobs:
           kernel_dir = Path(os.environ["KERNEL_DIR"])
           teacher_build_id = os.environ["TEACHER_BUILD_ID"]
           kernel_ref = os.environ["KERNEL_REF"]
-
-          payload = {}
-          for path in sorted(submission.rglob("*")):
-              if path.is_file():
-                  relative = path.relative_to(submission).as_posix()
-                  payload[relative] = path.read_text(encoding="utf-8")
-          if "agent.yaml" not in payload:
-              raise SystemExit("canonical submission is missing agent.yaml")
-          if any(path.startswith("adapters/") for path in payload):
-              raise SystemExit("deterministic teacher must use base submission without adapters")
+          kernel_title = os.environ["KERNEL_TITLE"]
 
           training = json.loads(training_path.read_text(encoding="utf-8"))
           if training.get("version") != "verifier-lora-v0-train-harvest":
@@ -109,12 +96,7 @@ jobs:
           if not set(target_ids) <= set(clean_ids):
               raise SystemExit("deterministic targets are not a subset of gold-clean training IDs")
 
-          encoded_submission = base64.b64encode(
-              json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-          ).decode("ascii")
           replacements = {
-              'SUBMISSION_PAYLOAD_B64 = "__SUBMISSION_PAYLOAD_B64__"':
-                  f"SUBMISSION_PAYLOAD_B64 = {encoded_submission!r}",
               'TRAINING_MANIFEST_JSON = "__VERIFIER_LORA_TRAINING_MANIFEST_JSON__"':
                   f"TRAINING_MANIFEST_JSON = {json.dumps(training, sort_keys=True)!r}",
               'TRAINING_GOLD_SCREEN_JSON = "__VERIFIER_LORA_TRAINING_GOLD_SCREEN_JSON__"':
@@ -138,45 +120,39 @@ jobs:
 
           metadata = {
               "id": kernel_ref,
-              "title": f"Gemma 4 Verifier SFT Teacher v0 {teacher_build_id[:12]}",
+              "title": kernel_title,
               "code_file": "verifier_sft_teacher_runtime.py",
               "language": "python",
               "kernel_type": "script",
               "is_private": True,
-              "enable_gpu": True,
+              "enable_gpu": False,
               "enable_tpu": False,
               "enable_internet": False,
-              "machine_shape": "NvidiaL4",
               "docker_image": "gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461",
               "dataset_sources": ["metric/gemma-4-developer-agent-wheelhouse"],
               "competition_sources": ["gemma-4-developer-agent"],
               "kernel_sources": [],
-              "model_sources": [
-                  "google/gemma-4/Other/gemma-4-e4b-it-qat-w4a16-ct/2"
-              ],
+              "model_sources": [],
           }
           (kernel_dir / "kernel-metadata.json").write_text(
               json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
           )
           print("rendered_teacher_build_id=", teacher_build_id)
           print("rendered_kernel_ref=", kernel_ref)
+          print("rendered_kernel_title=", kernel_title)
           print("rendered_sft_teacher_ids=", target_ids)
           print("rendered_code_files=", [p.name for p in kernel_dir.iterdir() if p.is_file()])
           PY
 
-      - name: Push private Kaggle L4 deterministic-teacher kernel
+      - name: Push private Kaggle CPU deterministic-teacher kernel
         shell: bash
         run: |
           set -euo pipefail
           push_status=0
-          push_output="$(kaggle kernels push -p "$KERNEL_DIR" --accelerator NvidiaL4 -t 7200 2>&1)" || push_status=$?
+          push_output="$(kaggle kernels push -p "$KERNEL_DIR" -t 3600 2>&1)" || push_status=$?
           printf '%s\n' "$push_output"
           if [[ "$push_status" -ne 0 ]]; then
-            if grep -Fq "Maximum batch GPU session count" <<<"$push_output"; then
-              echo "Kernel push error: Maximum batch GPU session count reached" >&2
-            else
-              echo "Kernel push error (status=$push_status)" >&2
-            fi
+            echo "Kernel push error (status=$push_status)" >&2
             exit "$push_status"
           fi
 
@@ -186,7 +162,7 @@ jobs:
         run: |
           set -euo pipefail
           terminal=""
-          for attempt in $(seq 1 240); do
+          for attempt in $(seq 1 180); do
             status_output="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
             printf '[%03d] %s\n' "$attempt" "$status_output"
             lower="$(printf '%s' "$status_output" | tr '[:upper:]' '[:lower:]')"
@@ -198,7 +174,7 @@ jobs:
               terminal="error"
               break
             fi
-            sleep 25
+            sleep 20
           done
           if [[ -z "$terminal" ]]; then
             terminal="timeout"
@@ -253,19 +229,27 @@ jobs:
           assert result.get("version") == "verifier-lora-v0-deterministic-teacher", result
           assert result.get("status") == "completed", result
           assert result.get("teacher_build_id") == os.environ["TEACHER_BUILD_ID"], result
+          assert result.get("execution_mode") == "deterministic_model_free", result
           assert result.get("model") == "gemma-4-e4b-it-qat-w4a16-ct", result
           assert result.get("requested") == len(expected_ids) == 6, result
           records = result.get("records") or []
           assert len(records) == 12, result
           assert [item.get("example_id") for item in records] == expected_example_ids, result
           assert [item.get("instance_id") for item in records] == [x for x in expected_ids for _ in range(2)], result
-          approved = [item for item in records if item.get("approved") is True]
-          if not approved:
-              raise SystemExit("deterministic teacher produced zero approved records")
-          labels = {item.get("label") for item in approved}
-          if not {"safe_stop", "verified_submit"} <= labels:
-              raise SystemExit(f"paired supervision requires both labels, got {sorted(labels)}")
 
+          gold_records = [item for item in records if str(item.get("example_id", "")).endswith(":gold-pass")]
+          assert len(gold_records) == 6, gold_records
+          if not all(item.get("approved") is True and item.get("label") == "verified_submit" for item in gold_records):
+              raise SystemExit(f"all six gold-pass records must be approved: {gold_records}")
+
+          safe_stop_records = [
+              item for item in records
+              if item.get("approved") is True and item.get("label") == "safe_stop"
+          ]
+          if not safe_stop_records:
+              raise SystemExit("paired supervision requires at least one genuine safe_stop record")
+
+          approved = [item for item in records if item.get("approved") is True]
           forbidden_keys = {"reference_patch", "reference_solution", "gold_patch", "solution_patch", "test_patch"}
           def walk(value):
               if isinstance(value, dict):
