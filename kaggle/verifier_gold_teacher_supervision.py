@@ -21,11 +21,36 @@ TARGET_PLAN_VERSION = "verifier-lora-v0-targeted-tests"
 DIFF_COMMAND = "git diff --check && git diff"
 
 
+def find_reference_patch_dir(roots: list[Path]) -> Path:
+    """Find the nearest ancestor secret dir containing only reference-patch data.
+
+    Discovery checks for ``perfect_submission.*`` directly and never consults
+    hidden verifier files when deciding which secret mount to use.
+    """
+    seen: set[Path] = set()
+    for root in roots:
+        try:
+            resolved = Path(root).resolve()
+        except Exception:
+            continue
+        for ancestor in [resolved, *resolved.parents]:
+            candidate = ancestor / "secret"
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            if (
+                (candidate / "perfect_submission.parquet").is_file()
+                or (candidate / "perfect_submission.csv").is_file()
+            ):
+                return candidate
+    raise FileNotFoundError("perfect_submission reference-patch secret directory not found")
+
+
 def load_reference_patch_map(secret_dir: Path) -> dict[str, str]:
     """Load only training reference patches from perfect_submission.
 
-    The competition secret bundle also contains hidden verifier test patches in
-    ``solution.*``. This loader intentionally never opens those files.
+    The competition secret bundle also contains hidden verifier test evidence in
+    other files. This loader intentionally never opens those files.
     """
     secret_dir = Path(secret_dir)
     parquet_path = secret_dir / "perfect_submission.parquet"
