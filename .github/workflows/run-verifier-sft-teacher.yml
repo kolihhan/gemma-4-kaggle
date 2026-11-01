@@ -31,7 +31,8 @@ jobs:
     timeout-minutes: 120
     env:
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
-      KERNEL_REF: kolihhan/gemma-4-verifier-sft-teacher-v0
+      TEACHER_BUILD_ID: ${{ github.sha }}
+      KERNEL_REF: kolihhan/gemma-4-verifier-sft-teacher-v0-${{ github.run_id }}
       KERNEL_DIR: /tmp/gemma4-verifier-sft-teacher-v0
       OUTPUT_DIR: /tmp/gemma4-verifier-sft-teacher-v0-output
 
@@ -70,6 +71,8 @@ jobs:
           screen_path = repo / "docs" / "evaluation" / "verifier-lora-training-gold-screen-v0.json"
           plan_path = repo / "docs" / "evaluation" / "verifier-lora-targeted-tests-v0.json"
           kernel_dir = Path(os.environ["KERNEL_DIR"])
+          teacher_build_id = os.environ["TEACHER_BUILD_ID"]
+          kernel_ref = os.environ["KERNEL_REF"]
 
           payload = {}
           for path in sorted(submission.rglob("*")):
@@ -118,6 +121,8 @@ jobs:
                   f"TRAINING_GOLD_SCREEN_JSON = {json.dumps(screen, sort_keys=True)!r}",
               'TARGETED_TEST_PLAN_JSON = "__VERIFIER_LORA_TARGETED_TEST_PLAN_JSON__"':
                   f"TARGETED_TEST_PLAN_JSON = {json.dumps(plan, sort_keys=True)!r}",
+              'TEACHER_BUILD_ID = "__VERIFIER_SFT_TEACHER_BUILD_ID__"':
+                  f"TEACHER_BUILD_ID = {teacher_build_id!r}",
           }
           rendered = bundle_runtime(
               runtime_template.read_text(encoding="utf-8"),
@@ -132,8 +137,8 @@ jobs:
           (kernel_dir / "verifier_sft_teacher_runtime.py").write_text(rendered, encoding="utf-8")
 
           metadata = {
-              "id": "kolihhan/gemma-4-verifier-sft-teacher-v0",
-              "title": "Gemma 4 Verifier SFT Teacher v0",
+              "id": kernel_ref,
+              "title": f"Gemma 4 Verifier SFT Teacher v0 {teacher_build_id[:12]}",
               "code_file": "verifier_sft_teacher_runtime.py",
               "language": "python",
               "kernel_type": "script",
@@ -153,6 +158,8 @@ jobs:
           (kernel_dir / "kernel-metadata.json").write_text(
               json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
           )
+          print("rendered_teacher_build_id=", teacher_build_id)
+          print("rendered_kernel_ref=", kernel_ref)
           print("rendered_sft_teacher_ids=", target_ids)
           print("rendered_code_files=", [p.name for p in kernel_dir.iterdir() if p.is_file()])
           PY
@@ -161,7 +168,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          kaggle kernels push -p "$KERNEL_DIR" --accelerator NvidiaL4 -t 7200
+          push_status=0
+          push_output="$(kaggle kernels push -p "$KERNEL_DIR" --accelerator NvidiaL4 -t 7200 2>&1)" || push_status=$?
+          printf '%s\n' "$push_output"
+          if [[ "$push_status" -ne 0 ]]; then
+            if grep -Fq "Maximum batch GPU session count" <<<"$push_output"; then
+              echo "Kernel push error: Maximum batch GPU session count reached" >&2
+            else
+              echo "Kernel push error (status=$push_status)" >&2
+            fi
+            exit "$push_status"
+          fi
 
       - name: Poll Kaggle kernel to terminal state
         id: poll
@@ -235,6 +252,7 @@ jobs:
           ]
           assert result.get("version") == "verifier-lora-v0-deterministic-teacher", result
           assert result.get("status") == "completed", result
+          assert result.get("teacher_build_id") == os.environ["TEACHER_BUILD_ID"], result
           assert result.get("model") == "gemma-4-e4b-it-qat-w4a16-ct", result
           assert result.get("requested") == len(expected_ids) == 6, result
           records = result.get("records") or []
