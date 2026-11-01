@@ -19,13 +19,13 @@ class VerifierSftTeacherRuntimeContractTests(unittest.TestCase):
         self.assertIn("load_targeted_test_plan", source)
         self.assertIn("build_teacher_safe_stop_record", source)
         self.assertIn("build_teacher_supervision_record", source)
+        self.assertIn("base_targeted_test", source)
+        self.assertIn("gold_targeted_test", source)
         self.assertIn("apply_patch_in_container", source)
         self.assertIn("original_setup_baseline_commit", source)
         self.assertEqual(DIFF_COMMAND, "git diff --check && git diff")
         self.assertIn("DIFF_COMMAND", source)
         self.assertIn('SUPERVISION_PATH = WORKING_DIR / "verifier_gold_teacher_supervision.json"', source)
-        self.assertIn(":base-fail", source)
-        self.assertIn(":gold-pass", source)
         self.assertNotIn("blind_evaluation", source)
         self.assertNotIn("test_patch", source)
 
@@ -43,6 +43,7 @@ class VerifierSftTeacherRuntimeContractTests(unittest.TestCase):
         )
         self.assertNotIn("import verifier_gold_teacher_runtime as gold", bundled)
         self.assertNotIn("from verifier_gold_teacher_supervision import (", bundled)
+        self.assertIn("build_teacher_safe_stop_record = _supervision_helper.build_teacher_safe_stop_record", bundled)
         self.assertIn("_load_embedded_module", bundled)
         compile(bundled, "bundled_verifier_sft_teacher.py", "exec")
 
