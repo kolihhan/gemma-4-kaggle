@@ -13,6 +13,7 @@ Only frozen training IDs are accepted. Blind evaluation data is never read.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import tempfile
 import traceback
@@ -24,6 +25,7 @@ from verifier_gold_teacher_supervision import (
     DIFF_COMMAND,
     build_teacher_safe_stop_record,
     build_teacher_supervision_record,
+    load_reference_patch_map,
     load_targeted_test_plan,
 )
 
@@ -124,7 +126,7 @@ async def _collect_task_records(
 
     reference_patch = task.patch or ""
     if not reference_patch.strip():
-        raise RuntimeError("deterministic teacher reference patch unavailable after hydration")
+        raise RuntimeError("deterministic teacher reference patch is unavailable")
 
     snapshot_path, base_snapshot_path, patch_path = resolve_task_snapshot_paths(
         snapshots_dir,
@@ -260,11 +262,17 @@ async def run_teacher() -> dict[str, Any]:
     tasks_path = gold.DATA_DIR / "tasks.jsonl"
     snapshots_dir = gold.DATA_DIR / "snapshots"
     public_tasks = load_tasks(tasks_path)
+    reference_patch_map = load_reference_patch_map(gold.DATA_DIR / "secret")
     selected = set(target_ids)
     tasks_by_id = {task.instance_id: task for task in public_tasks if task.instance_id in selected}
     missing = [task_id for task_id in target_ids if task_id not in tasks_by_id]
     if missing:
         raise RuntimeError(f"deterministic-teacher task(s) missing from public corpus: {missing}")
+    missing_reference_patches = [task_id for task_id in target_ids if task_id not in reference_patch_map]
+    if missing_reference_patches:
+        raise RuntimeError(
+            f"deterministic-teacher reference patch(es) missing: {missing_reference_patches}"
+        )
 
     config = EvalConfig(
         tasks_path=tasks_path,
@@ -286,7 +294,7 @@ async def run_teacher() -> dict[str, Any]:
         problem_description = public_task.problem_statement or ""
         print(f"[{index:02d}/{len(target_ids):02d}] deterministic-teacher {task_id}", flush=True)
         try:
-            task = evaluator._hydrate_task_from_secret(public_task)
+            task = dataclasses.replace(public_task, patch=reference_patch_map[task_id])
             task_records = await _collect_task_records(
                 evaluator=evaluator,
                 task=task,
