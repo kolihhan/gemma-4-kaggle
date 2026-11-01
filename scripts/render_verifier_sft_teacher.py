@@ -9,6 +9,7 @@ import base64
 IMPORT_BLOCK = """import verifier_gold_teacher_runtime as gold
 from verifier_gold_teacher_supervision import (
     DIFF_COMMAND,
+    build_teacher_safe_stop_record,
     build_teacher_supervision_record,
     load_targeted_test_plan,
 )
@@ -51,6 +52,7 @@ gold = _load_embedded_module(
     "verifier_gold_teacher_runtime", {_encoded(gold_source)!r}
 )
 DIFF_COMMAND = _supervision_helper.DIFF_COMMAND
+build_teacher_safe_stop_record = _supervision_helper.build_teacher_safe_stop_record
 build_teacher_supervision_record = _supervision_helper.build_teacher_supervision_record
 load_targeted_test_plan = _supervision_helper.load_targeted_test_plan
 '''
