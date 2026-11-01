@@ -1,0 +1,31 @@
+name: Probe baseline preflight status
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/probe-baseline-preflight-now.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-baseline-preflight-41331492967
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Kaggle CLI
+        run: python -m pip install --disable-pip-version-check 'kaggle==2.2.5' 'six==1.17.0'
+      - name: Probe kernel status and logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle kernels status "$KERNEL_REF"
+          echo '--- recent kernel logs ---'
+          kaggle kernels logs "$KERNEL_REF" | tail -n 120 || true
