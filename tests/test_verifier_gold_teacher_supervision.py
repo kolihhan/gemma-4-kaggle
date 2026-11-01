@@ -68,13 +68,14 @@ class TargetedTestPlanTests(unittest.TestCase):
 
 class TeacherSupervisionRecordTests(unittest.TestCase):
     def test_builds_approved_verified_submit_from_deterministic_passing_evidence(self):
+        diff = "diff --git a/rich/panel.py b/rich/panel.py\n"
         record = build_teacher_supervision_record(
             instance_id="rich_1",
             problem_description="Fix the panel rendering regression.",
             targeted_command="pytest tests/test_panel.py -q",
-            pre_diff={"exit_code": 0, "output": "diff --git a/rich/panel.py b/rich/panel.py\n"},
+            pre_diff={"exit_code": 0, "output": diff},
             targeted_test={"exit_code": 0, "output": "2 passed\n"},
-            final_diff={"exit_code": 0, "output": "diff --git a/rich/panel.py b/rich/panel.py\n"},
+            final_diff={"exit_code": 0, "output": diff},
         )
         self.assertTrue(record["approved"])
         self.assertEqual(record["label"], "verified_submit")
@@ -87,7 +88,7 @@ class TeacherSupervisionRecordTests(unittest.TestCase):
         self.assertNotIn("reference_patch", record)
         self.assertNotIn("gold_patch", record)
 
-    def test_failing_or_missing_deterministic_evidence_stays_unapproved(self):
+    def test_failing_deterministic_evidence_stays_unapproved(self):
         for field in ("pre_diff", "targeted_test", "final_diff"):
             evidence = {
                 "pre_diff": {"exit_code": 0, "output": "diff"},
@@ -104,6 +105,34 @@ class TeacherSupervisionRecordTests(unittest.TestCase):
                 )
                 self.assertFalse(record["approved"])
                 self.assertIsNone(record["label"])
+                self.assertNotIn("submit_patch", [step["tool"] for step in record["steps"]])
+
+    def test_empty_or_changed_diff_never_becomes_positive_supervision(self):
+        cases = [
+            (
+                {"exit_code": 0, "output": ""},
+                {"exit_code": 0, "output": ""},
+                "empty_diff",
+            ),
+            (
+                {"exit_code": 0, "output": "diff --git a/a.py b/a.py\n-old\n+new\n"},
+                {"exit_code": 0, "output": "diff --git a/a.py b/a.py\n-old\n+different\n"},
+                "diff_changed_during_test",
+            ),
+        ]
+        for pre_diff, final_diff, expected_flag in cases:
+            with self.subTest(expected_flag=expected_flag):
+                record = build_teacher_supervision_record(
+                    instance_id="rich_1",
+                    problem_description="Fix it.",
+                    targeted_command="pytest tests/test_panel.py -q",
+                    pre_diff=pre_diff,
+                    targeted_test={"exit_code": 0, "output": "2 passed\n"},
+                    final_diff=final_diff,
+                )
+                self.assertFalse(record["approved"])
+                self.assertIsNone(record["label"])
+                self.assertIn(expected_flag, record["audit_flags"])
                 self.assertNotIn("submit_patch", [step["tool"] for step in record["steps"]])
 
 
