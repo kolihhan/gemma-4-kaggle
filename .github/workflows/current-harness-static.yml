@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: gemma4-current-scorer-${{ github.ref }}
+  group: gemma4-static-preflight-v2-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
