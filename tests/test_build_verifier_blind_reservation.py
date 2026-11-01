@@ -2,7 +2,10 @@ import json
 import unittest
 from pathlib import Path
 
-from scripts.build_verifier_blind_reservation import build_blind_reservation
+from scripts.build_verifier_blind_reservation import (
+    build_blind_reservation,
+    replace_confounded_blind,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,6 +58,114 @@ class VerifierBlindReservationTests(unittest.TestCase):
             {"instance_id", "repo", "patch_bucket"},
         )
         self.assertIn("Requests", reservation["coverage_limit"])
+
+    def test_replacement_prefers_same_repo_and_bucket_and_never_uses_harvested(self):
+        split = {
+            "version": "verifier-lora-v0",
+            "train": [
+                {"instance_id": "rich_old", "repo": "Textualize/rich", "patch_bucket": "1-10"},
+                {"instance_id": "rich_next", "repo": "Textualize/rich", "patch_bucket": "1-10"},
+                {"instance_id": "rich_harvested", "repo": "Textualize/rich", "patch_bucket": "1-10"},
+                {"instance_id": "rich_other", "repo": "Textualize/rich", "patch_bucket": "11-30"},
+                {"instance_id": "fast_keep", "repo": "fastapi/fastapi", "patch_bucket": "1-10"},
+            ],
+        }
+        harvested = {
+            "version": "verifier-lora-v0-train-harvest",
+            "tasks": [
+                {"instance_id": "rich_harvested", "repo": "Textualize/rich", "patch_bucket": "1-10"}
+            ],
+        }
+        reservation = {
+            "version": "verifier-lora-v0-blind-reservation",
+            "selection": {"metadata_only": True},
+            "coverage_limit": "test",
+            "counts": {"tasks": 2, "by_repo": {"Textualize/rich": 1, "fastapi/fastapi": 1}},
+            "tasks": [
+                {"instance_id": "rich_old", "repo": "Textualize/rich", "patch_bucket": "1-10"},
+                {"instance_id": "fast_keep", "repo": "fastapi/fastapi", "patch_bucket": "1-10"},
+            ],
+        }
+        replaced = replace_confounded_blind(
+            reservation,
+            split,
+            harvested,
+            {"rich_old"},
+        )
+        ids = {item["instance_id"] for item in replaced["tasks"]}
+        self.assertEqual(ids, {"rich_next", "fast_keep"})
+        self.assertNotIn("rich_harvested", ids)
+        self.assertEqual(replaced["counts"], reservation["counts"])
+        round1 = replaced["selection"]["gold_control_replacement_rounds"][0]
+        self.assertEqual(round1["replacements"][0]["selection_scope"], "same_repo_same_bucket")
+        self.assertEqual(round1["replacements"][0]["from"], "rich_old")
+        self.assertEqual(round1["replacements"][0]["to"], "rich_next")
+
+    def test_replacement_never_reuses_current_or_historical_blind_ids(self):
+        split = {
+            "version": "verifier-lora-v0",
+            "train": [
+                {"instance_id": "r1", "repo": "Textualize/rich", "patch_bucket": "1-10"},
+                {"instance_id": "r2", "repo": "Textualize/rich", "patch_bucket": "1-10"},
+                {"instance_id": "r3", "repo": "Textualize/rich", "patch_bucket": "1-10"},
+            ],
+        }
+        harvested = {"version": "verifier-lora-v0-train-harvest", "tasks": []}
+        reservation = {
+            "version": "verifier-lora-v0-blind-reservation",
+            "selection": {
+                "metadata_only": True,
+                "gold_control_replacement_rounds": [
+                    {
+                        "round": 1,
+                        "replacements": [
+                            {"from": "r1", "to": "r2", "repo": "Textualize/rich", "selection_scope": "same_repo_same_bucket", "from_patch_bucket": "1-10", "to_patch_bucket": "1-10"}
+                        ],
+                    }
+                ],
+            },
+            "coverage_limit": "test",
+            "counts": {"tasks": 1, "by_repo": {"Textualize/rich": 1}},
+            "tasks": [
+                {"instance_id": "r2", "repo": "Textualize/rich", "patch_bucket": "1-10"}
+            ],
+        }
+        replaced = replace_confounded_blind(reservation, split, harvested, {"r2"})
+        self.assertEqual([item["instance_id"] for item in replaced["tasks"]], ["r3"])
+
+    def test_replacement_fails_without_exact_bucket_unless_fallback_explicit(self):
+        split = {
+            "version": "verifier-lora-v0",
+            "train": [
+                {"instance_id": "r1", "repo": "Textualize/rich", "patch_bucket": "1-10"},
+                {"instance_id": "r2", "repo": "Textualize/rich", "patch_bucket": "11-30"},
+            ],
+        }
+        harvested = {"version": "verifier-lora-v0-train-harvest", "tasks": []}
+        reservation = {
+            "version": "verifier-lora-v0-blind-reservation",
+            "selection": {"metadata_only": True},
+            "coverage_limit": "test",
+            "counts": {"tasks": 1, "by_repo": {"Textualize/rich": 1}},
+            "tasks": [
+                {"instance_id": "r1", "repo": "Textualize/rich", "patch_bucket": "1-10"}
+            ],
+        }
+        with self.assertRaisesRegex(ValueError, "same repo/bucket"):
+            replace_confounded_blind(reservation, split, harvested, {"r1"})
+
+        replaced = replace_confounded_blind(
+            reservation,
+            split,
+            harvested,
+            {"r1"},
+            allow_same_repo_fallback=True,
+        )
+        self.assertEqual(replaced["tasks"][0]["instance_id"], "r2")
+        self.assertEqual(
+            replaced["selection"]["gold_control_replacement_rounds"][0]["replacements"][0]["selection_scope"],
+            "same_repo_fallback",
+        )
 
 
 if __name__ == "__main__":
