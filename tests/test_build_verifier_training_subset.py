@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "build_verifier_training_subset.py"
 SPLIT = ROOT / "docs" / "evaluation" / "verifier-lora-split-v0.json"
+FROZEN = ROOT / "docs" / "evaluation" / "verifier-lora-train-subset-v0.json"
 
 
 def load_module():
@@ -110,6 +111,13 @@ class VerifierTrainingSubsetTests(unittest.TestCase):
         self.assertTrue(set(ids) <= train_ids)
         self.assertFalse(set(ids) & holdout_ids)
         self.assertFalse(set(ids) & excluded_ids)
+
+    def test_frozen_manifest_exactly_matches_current_builder_output(self):
+        module = self.require_module()
+        split = json.loads(SPLIT.read_text(encoding="utf-8"))
+        frozen = json.loads(FROZEN.read_text(encoding="utf-8"))
+
+        self.assertEqual(frozen, module.build_training_subset(split))
 
 
 if __name__ == "__main__":
