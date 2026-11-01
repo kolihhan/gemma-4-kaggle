@@ -1,4 +1,3 @@
-import base64
 import json
 import unittest
 
@@ -38,7 +37,11 @@ class VerifierLoraTrainingContractTests(unittest.TestCase):
                 "instance_id": task_id,
                 "label": "verified_submit",
                 "source": "gold_patch_targeted_test",
-                "messages": [{"role": "system", "content": "x"}],
+                "messages": [
+                    {"role": "system", "content": "verify"},
+                    {"role": "assistant", "content": "run test"},
+                    {"role": "tool", "content": "passed"},
+                ],
                 "tools": [{"type": "function", "function": {"name": "run_command"}}],
             }
             for task_id in EXPECTED_IDS
