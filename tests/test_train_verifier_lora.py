@@ -134,20 +134,36 @@ class VerifierLoraTrainingContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "would truncate"):
             preflight_token_lengths(FakeProcessor(), rows, max_length=4)
 
-    def test_text_only_lora_target_guard_rejects_non_decoder_modules(self):
+    def test_expected_hf_model_class_is_multimodal_wrapper(self):
+        from kaggle.train_verifier_lora import validate_model_class
+
+        class GoodModel:
+            pass
+
+        GoodModel.__name__ = "Gemma4ForConditionalGeneration"
+        validate_model_class(GoodModel())
+
+        class BadModel:
+            pass
+
+        BadModel.__name__ = "Gemma4ForCausalLM"
+        with self.assertRaisesRegex(ValueError, "Gemma4ForConditionalGeneration"):
+            validate_model_class(BadModel())
+
+    def test_text_only_lora_target_guard_uses_language_model_decoder(self):
         from kaggle.train_verifier_lora import validate_lora_target_modules
 
         class FakeModel:
             def named_modules(self):
                 return iter(
                     [
-                        ("model.layers.0.self_attn.q_proj", object()),
-                        ("model.layers.0.self_attn.k_proj", object()),
-                        ("model.layers.0.self_attn.v_proj", object()),
-                        ("model.layers.0.self_attn.o_proj", object()),
-                        ("model.layers.0.mlp.gate_proj", object()),
-                        ("model.layers.0.mlp.up_proj", object()),
-                        ("model.layers.0.mlp.down_proj", object()),
+                        ("model.language_model.layers.0.self_attn.q_proj", object()),
+                        ("model.language_model.layers.0.self_attn.k_proj", object()),
+                        ("model.language_model.layers.0.self_attn.v_proj", object()),
+                        ("model.language_model.layers.0.self_attn.o_proj", object()),
+                        ("model.language_model.layers.0.mlp.gate_proj", object()),
+                        ("model.language_model.layers.0.mlp.up_proj", object()),
+                        ("model.language_model.layers.0.mlp.down_proj", object()),
                     ]
                 )
 
@@ -156,9 +172,9 @@ class VerifierLoraTrainingContractTests(unittest.TestCase):
 
         class BadModel(FakeModel):
             def named_modules(self):
-                return iter(list(super().named_modules()) + [("vision_tower.layers.0.q_proj", object())])
+                return iter(list(super().named_modules()) + [("model.vision_tower.layers.0.q_proj", object())])
 
-        with self.assertRaisesRegex(ValueError, "outside model.layers"):
+        with self.assertRaisesRegex(ValueError, "outside model.language_model.layers"):
             validate_lora_target_modules(BadModel(), ["q_proj"])
 
 
