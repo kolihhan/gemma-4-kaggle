@@ -127,7 +127,8 @@ class VerifierTrainingTraceRuntimeTests(unittest.TestCase):
         self.assertIn("name: gemma4-verifier-training-trace-harvest-v0-evidence", text)
         self.assertIn("if: always()", text)
         self.assertIn("verifier_training_trace_results.json", text)
-        self.assertIn("verifier-training-trace-results", text)
+        self.assertIn('kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o', text)
+        self.assertIn("path: /tmp/gemma4-verifier-training-trace-harvest-v0-output", text)
 
 
 if __name__ == "__main__":
