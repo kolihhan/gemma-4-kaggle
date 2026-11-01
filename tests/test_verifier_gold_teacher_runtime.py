@@ -80,19 +80,20 @@ class GoldPatchHookTests(unittest.TestCase):
 
 class GoldTeacherResultTests(unittest.TestCase):
     def test_summary_hashes_reference_patch_without_serializing_it(self):
+        patch = "diff --git a/a.py b/a.py\n"
         record = build_result_record(
             instance_id="rich_1",
             repo="Textualize/rich",
-            reference_patch="diff --git a/a.py b/a.py\n",
+            reference_patch=patch,
             resolved=True,
             test_exit_code=0,
-            agent_patch="diff --git a/a.py b/a.py\n",
+            agent_patch=patch,
             tool_calls=4,
             duration_seconds=12.5,
             error=None,
         )
         self.assertTrue(record["resolved"])
-        self.assertEqual(record["reference_patch_chars"], 27)
+        self.assertEqual(record["reference_patch_chars"], len(patch))
         self.assertIn("reference_patch_sha256", record)
         self.assertNotIn("reference_patch", record)
         self.assertIn("agent_patch_sha256", record)
