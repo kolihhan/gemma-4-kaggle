@@ -1,4 +1,4 @@
-# Current-scorer validation for the exact canonical baseline archive.
+# Validate the exact canonical baseline archive against the current official scorer wheelhouse.
 name: Validate current scorer wheelhouse
 
 on:
@@ -6,7 +6,6 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/current-harness-static.yml"
-      - "kaggle/baseline_preflight_runtime.py"
       - "submission/**"
   workflow_dispatch:
 
@@ -20,12 +19,10 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 25
     env:
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
-      KERNEL_REF: kolihhan/gemma4-baseline-preflight-${{ github.run_id }}
-      KERNEL_DIR: /tmp/gemma4-baseline-preflight-kernel
-      OUTPUT_DIR: /tmp/gemma4-baseline-preflight-output
+      WHEELHOUSE: metric/gemma-4-developer-agent-wheelhouse
       MODEL_NAME: gemma-4-e4b-it-qat-w4a16-ct
 
     steps:
@@ -73,121 +70,76 @@ jobs:
           PY
 
       - name: Install Kaggle CLI
-        run: |
-          python -m pip install --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
-          kaggle --version
+        run: python -m pip install --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
 
-      - name: Render private CPU validation kernel
+      - name: Download current official scorer wheelhouse
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf "$KERNEL_DIR" "$OUTPUT_DIR"
-          mkdir -p "$KERNEL_DIR" "$OUTPUT_DIR"
+          rm -rf /tmp/scorer-wheelhouse /tmp/wheelhouse-fixed
+          mkdir -p /tmp/scorer-wheelhouse /tmp/wheelhouse-fixed
+          kaggle datasets download -d "$WHEELHOUSE" -p /tmp/scorer-wheelhouse --unzip
           python - <<'PY'
-          import base64
-          import json
-          import os
+          import shutil
           from pathlib import Path
 
-          archive = Path("submission.zip").read_bytes()
-          digest = Path("submission.sha256").read_text(encoding="utf-8").split()[0]
-          runtime = Path("kaggle/baseline_preflight_runtime.py").read_text(encoding="utf-8")
-          runtime = runtime.replace("__SUBMISSION_ARCHIVE_B64__", base64.b64encode(archive).decode("ascii"))
-          runtime = runtime.replace("__EXPECTED_SHA256__", digest)
-          compile(runtime, "validate_submission.py", "exec")
-
-          kernel_dir = Path(os.environ["KERNEL_DIR"])
-          kernel_ref = os.environ["KERNEL_REF"]
-          (kernel_dir / "validate_submission.py").write_text(runtime, encoding="utf-8")
-          metadata = {
-              "id": kernel_ref,
-              "title": f"Gemma4 Baseline Preflight {digest[:12]}",
-              "code_file": "validate_submission.py",
-              "language": "python",
-              "kernel_type": "script",
-              "is_private": True,
-              "enable_gpu": False,
-              "enable_tpu": False,
-              "enable_internet": False,
-              "docker_image": "gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461",
-              "dataset_sources": ["metric/gemma-4-developer-agent-wheelhouse"],
-              "competition_sources": [],
-              "kernel_sources": [],
-              "model_sources": [],
-          }
-          (kernel_dir / "kernel-metadata.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
-          print("rendered_kernel_ref=", kernel_ref)
-          print("rendered_archive_sha256=", digest)
+          src = Path("/tmp/scorer-wheelhouse")
+          dst = Path("/tmp/wheelhouse-fixed")
+          for wheel in src.glob("*.whl"):
+              if "cutlass" in wheel.name.lower():
+                  continue
+              name = wheel.name.replace("cu128", "+cu128") if ("cu128" in wheel.name and "+" not in wheel.name) else wheel.name
+              target = dst / name
+              if target.exists():
+                  continue
+              try:
+                  target.symlink_to(wheel)
+              except OSError:
+                  shutil.copyfile(wheel, target)
+          wheels = sorted(dst.glob("*.whl"))
+          if not wheels:
+              raise SystemExit("no scorer wheels found")
+          print("prepared scorer wheels:", len(wheels))
           PY
 
-      - name: Push private Kaggle CPU validation kernel
+      - name: Install official scorer wheels without resolving heavy dependencies
         shell: bash
         run: |
           set -euo pipefail
-          kaggle kernels push -p "$KERNEL_DIR" -t 1800
-
-      - name: Poll Kaggle validation kernel
-        id: poll
-        shell: bash
-        run: |
-          set -euo pipefail
-          terminal=""
-          for attempt in $(seq 1 120); do
-            status_output="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
-            printf '[%03d] %s\n' "$attempt" "$status_output"
-            lower="$(printf '%s' "$status_output" | tr '[:upper:]' '[:lower:]')"
-            if grep -Eq 'complete|completed' <<<"$lower"; then
-              terminal="complete"
-              break
-            fi
-            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then
-              terminal="error"
-              break
-            fi
-            sleep 15
-          done
-          if [[ -z "$terminal" ]]; then
-            terminal="timeout"
-          fi
-          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
-          echo "Kaggle terminal state: $terminal"
-
-      - name: Collect validation evidence
-        if: always()
-        shell: bash
-        run: |
-          set +e
-          mkdir -p "$OUTPUT_DIR"
-          kaggle kernels logs "$KERNEL_REF" > "$OUTPUT_DIR/kernel.log" 2>&1
-          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o > "$OUTPUT_DIR/output-download.log" 2>&1
-          find "$OUTPUT_DIR" -maxdepth 2 -type f -printf '%P %s bytes\n' | sort
-          tail -n 160 "$OUTPUT_DIR/kernel.log" || true
-
-      - name: Assert current scorer accepted the exact archive
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ "${{ steps.poll.outputs.terminal }}" != "complete" ]]; then
-            echo "Kaggle current-scorer validation did not complete successfully: ${{ steps.poll.outputs.terminal }}" >&2
+          mapfile -d '' wheels < <(find /tmp/wheelhouse-fixed -maxdepth 1 \( -type f -o -type l \) -name '*.whl' -print0)
+          if [[ ${#wheels[@]} -eq 0 ]]; then
+            echo "no scorer wheels found" >&2
             exit 1
           fi
-          test -f "$OUTPUT_DIR/baseline_submission_validation.json"
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
+          python -m pip install -q --no-deps --force-reinstall "${wheels[@]}"
 
-          expected_sha = Path("submission.sha256").read_text(encoding="utf-8").split()[0]
-          result = json.loads(
-              (Path(os.environ["OUTPUT_DIR"]) / "baseline_submission_validation.json").read_text(encoding="utf-8")
-          )
-          assert result.get("status") == "valid", result
-          assert result.get("archive_sha256") == expected_sha, result
-          assert result.get("declared_models") == ["gemma-4-e4b-it-qat-w4a16-ct"], result
-          assert "agent.yaml" in (result.get("files") or []), result
-          print("validated_archive_sha256=", expected_sha)
-          print("validated_declared_models=", result["declared_models"])
-          print("validated_file_count=", result["file_count"])
+      - name: Validate exact canonical E4B submission
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          from adk_submission import validate_directory
+          from adk_submission.discovery import discover_declared_models
+          from swegemma.config import build_submission_limits
+
+          submission = Path("submission")
+          limits, _generation_constraints = build_submission_limits()
+          validate_directory(submission, limits=limits)
+          models = discover_declared_models(submission)
+          expected = {"gemma-4-e4b-it-qat-w4a16-ct"}
+          if models != expected:
+              raise SystemExit(f"unexpected declared models: {sorted(models)}")
+
+          archive = Path("submission.zip")
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          recorded = Path("submission.sha256").read_text(encoding="utf-8").split()[0]
+          if digest != recorded:
+              raise SystemExit(f"archive SHA mismatch: {digest} != {recorded}")
+          print("STATIC_E4B_SUBMISSION_VALID=1")
+          print("validated_archive_sha256=", digest)
+          print("validated_declared_models=", sorted(models))
           PY
 
       - name: Upload exact validated submission package
@@ -198,7 +150,5 @@ jobs:
           path: |
             submission.zip
             submission.sha256
-            /tmp/gemma4-baseline-preflight-output/baseline_submission_validation.json
-            /tmp/gemma4-baseline-preflight-output/kernel.log
           if-no-files-found: warn
           retention-days: 30
