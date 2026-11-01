@@ -10,6 +10,7 @@ Expected normalized record shape::
 
     {
       "instance_id": "rich_1234",
+      "example_id": "rich_1234:gold-pass",
       "approved": true,
       "label": "verified_submit" | "safe_stop",
       "source": "base_trace_curated" | "gold_verification_curated" | ...,
@@ -32,6 +33,7 @@ model-specific preprocessing.
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import shlex
 from pathlib import Path
@@ -63,11 +65,12 @@ ALLOWED_LABELS = {"verified_submit", "safe_stop"}
 
 
 def classify_test_command(command: str) -> str:
-    """Classify pytest commands as targeted, broad, or not_test.
+    """Classify a bounded verification command as targeted, broad, or not_test.
 
-    A test-file path or explicit pytest node is treated as targeted. Bare
-    pytest, repo-root pytest, and ``pytest tests`` are intentionally treated as
-    broad because v0 supervision is meant to teach the smallest relevant gate.
+    Explicit pytest files/nodes are targeted. A one-shot ``python -c`` command
+    is also targeted when its parsed source contains an actual ``assert``.
+    Bare/repo-wide pytest remains broad because v0 supervision is meant to
+    teach the smallest relevant gate.
     """
 
     if not isinstance(command, str) or not command.strip():
@@ -75,7 +78,17 @@ def classify_test_command(command: str) -> str:
     try:
         tokens = shlex.split(command)
     except ValueError:
-        tokens = command.split()
+        return "not_test"
+    if not tokens or any(token in {"&&", "||", "|", ";", "`"} for token in tokens):
+        return "not_test"
+
+    executable = tokens[0].rsplit("/", 1)[-1]
+    if executable in {"python", "python3"} and len(tokens) == 3 and tokens[1] == "-c":
+        try:
+            tree = ast.parse(tokens[2])
+        except SyntaxError:
+            return "not_test"
+        return "targeted" if any(isinstance(node, ast.Assert) for node in ast.walk(tree)) else "not_test"
 
     pytest_index = None
     for index, token in enumerate(tokens):
@@ -372,7 +385,7 @@ def build_examples(
         raise SupervisionError("verifier template must contain {problem_description}")
 
     examples: list[dict[str, Any]] = []
-    seen: set[str] = set()
+    seen_examples: set[str] = set()
     for raw in records:
         if not isinstance(raw, dict):
             raise SupervisionError("supervision record is not an object")
@@ -385,9 +398,12 @@ def build_examples(
         instance_id = raw.get("instance_id")
         if not isinstance(instance_id, str) or not instance_id:
             raise SupervisionError("record has no instance_id")
-        if instance_id in seen:
-            raise SupervisionError(f"duplicate supervision record: {instance_id}")
-        seen.add(instance_id)
+        example_id = raw.get("example_id", instance_id)
+        if not isinstance(example_id, str) or not example_id:
+            raise SupervisionError(f"{instance_id}: invalid example_id")
+        if example_id in seen_examples:
+            raise SupervisionError(f"duplicate supervision example: {example_id}")
+        seen_examples.add(example_id)
 
         if raw.get("approved") is not True:
             raise SupervisionError(
@@ -421,6 +437,7 @@ def build_examples(
         examples.append(
             {
                 "instance_id": instance_id,
+                "example_id": example_id,
                 "label": label,
                 "source": source,
                 "messages": _messages_for_record(raw, verifier_template, steps),
