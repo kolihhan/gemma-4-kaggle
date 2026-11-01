@@ -62,6 +62,8 @@ class VerifierSftTeacherRuntimeContractTests(unittest.TestCase):
     def test_workflow_fails_closed_on_push_error_and_stale_kernel_output(self):
         source = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn('TEACHER_BUILD_ID: ${{ github.sha }}', source)
+        self.assertIn('KERNEL_REF: kolihhan/gemma-4-verifier-sft-teacher-v0-${{ github.run_id }}', source)
+        self.assertIn('"id": kernel_ref', source)
         self.assertIn("push_output=", source)
         self.assertIn("push_status=", source)
         self.assertIn("Kernel push error", source)
