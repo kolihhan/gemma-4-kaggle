@@ -1,0 +1,47 @@
+{
+  "version": "verifier-lora-v0-eval-contract-v1",
+  "development_validation": {
+    "role": "development_validation",
+    "is_blind": false,
+    "reason": "The nine gold-clean base tasks have already been manually inspected task-by-task and their failure traces, test choices, premature submissions, and outcomes shaped the verifier-LoRA hypothesis.",
+    "source": "docs/evaluation/verifier-lora-gold-screen-v0.json",
+    "instance_ids": [
+      "rich_3061",
+      "rich_3067",
+      "rich_3934",
+      "rich_3942",
+      "fastapi_13920",
+      "fastapi_14077",
+      "fastapi_14463",
+      "fastapi_14851",
+      "fastapi_14986"
+    ],
+    "coverage": {
+      "Textualize/rich": 4,
+      "fastapi/fastapi": 5,
+      "psf/requests": 0
+    },
+    "claim_limit": "This development set supports diagnostics for Rich and FastAPI only; it does not support Requests or broad cross-repository generalization claims."
+  },
+  "blind_evaluation": {
+    "status": "pending_freeze",
+    "instance_ids": [],
+    "candidate_source": "tasks currently in the training side of verifier-lora-split-v0 that have not been harvested, manually inspected, or otherwise development-seen",
+    "selection_rule": "Freeze task IDs from metadata only, then allow automated harness/gold-control eligibility screening. Do not inspect base-model blind failure traces, blind reference patches, or task-level blind outcomes before the verifier adapter is frozen.",
+    "automated_gold_control_only": true,
+    "base_failure_traces_uninspected_before_adapter_freeze": true
+  },
+  "promotion": {
+    "requires_frozen_blind_evaluation": true,
+    "metrics": [
+      "development verifier behavior",
+      "development resolved-task count",
+      "independent blind resolved-task count",
+      "F4/F5 reduction",
+      "targeted-test behavior",
+      "premature-submit behavior",
+      "runtime and tool-call cost"
+    ],
+    "stop_rule": "If verifier-LoRA v0 fails the frozen blind evaluation, stop v0 instead of immediately sweeping rank, epochs, learning rate, or other hyperparameters."
+  }
+}
