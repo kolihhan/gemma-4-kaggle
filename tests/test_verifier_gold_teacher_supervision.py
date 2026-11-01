@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from kaggle.verifier_gold_teacher_runtime import (
+from kaggle.verifier_gold_teacher_supervision import (
     build_teacher_supervision_record,
     load_targeted_test_plan,
 )
