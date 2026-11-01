@@ -8,13 +8,15 @@ Build a competitive, evidence-driven Gemma 4 software-engineering agent. Optimiz
 
 **Run one controlled verifier-only E4B LoRA v0 falsification experiment.**
 
-The canonical agent topology remains:
+The canonical agent topology remains unchanged:
 
 1. root coder `LlmAgent`, unadapted;
 2. verifier `AgentTool`, owns `submit_patch` and is the only component eligible for the v0 adapter;
 3. base competition variant remains `gemma-4-e4b-it-qat-w4a16-ct` for every agent.
 
 Do not reopen the 12B path, change topology, sweep hyperparameters, or add more prompt-only policy before this controlled experiment is resolved.
+
+PR #4 remains an experiment/evidence branch. It still contains **no `submission/**` changes**.
 
 ## Why LoRA v0 exists
 
@@ -47,7 +49,7 @@ Their traces shaped the LoRA hypothesis, so they may be used only for developmen
 
 No untouched Requests candidate remains in the current training-side pool because both Requests train tasks were already used by the frozen training trace harvest. Therefore v0 cannot establish Requests generalization.
 
-`docs/evaluation/verifier-lora-eval-contract-v1.json` now points exactly to this frozen reservation. Blind base failure traces and blind reference patches must remain manually uninspected until the adapter is frozen.
+`docs/evaluation/verifier-lora-eval-contract-v1.json` points exactly to this frozen reservation. The final blind IDs are disjoint from the 18-task training harvest. Blind base failure traces and blind reference patches remain manually uninspected until the adapter is frozen.
 
 ## Training-side evidence
 
@@ -55,7 +57,7 @@ No untouched Requests candidate remains in the current training-side pool becaus
 
 Training subset: **18 tasks**.
 
-The base verifier trace harvest completed for all 18. Only **2/18** ultimately resolved, and none of the raw trajectories is safe to auto-approve as a positive SFT target. Raw base behavior is therefore diagnostic evidence, not the positive training dataset.
+The base verifier trace harvest completed for all 18. Only **2/18** ultimately resolved, and none of the raw trajectories is safe to auto-approve as a positive SFT target. Raw base behavior is diagnostic evidence, not the positive training dataset.
 
 ### Training gold screen — complete
 
@@ -64,94 +66,120 @@ Automated gold-control screening over those 18 produced:
 - **12 clean** training tasks;
 - **6 confounded** training tasks.
 
-Only the clean set may source deterministic positive supervision.
+Only the clean set may source deterministic supervision.
 
 ### Model gold-teacher control — complete, not accepted as labels
 
 A verifier-only model run on gold-patched clean training tasks was executed. The model still mutated/handled known-good workspaces unreliably, so its behavioral traces are not automatically treated as positive teacher targets.
 
-## Task 4 — deterministic verifier supervision
+## Task 4 — deterministic paired verifier supervision
 
-Current direction: construct small positive verifier trajectories from **deterministic evidence**, not model self-judgment.
+### First deterministic dataset — mechanically successful, rejected for training
 
-Frozen targeted-test source set: `docs/evaluation/verifier-lora-targeted-tests-v0.json`.
+Run `41309594361` completed end-to-end and produced a contract-checked SFT JSONL.
 
-Six training-only, gold-clean cases are selected:
+It yielded five approved `verified_submit` examples:
 
-- `fastapi_14479` → `pytest tests/test_invalid_sequence_param.py -q`
-- `requests_6644` → `pytest tests/test_adapters.py -q`
-- `rich_3718` → `pytest tests/test_panel.py -q`
-- `rich_3882` → `pytest tests/test_prompt.py -q`
-- `rich_3953` → `pytest tests/test_cells.py -q`
-- `rich_4006` → `pytest tests/test_cells.py -q`
+- `fastapi_14479`
+- `rich_3718`
+- `rich_3882`
+- `rich_3953`
+- `rich_4006`
 
-Approval contract for each case:
+`requests_6644` was correctly rejected because its frozen `tests/test_adapters.py` path did not exist in the pre-fix snapshot.
 
-1. apply the training reference patch only after the official baseline commit;
-2. `git diff --check && git diff` must pass;
-3. the frozen targeted pytest gate must pass;
-4. final `git diff --check && git diff` must pass;
-5. only then emit `verified_submit` + `submit_patch`;
-6. failed evidence remains unapproved and cannot enter positive SFT.
+**Do not train on this artifact.** It is positive-only supervision and would weakly teach “verification -> submit” without directly teaching the central F4/F5 invariant that failing relevant evidence must not be submitted.
 
-No raw reference patch, gold patch, solution patch, or hidden `test_patch` is persisted into the SFT record.
+### Paired v0 contract — implemented
 
-Implementation:
+For each selected training-only task, collect two deterministic states using the same bounded public regression gate:
 
-- `kaggle/verifier_gold_teacher_supervision.py`
-- `kaggle/verifier_sft_teacher_runtime.py`
-- `scripts/render_verifier_sft_teacher.py`
-- `.github/workflows/run-verifier-sft-teacher.yml`
-- existing contract checker `scripts/build_verifier_sft.py`
+1. **base-fail**: untouched baseline + failing regression gate -> approved `safe_stop` only when the base diff is empty/stable and the gate actually fails;
+2. **gold-pass**: training reference patch + passing regression gate -> approved `verified_submit` only when the gold diff is non-empty/stable and the gate passes.
 
-## Current execution status
+Records use separate `example_id`s:
 
-### GitHub validation
+- `<instance_id>:base-fail`
+- `<instance_id>:gold-pass`
 
-Branch `exp/verifier-lora-v0`, PR #4.
+The SFT builder deduplicates by `example_id`, so one task can contribute both behavior labels.
 
-Latest durable contract change: `41a16bbb14ab37d837ec1dd011f9146c2a653cbc`.
+### Frozen public behavior gates
 
-Full repo validation run `41308873255`: **PASS**.
+`docs/evaluation/verifier-lora-targeted-tests-v0.json` now uses bounded public upstream regression behavior rather than assuming post-fix test files already exist in the pre-fix snapshot.
 
-The suite currently runs **129 tests** plus compile/corpus/restore checks.
+Selected tasks:
 
-### Deterministic SFT teacher run
+- `fastapi_14479` — targeted FastAPI regression test file;
+- `requests_6644` — inline assertion for `HTTPAdapter.request_url()` trimming the excess leading slash while preserving `:h`;
+- `rich_3718` — inline panel title/background ANSI assertion;
+- `rich_3882` — inline `Confirm.ask` markup-disabled prompt assertion;
+- `rich_3953` — inline zero-width ZWJ/control-character `cell_len` assertions;
+- `rich_4006` — inline zero-width escape/grapheme assertion.
 
-Run `41308606160` was launched from commit `82ed6b813d1ac53aeceb8b670629a9a751019afb`.
+A `python -c` gate is accepted only when AST parsing finds a real `assert`; shell chaining is rejected. Broad repository pytest is still rejected as positive verification evidence.
 
-The first attempt exposed a Kaggle packaging bug: script kernels materialized only the configured `code_file`, so sibling Python helpers were not importable. The root cause was fixed by bundling the runtime and both local helper modules into one standalone Kaggle script. The replacement run passed render and push and is executing inside Kaggle.
+### Current paired teacher execution
 
-**Do not declare Task 4 complete until its artifact is inspected.** Required evidence is a non-empty contract-checked `verifier-sft-v0.jsonl` built only from approved deterministic records.
+Run `41314500798` / job `124871578457` was launched from commit `311409448f43be45f55a05ab903661d4bbb57145` after the standalone Kaggle bundler was updated for paired supervision.
 
-## Task 5 gate — not started
+Render and Kaggle push both passed. The run is currently executing inside Kaggle.
 
-Do not launch LoRA training until Task 4 evidence is verified.
+Required Task-4 acceptance evidence:
 
-When the gate opens, the frozen v0 training configuration is:
+- exactly 12 audit records, two per target;
+- all six `:gold-pass` examples approved;
+- at least one genuinely failing `:base-fail` example approved as `safe_stop`;
+- no blind IDs or hidden `test_patch` content;
+- non-empty contract-checked `verifier-sft-v0.jsonl` containing both `safe_stop` and `verified_submit`.
+
+If any gold-pass gate fails, fix the public regression gate before training. Do not weaken the approval contract.
+
+## Task 5 — trainer implementation ready, execution still gated
+
+`kaggle/train_verifier_lora.py` is implemented for the paired dataset but **training has not been launched**.
+
+Dataset contract:
+
+- all six frozen targets must have exactly one approved `:gold-pass` / `verified_submit` example;
+- at least one approved `:base-fail` / `safe_stop` example must exist;
+- examples are unique by `example_id`;
+- unknown IDs, missing gold coverage, duplicate examples, wrong labels/sources, or forbidden solution fields fail closed;
+- token-length preflight is keyed by `example_id` and aborts instead of truncating.
+
+Frozen training configuration remains:
 
 - base: `google/gemma-4-E4B-it-qat-q4_0-unquantized`;
 - PEFT/TRL SFT;
 - rank `r=8`;
 - alpha `16`;
 - dropout `0.05`;
-- causal LM;
+- learning rate `1e-4`;
+- 3 epochs;
+- seed `42`;
+- max length `4096` with no silent truncation;
+- text-decoder LoRA targets only;
 - save adapter only: `adapter_config.json` + `adapter_model.safetensors`;
 - one run, **no hyperparameter sweep**.
 
-The coder stays unadapted. Adapter evaluation must keep coder, topology, prompts, tools, sampling, time limits, and base family fixed.
+Latest full repo validation after the paired trainer update: run `41314790821` — **PASS**.
+
+Do not create/trigger the training execution workflow against an old teacher artifact. Lock the exact accepted paired-teacher run/artifact first.
 
 ## Stop / promotion rule
 
 Training loss is not a promotion metric.
 
-After one adapter is frozen, compare it against the base verifier on development diagnostics and the independent frozen blind set. Promotion requires materially better verifier behavior/resolution without unacceptable runtime/tool-call cost.
+After one adapter is frozen, compare it against the base verifier with coder, topology, prompts, tools, sampling, time limits, and base family fixed. Use development diagnostics plus the independent frozen blind reservation.
+
+Promotion requires materially better verifier behavior/resolution without unacceptable runtime/tool-call cost.
 
 If v0 fails the frozen blind evaluation, stop v0 rather than immediately sweeping rank, epochs, learning rate, or other knobs.
 
 ## Immediate next step
 
-1. Finish run `41308606160` and inspect the raw supervision artifact plus generated SFT JSONL.
-2. If at least one clean approved example survives `build_verifier_sft.py`, record the exact approved IDs/count and freeze Task 4 evidence.
-3. Only then implement/run Task 5 rank-8 verifier LoRA training.
-4. Do not inspect blind task-level failure traces before the adapter is frozen.
+1. Finish paired teacher run `41314500798` and inspect every base-fail/gold-pass record plus generated SFT JSONL.
+2. Require six approved gold-pass examples and at least one approved safe-stop example; otherwise repair the deterministic public gate, not the label threshold.
+3. Freeze the exact accepted teacher artifact/run ID.
+4. Only then wire and launch the single rank-8 LoRA training run.
+5. Do not inspect blind task-level failure traces before the adapter is frozen.
