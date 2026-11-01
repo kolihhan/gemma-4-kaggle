@@ -16,6 +16,7 @@ jobs:
     timeout-minutes: 10
     env:
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      MODEL_VARIATION: google/gemma-4/Other/gemma-4-e4b-it-qat-q4_0-unquantized
 
     steps:
       - uses: actions/checkout@v4
@@ -29,11 +30,16 @@ jobs:
           python -m pip install --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
           python -c "import kaggle, six"
 
-      - name: List Gemma 4 model variations
+      - name: Verify unquantized E4B variation and files
         shell: bash
         run: |
           set -euo pipefail
-          echo "--- CLI help ---"
-          kaggle models variations list --help
-          echo "--- google/gemma-4 variations (table) ---"
-          kaggle models variations list google/gemma-4 --page-size 200
+          echo "--- variation metadata ---"
+          rm -rf /tmp/gemma4-model-meta
+          mkdir -p /tmp/gemma4-model-meta
+          kaggle models variations get "$MODEL_VARIATION" -p /tmp/gemma4-model-meta
+          cat /tmp/gemma4-model-meta/model-instance-metadata.json
+          echo "--- latest files ---"
+          kaggle models variations files "$MODEL_VARIATION" --format json
+          echo "--- versions ---"
+          kaggle models variations versions list "$MODEL_VARIATION" --format json --page-size 50
