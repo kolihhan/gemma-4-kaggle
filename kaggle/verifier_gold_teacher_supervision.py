@@ -79,6 +79,27 @@ def _classify_verification(command: str) -> str:
     return "broad"
 
 
+def _is_behavioral_failure(command: str, evidence: dict[str, Any]) -> bool:
+    """Return true only when a frozen inline assertion failed as intended.
+
+    v0 safe-stop labels intentionally require ``python -c`` assertions. A
+    generic non-zero process status is not enough because import failures,
+    missing files, collection errors, and setup failures are infrastructure
+    evidence rather than evidence that the target behavior is still broken.
+    """
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False
+    if (
+        len(tokens) != 3
+        or tokens[0].rsplit("/", 1)[-1] not in {"python", "python3"}
+        or tokens[1] != "-c"
+    ):
+        return False
+    return evidence.get("exit_code") == 1 and "AssertionError" in str(evidence.get("output", ""))
+
+
 def load_targeted_test_plan(plan_json: str, clean_training_ids: set[str]) -> dict[str, str]:
     """Validate a frozen targeted verification plan against gold-clean training IDs."""
     try:
@@ -162,7 +183,7 @@ def build_teacher_safe_stop_record(
     targeted_test: dict[str, Any],
     final_diff: dict[str, Any],
 ) -> dict[str, Any]:
-    """Build safe-stop supervision from a clean base state with failing evidence."""
+    """Build safe-stop supervision from a clean base state with behavioral failure."""
     if not isinstance(instance_id, str) or not instance_id:
         raise ValueError("instance_id is required")
     if not isinstance(problem_description, str) or not problem_description.strip():
@@ -177,8 +198,8 @@ def build_teacher_safe_stop_record(
     diff_clean = not pre["output"].strip() and not final["output"].strip()
     diff_stable = pre["output"] == final["output"]
     diff_checks_pass = pre["exit_code"] == 0 and final["exit_code"] == 0
-    targeted_failed = test["exit_code"] != 0
-    approved = diff_clean and diff_stable and diff_checks_pass and targeted_failed
+    targeted_behavior_failed = _is_behavioral_failure(targeted_command, test)
+    approved = diff_clean and diff_stable and diff_checks_pass and targeted_behavior_failed
 
     audit_flags: list[str] = []
     if pre["exit_code"] != 0:
@@ -187,6 +208,8 @@ def build_teacher_safe_stop_record(
         audit_flags.append("failed_final_diff")
     if test["exit_code"] == 0:
         audit_flags.append("targeted_test_unexpectedly_passed")
+    elif not targeted_behavior_failed:
+        audit_flags.append("non_behavioral_targeted_failure")
     if pre["output"].strip() or final["output"].strip():
         audit_flags.append("dirty_base_diff")
     if not diff_stable:
