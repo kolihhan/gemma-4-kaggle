@@ -2,13 +2,38 @@ import json
 import unittest
 
 
-EXPECTED_IDS = [
+EXPECTED_TASK_IDS = [
     "fastapi_14479",
+    "requests_6644",
     "rich_3718",
     "rich_3882",
     "rich_3953",
     "rich_4006",
 ]
+
+
+def sft_row(task_id, label):
+    if label == "verified_submit":
+        example_id = f"{task_id}:gold-pass"
+        source = "gold_patch_targeted_test"
+    elif label == "safe_stop":
+        example_id = f"{task_id}:base-fail"
+        source = "base_targeted_failure"
+    else:
+        example_id = f"{task_id}:bad"
+        source = "bad"
+    return {
+        "instance_id": task_id,
+        "example_id": example_id,
+        "label": label,
+        "source": source,
+        "messages": [
+            {"role": "system", "content": "verify"},
+            {"role": "assistant", "content": "run test"},
+            {"role": "tool", "content": "evidence"},
+        ],
+        "tools": [{"type": "function", "function": {"name": "run_command"}}],
+    }
 
 
 class VerifierLoraTrainingContractTests(unittest.TestCase):
@@ -29,46 +54,61 @@ class VerifierLoraTrainingContractTests(unittest.TestCase):
         self.assertNotIn("sweep", TRAINING_CONFIG)
         self.assertNotIn("grid", TRAINING_CONFIG)
 
-    def test_dataset_loader_rejects_leakage_duplicates_and_unexpected_ids(self):
+    def test_dataset_loader_accepts_gold_coverage_plus_safe_stop_subset(self):
         from kaggle.train_verifier_lora import load_sft_rows
 
-        good = [
-            {
-                "instance_id": task_id,
-                "label": "verified_submit",
-                "source": "gold_patch_targeted_test",
-                "messages": [
-                    {"role": "system", "content": "verify"},
-                    {"role": "assistant", "content": "run test"},
-                    {"role": "tool", "content": "passed"},
-                ],
-                "tools": [{"type": "function", "function": {"name": "run_command"}}],
-            }
-            for task_id in EXPECTED_IDS
-        ]
+        good = []
+        for task_id in EXPECTED_TASK_IDS:
+            if task_id in {"requests_6644", "rich_3953"}:
+                good.append(sft_row(task_id, "safe_stop"))
+            good.append(sft_row(task_id, "verified_submit"))
         payload = "\n".join(json.dumps(row) for row in good) + "\n"
         rows = load_sft_rows(payload)
-        self.assertEqual([row["instance_id"] for row in rows], EXPECTED_IDS)
+        self.assertEqual([row["example_id"] for row in rows], [row["example_id"] for row in good])
+        self.assertEqual(
+            {row["instance_id"] for row in rows if row["label"] == "verified_submit"},
+            set(EXPECTED_TASK_IDS),
+        )
+        self.assertIn("safe_stop", {row["label"] for row in rows})
+
+    def test_dataset_loader_rejects_leakage_duplicates_missing_gold_and_bad_labels(self):
+        from kaggle.train_verifier_lora import load_sft_rows
+
+        good = [sft_row(task_id, "verified_submit") for task_id in EXPECTED_TASK_IDS]
+        good.insert(1, sft_row("requests_6644", "safe_stop"))
 
         bad_cases = []
         duplicate = good + [dict(good[0])]
         bad_cases.append("\n".join(json.dumps(row) for row in duplicate))
+
         wrong_id = [dict(row) for row in good]
         wrong_id[0]["instance_id"] = "rich_3105"
         bad_cases.append("\n".join(json.dumps(row) for row in wrong_id))
+
         leaked = [dict(row) for row in good]
         leaked[0] = dict(leaked[0], reference_patch="secret")
         bad_cases.append("\n".join(json.dumps(row) for row in leaked))
+
+        missing_gold = [row for row in good if row["example_id"] != "rich_4006:gold-pass"]
+        bad_cases.append("\n".join(json.dumps(row) for row in missing_gold))
+
+        no_negative = [sft_row(task_id, "verified_submit") for task_id in EXPECTED_TASK_IDS]
+        bad_cases.append("\n".join(json.dumps(row) for row in no_negative))
+
         wrong_label = [dict(row) for row in good]
         wrong_label[0]["label"] = "maybe"
         bad_cases.append("\n".join(json.dumps(row) for row in wrong_label))
+
+        wrong_example_id = [dict(row) for row in good]
+        wrong_example_id[0]["example_id"] = "fastapi_14479:base-fail"
+        bad_cases.append("\n".join(json.dumps(row) for row in wrong_example_id))
 
         for payload in bad_cases:
             with self.subTest(payload=payload[:120]):
                 with self.assertRaises(ValueError):
                     load_sft_rows(payload)
 
-    def test_length_preflight_refuses_truncation(self):
+    def test_length_preflight_refuses_truncation_and_keys_by_example(self):
         from kaggle.train_verifier_lora import preflight_token_lengths
 
         class FakeProcessor:
@@ -82,12 +122,13 @@ class VerifierLoraTrainingContractTests(unittest.TestCase):
         rows = [
             {
                 "instance_id": "short",
+                "example_id": "short:gold-pass",
                 "messages": [{"role": "system", "content": "abcd"}],
                 "tools": [{"type": "function", "function": {"name": "run_command"}}],
             }
         ]
         lengths = preflight_token_lengths(FakeProcessor(), rows, max_length=4)
-        self.assertEqual(lengths, {"short": 4})
+        self.assertEqual(lengths, {"short:gold-pass": 4})
 
         rows[0]["messages"][0]["content"] = "abcde"
         with self.assertRaisesRegex(ValueError, "would truncate"):
