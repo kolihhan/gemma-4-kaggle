@@ -224,21 +224,16 @@ def validate_model_class(model: Any) -> None:
 
 
 def validate_lora_target_modules(model: Any, targets: list[str]) -> list[str]:
-    """Ensure suffix targets exist only inside the multimodal wrapper's text decoder."""
+    """Select exact text-decoder modules while ignoring same-named multimodal tower layers."""
     target_set = set(targets)
+    decoder_prefix = "model.language_model.layers."
     matches = [
         name
         for name, _ in model.named_modules()
-        if name.rsplit(".", 1)[-1] in target_set
+        if name.startswith(decoder_prefix) and name.rsplit(".", 1)[-1] in target_set
     ]
     if not matches:
-        raise ValueError("no LoRA target modules found")
-    decoder_prefix = "model.language_model.layers."
-    outside = [name for name in matches if not name.startswith(decoder_prefix)]
-    if outside:
-        raise ValueError(
-            f"LoRA target matched outside model.language_model.layers: {outside[:10]}"
-        )
+        raise ValueError("no LoRA target modules found in model.language_model.layers")
     missing = [target for target in targets if not any(name.endswith(f".{target}") for name in matches)]
     if missing:
         raise ValueError(f"LoRA target modules missing from decoder: {missing}")
@@ -331,7 +326,7 @@ def main() -> None:
         lora_dropout=TRAINING_CONFIG["lora_dropout"],
         bias="none",
         task_type="CAUSAL_LM",
-        target_modules=TRAINING_CONFIG["target_modules"],
+        target_modules=matched_modules,
     )
     training_args = SFTConfig(
         output_dir=str(OUTPUT_ROOT / "trainer"),
