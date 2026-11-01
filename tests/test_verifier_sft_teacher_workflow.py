@@ -15,6 +15,8 @@ class VerifierSftTeacherRuntimeContractTests(unittest.TestCase):
         self.assertTrue(RUNTIME.is_file())
         source = RUNTIME.read_text(encoding="utf-8")
         self.assertIn('TARGETED_TEST_PLAN_JSON = "__VERIFIER_LORA_TARGETED_TEST_PLAN_JSON__"', source)
+        self.assertIn('GOLD_RUNTIME_SOURCE_B64 = "__VERIFIER_GOLD_RUNTIME_SOURCE_B64__"', source)
+        self.assertIn('SUPERVISION_HELPER_SOURCE_B64 = "__VERIFIER_GOLD_SUPERVISION_HELPER_SOURCE_B64__"', source)
         self.assertIn("load_targeted_test_plan", source)
         self.assertIn("build_teacher_supervision_record", source)
         self.assertIn("apply_patch_in_container", source)
@@ -25,12 +27,21 @@ class VerifierSftTeacherRuntimeContractTests(unittest.TestCase):
         self.assertNotIn("blind_evaluation", source)
         self.assertNotIn("test_patch", source)
 
+    def test_workflow_embeds_helpers_into_single_kaggle_code_file(self):
+        self.assertTrue(WORKFLOW.is_file())
+        source = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("verifier_gold_teacher_runtime.py", source)
+        self.assertIn("verifier_gold_teacher_supervision.py", source)
+        self.assertIn("__VERIFIER_GOLD_RUNTIME_SOURCE_B64__", source)
+        self.assertIn("__VERIFIER_GOLD_SUPERVISION_HELPER_SOURCE_B64__", source)
+        self.assertNotIn("shutil.copy2(helper", source)
+        self.assertNotIn("shutil.copy2(gold_runtime", source)
+
     def test_workflow_embeds_frozen_targets_and_builds_sft_artifact(self):
         self.assertTrue(WORKFLOW.is_file())
         source = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("verifier-lora-targeted-tests-v0.json", source)
         self.assertIn("verifier_sft_teacher_runtime.py", source)
-        self.assertIn("verifier_gold_teacher_supervision.py", source)
         self.assertIn("machine_shape", source)
         self.assertIn("NvidiaL4", source)
         self.assertIn("is_private", source)
