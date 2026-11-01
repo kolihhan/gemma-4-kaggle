@@ -50,6 +50,7 @@ jobs:
           submission = repo / "submission"
           runtime_template = repo / "kaggle" / "verifier_baseline_runtime.py"
           manifest_path = repo / "docs" / "evaluation" / "verifier-lora-split-v0.json"
+          screen_path = repo / "docs" / "evaluation" / "verifier-lora-gold-screen-v0.json"
           kernel_dir = Path(os.environ["KERNEL_DIR"])
 
           payload = {}
@@ -65,12 +66,36 @@ jobs:
           encoded = base64.b64encode(
               json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
           ).decode("ascii")
-          manifest_text = manifest_path.read_text(encoding="utf-8")
-          manifest = json.loads(manifest_text)
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          screen = json.loads(screen_path.read_text(encoding="utf-8"))
           if manifest.get("version") != "verifier-lora-v0":
               raise SystemExit(f"unexpected manifest version: {manifest.get('version')!r}")
+          if screen.get("version") != manifest.get("version"):
+              raise SystemExit(
+                  f"gold-screen version mismatch: {screen.get('version')!r} != {manifest.get('version')!r}"
+              )
           if not manifest.get("holdout"):
               raise SystemExit("holdout manifest is empty")
+
+          clean_ids = set(screen["clean_instance_ids"])
+          confounded_ids = {item["instance_id"] for item in screen.get("confounded", [])}
+          frozen_ids = {item["instance_id"] for item in manifest["holdout"]}
+          if not clean_ids:
+              raise SystemExit("gold-screen clean denominator is empty")
+          if clean_ids & confounded_ids:
+              raise SystemExit("gold-screen clean/confounded sets overlap")
+          if clean_ids | confounded_ids != frozen_ids:
+              raise SystemExit(
+                  "gold-screen partition does not exactly cover frozen holdout: "
+                  f"clean={sorted(clean_ids)} confounded={sorted(confounded_ids)} frozen={sorted(frozen_ids)}"
+              )
+
+          manifest["holdout"] = [
+              item for item in manifest["holdout"] if item["instance_id"] in clean_ids
+          ]
+          manifest["counts"] = dict(manifest.get("counts") or {})
+          manifest["counts"]["holdout"] = len(manifest["holdout"])
+          manifest_text = json.dumps(manifest, sort_keys=True)
 
           template = runtime_template.read_text(encoding="utf-8")
           submission_marker = "__SUBMISSION_PAYLOAD_B64__"
@@ -115,7 +140,7 @@ jobs:
               json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
           )
           print("rendered_submission_files=", sorted(payload))
-          print("rendered_holdout_ids=", [item["instance_id"] for item in manifest["holdout"]])
+          print("rendered_clean_holdout_ids=", [item["instance_id"] for item in manifest["holdout"]])
           print("rendered_runtime_bytes=", (kernel_dir / "verifier_baseline_runtime.py").stat().st_size)
           PY
 
@@ -191,10 +216,10 @@ jobs:
 
           output_dir = Path(os.environ["OUTPUT_DIR"])
           result = json.loads((output_dir / "verifier_baseline_results.json").read_text(encoding="utf-8"))
-          expected = json.loads(
-              Path("docs/evaluation/verifier-lora-split-v0.json").read_text(encoding="utf-8")
+          screen = json.loads(
+              Path("docs/evaluation/verifier-lora-gold-screen-v0.json").read_text(encoding="utf-8")
           )
-          expected_ids = [item["instance_id"] for item in expected["holdout"]]
+          expected_ids = screen["clean_instance_ids"]
           assert result.get("version") == "verifier-lora-v0", result
           assert result.get("model") == "gemma-4-e4b-it-qat-w4a16-ct", result
           assert result.get("status") == "completed", result
