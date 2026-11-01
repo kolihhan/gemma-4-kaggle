@@ -1,8 +1,13 @@
+import csv
 import json
 from pathlib import Path
+import tempfile
 import unittest
 
-from kaggle.verifier_gold_teacher_supervision import build_teacher_safe_stop_record
+from kaggle.verifier_gold_teacher_supervision import (
+    build_teacher_safe_stop_record,
+    load_reference_patch_map,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +24,22 @@ INLINE_ASSERT = (
 
 
 class VerifierSftTeacherModelFreeContractTests(unittest.TestCase):
+    def test_reference_patch_loader_uses_only_perfect_submission(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            secret_dir = Path(temp_dir)
+            with (secret_dir / "perfect_submission.csv").open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=["id", "prediction"])
+                writer.writeheader()
+                writer.writerow({"id": "task_1", "prediction": "diff --git a/a.py b/a.py\n"})
+            (secret_dir / "solution.csv").write_text(
+                "this file contains hidden verifier evidence and must not be parsed\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                load_reference_patch_map(secret_dir),
+                {"task_1": "diff --git a/a.py b/a.py\n"},
+            )
+
     def test_safe_stop_rejects_infrastructure_failure(self):
         record = build_teacher_safe_stop_record(
             instance_id="requests_2",
@@ -43,6 +64,15 @@ class VerifierSftTeacherModelFreeContractTests(unittest.TestCase):
         self.assertIn("assert", command)
         self.assertIn("Query parameter", command)
         self.assertNotIn("pytest tests/test_invalid_sequence_param.py", command)
+
+    def test_teacher_never_hydrates_hidden_test_patch_bundle(self):
+        source = RUNTIME.read_text(encoding="utf-8")
+        self.assertIn("load_reference_patch_map", source)
+        self.assertNotIn("_hydrate_task_from_secret", source)
+        self.assertNotIn("_get_secret_bundle_data", source)
+        self.assertNotIn("solution.parquet", source)
+        self.assertNotIn("solution.csv", source)
+        self.assertNotIn("test_patch", source)
 
     def test_teacher_installs_official_wheelhouse_before_harness_imports(self):
         source = RUNTIME.read_text(encoding="utf-8")
