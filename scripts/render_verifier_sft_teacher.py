@@ -11,6 +11,7 @@ from verifier_gold_teacher_supervision import (
     DIFF_COMMAND,
     build_teacher_safe_stop_record,
     build_teacher_supervision_record,
+    load_reference_patch_map,
     load_targeted_test_plan,
 )
 """
@@ -54,6 +55,7 @@ gold = _load_embedded_module(
 DIFF_COMMAND = _supervision_helper.DIFF_COMMAND
 build_teacher_safe_stop_record = _supervision_helper.build_teacher_safe_stop_record
 build_teacher_supervision_record = _supervision_helper.build_teacher_supervision_record
+load_reference_patch_map = _supervision_helper.load_reference_patch_map
 load_targeted_test_plan = _supervision_helper.load_targeted_test_plan
 '''
     bundled = runtime_source.replace(IMPORT_BLOCK, bootstrap, 1)
