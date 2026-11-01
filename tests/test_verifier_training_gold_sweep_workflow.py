@@ -18,7 +18,7 @@ class VerifierTrainingGoldSweepWorkflowTests(unittest.TestCase):
 
     def test_reuses_gold_control_runtime_without_model_or_agent(self):
         text = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn('kaggle/gold_control_sweep.py', text)
+        self.assertIn('root / "kaggle" / "gold_control_sweep.py"', text)
         self.assertIn('"enable_gpu": False', text)
         self.assertIn('"enable_internet": False', text)
         self.assertIn('"model_sources": []', text)
