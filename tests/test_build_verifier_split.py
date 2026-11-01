@@ -211,7 +211,8 @@ class VerifierSplitTests(unittest.TestCase):
         self.assertEqual(replaced["counts"]["excluded"], 18)
 
     def test_round2_real_replacement_preserves_repo_quota_with_explicit_fallback(self):
-        split = json.loads(Path("docs/evaluation/verifier-lora-split-v0.json").read_text(encoding="utf-8"))
+        split = build_split(load_jsonl(Path("tasks.jsonl")), DEFAULT_HOLDOUT_QUOTA, DEFAULT_EXCLUDED_IDS)
+        split = replace_confounded_holdout(split, ROUND1_CONFOUNDED_IDS)
         before_repo_counts = Counter(item["repo"] for item in split["holdout"])
 
         replaced = replace_confounded_holdout(
