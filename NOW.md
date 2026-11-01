@@ -1,4 +1,4 @@
-# NOW — 2026-10-31
+# NOW — 2026-11-01
 
 ## North star
 
@@ -6,191 +6,152 @@ Build a competitive, evidence-driven Gemma 4 software-engineering agent. Optimiz
 
 ## Current decision
 
-**Current candidate topology:** root coder `LlmAgent` + one verifier `AgentTool`.
+**Run one controlled verifier-only E4B LoRA v0 falsification experiment.**
 
-1. Root coder owns inspect → patch → local verification and has no `submit_patch` / `write_file`.
-2. Verifier AgentTool independently inspects the shared working tree, may make at most one narrow repair, and owns `submit_patch`.
-3. The canonical candidate remains `gemma-4-e4b-it-qat-w4a16-ct`.
+The canonical agent topology remains:
 
-Why this replaced `SequentialAgent`: the official harness enables event compaction, and current ADK automatic compaction requires a root `LlmAgent` model. A root `SequentialAgent` produced `ValueError: No LlmAgent model available for event compaction summarizer` after a real run. Root `LlmAgent` + verifier AgentTool preserves two roles while giving the compactor a canonical root model.
+1. root coder `LlmAgent`, unadapted;
+2. verifier `AgentTool`, owns `submit_patch` and is the only component eligible for the v0 adapter;
+3. base competition variant remains `gemma-4-e4b-it-qat-w4a16-ct` for every agent.
 
-**12B path is stopped for now.** Two controlled `rich_3278` runs showed that 12B does not improve the current candidate under the 5-minute task budget. At `thinking_budget=4096`, it made only 3 tool calls and timed out before editing. At `thinking_budget=1024`, throughput rose to 18 calls, but the model entered a repeated read/reason loop, made zero edits, produced no patch, and never reached the verifier. Both 12B experiment PRs were closed unmerged.
+Do not reopen the 12B path, change topology, sweep hyperparameters, or add more prompt-only policy before this controlled experiment is resolved.
 
-**Next decision:** return to the E4B F4/F5 verification-and-repair failures. Before implementing another architecture, verify which supported declarative lifecycle/topology primitive can actually reduce those failures. Arbitrary custom Python verification/submit wrappers are not available under the competition's closed ToolRegistry submission model.
+## Why LoRA v0 exists
 
-## Verified current facts
+The current E4B candidate repeatedly reaches verification but still shows F4/F5 failures: broad test selection, weak use of failing evidence, repeated repair loops, and premature submission. Verifier-only LoRA is a falsification test for that behavioral bottleneck; it is **not** evidence that the verifier is the dominant cause of all unresolved tasks.
 
-- Kaggle currently permits 31B, 12B, E4B, and E2B QAT variants; all agents/sub-agents in one submission must use the same base variant.
-- Public development corpus: **129 tasks** — FastAPI 67 / Rich 48 / Requests 13 / HTTPX 1.
-- Reference changed-line buckets: **1–10: 60 / 11–30: 29 / 31–80: 20 / 81+: 20**.
-- Deterministic `per_repo=3` diagnostic sample has **10 tasks** because HTTPX has only one public task.
-- Current runtime uses the official scorer wheelhouse, pinned Python 3.12 Kaggle image, and L4 ×4 for E4B/12B smoke runs.
-- Current wheelhouse observed: `adk-submission 0.2.13`, `swegemma 0.2.11`.
-- `!include` paths resolve relative to the YAML file containing the include.
-- `AgentTool` is accepted by the current Kaggle runtime; its exposed tool name is the child agent name.
-- Kaggle staff says 12B needs a vLLM HF override mapping it to `Gemma4ForCausalLM` / `gemma4`; both 12B smokes proved that override can boot the model successfully in the current Kaggle environment.
-- Competition submissions are declarative-only; tools resolve through a closed host registry. Do not assume arbitrary competitor-defined Python tool wrappers are available.
+Several development failures still have fundamentally wrong or missing coder patches. Even a better verifier cannot rescue all of them.
 
-## Clean diagnostic: `rich_3278`
+Canonical design: `docs/design/verifier-lora-v0-2026-11-01.md`.
+Implementation plan: `docs/superpowers/plans/2026-11-01-verifier-lora-v0.md`.
 
-### Gold control — PASS
+## Evaluation boundaries — frozen
 
-- Hydrated reference patch under the current verifier: **23/23 tests pass**, `test_exit_code=0`, `resolved=true`.
-- Reference patch size: **176 chars**.
-- Therefore `rich_3278` is a clean agent-quality diagnostic.
+### Development validation
 
-### Single-agent E4B sequence
+The existing nine gold-clean tasks are development-seen, not blind evidence:
 
-1. Original baseline: destructive ~4 KB rewrite; F3 EDIT plus F4/F5 repair/submission failure.
-2. Soft guardrails: ~817-char patch; destructive rewrite disappeared, but failed verification still led to submission.
-3. Hard no-submit/recovery: regressed to ~4.2 KB, 17 calls, context overflow; rejected.
-4. Bounded tools (`write_file` removed): **319 chars, 4 calls**, no destructive rewrite. Remaining failure shifted to exact semantics/test-feedback handling.
+- Rich: 4
+- FastAPI: 5
+- Requests: 0
 
-Conclusion: edit safety improved materially; verification/reasoning is the remaining bottleneck.
+Their traces shaped the LoRA hypothesis, so they may be used only for development diagnostics.
 
-## Two-role E4B evidence
+### Independent blind reservation
 
-### Sequential coder → verifier: mechanically valid but compaction-unsafe
+`docs/evaluation/verifier-lora-blind-reservation-v0.json` is frozen at **10 tasks**:
 
-First valid run after fixing relative `!include` paths:
+- Rich: 4
+- FastAPI: 6
+- Requests: 0
 
-- `rich_3278`, E4B
-- **189.34 s**, **15 calls**, **320-char** patch
-- `test_exit_code=1`, `resolved=false`
+No untouched Requests candidate remains in the current training-side pool because both Requests train tasks were already used by the frozen training trace harvest. Therefore v0 cannot establish Requests generalization.
 
-Initial diagnosis changed after trace review: the verifier submitted a known-failing patch because our old verifier prompt explicitly told it to preserve the smallest defensible patch and submit after the bounded repair. That policy bug was removed.
+`docs/evaluation/verifier-lora-eval-contract-v1.json` now points exactly to this frozen reservation. Blind base failure traces and blind reference patches must remain manually uninspected until the adapter is frozen.
 
-Corrected verifier-policy rerun:
+## Training-side evidence
 
-- **142.04 s**, **5 calls**, **568-char** patch
-- `test_exit_code=1`, `resolved=false`
-- verifier still used broad `pytest` instead of the requested targeted gate
-- final patch contained a clear semantic bug (`position = end` before `end` was assigned)
-- after agent execution, current ADK event compaction raised `No LlmAgent model available for event compaction summarizer`
+### Frozen trace harvest — complete
 
-This made root `SequentialAgent` unsuitable for the official compaction-enabled harness.
+Training subset: **18 tasks**.
 
-### Root coder LlmAgent + verifier AgentTool — mechanically PASS, task FAIL
+The base verifier trace harvest completed for all 18. Only **2/18** ultimately resolved, and none of the raw trajectories is safe to auto-approve as a positive SFT target. Raw base behavior is therefore diagnostic evidence, not the positive training dataset.
 
-TDD migration:
+### Training gold screen — complete
 
-- RED contract commit: `cc2c8599cf2d4497facd58a24b251153944be7ca`
-- root changed to `LlmAgent`; verifier became an `AgentTool`; redundant coder sub-agent removed
-- standard repo validation after the final wording fix passed compile, all unit/static tests, real 129-task corpus checks, and restore-CLI smoke.
+Automated gold-control screening over those 18 produced:
 
-Official Kaggle L4 smoke run `41199444320` on `rich_3278`:
+- **12 clean** training tasks;
+- **6 confounded** training tasks.
 
-- runtime completed successfully; AgentTool config was accepted
-- verifier AgentTool was actually invoked
-- prior root-Sequential compaction exception did **not** recur
-- duration: **253.37 s**
-- tool calls: **18 / 32**
-- final patch: **275 chars**, one file
-- `test_exit_code=1`
-- `resolved=false`
+Only the clean set may source deterministic positive supervision.
 
-Final patch added a broad regex branch:
+### Model gold-teacher control — complete, not accepted as labels
 
-```text
-(?:\x1b[0-?].*) |
-```
+A verifier-only model run on gold-patched clean training tasks was executed. The model still mutated/handled known-good workspaces unreliably, so its behavioral traces are not automatically treated as positive teacher targets.
 
-Behavioral findings from the trace:
+## Task 4 — deterministic verifier supervision
 
-- coder still ran bare `pytest` rather than a narrow targeted check;
-- verifier did inspect `git diff` and read `tests/test_ansi.py`, which is progress;
-- verifier still repeatedly ran bare `pytest` rather than the smallest relevant test;
-- verifier eventually called `submit_patch` even though its immediately preceding verification still had exit code 1;
-- root coder invoked the verifier twice: after the first AgentTool returned without submission, the outer harness issued its normal “continue your work” turn, the root resumed editing, and called the verifier again.
+Current direction: construct small positive verifier trajectories from **deterministic evidence**, not model self-judgment.
 
-Conclusion: **the AgentTool topology fixes the compaction/plumbing problem, but E4B still does not reliably follow the verification gate.** More prompt wording is unlikely to be the highest-ROI next intervention.
+Frozen targeted-test source set: `docs/evaluation/verifier-lora-targeted-tests-v0.json`.
 
-## 12B controlled A/B evidence
+Six training-only, gold-clean cases are selected:
 
-Full comparison: `docs/evaluation/12b-rich3278-model-size-ab-2026-10-31.md`.
+- `fastapi_14479` → `pytest tests/test_invalid_sequence_param.py -q`
+- `requests_6644` → `pytest tests/test_adapters.py -q`
+- `rich_3718` → `pytest tests/test_panel.py -q`
+- `rich_3882` → `pytest tests/test_prompt.py -q`
+- `rich_3953` → `pytest tests/test_cells.py -q`
+- `rich_4006` → `pytest tests/test_cells.py -q`
 
-### 12B @ thinking budget 4096 — FAIL
+Approval contract for each case:
 
-Branch `exp/12b-rich3278-ab`, PR #1 closed unmerged. Official Kaggle run `41206261407`:
+1. apply the training reference patch only after the official baseline commit;
+2. `git diff --check && git diff` must pass;
+3. the frozen targeted pytest gate must pass;
+4. final `git diff --check && git diff` must pass;
+5. only then emit `verified_submit` + `submit_patch`;
+6. failed evidence remains unapproved and cannot enter positive SFT.
 
-- 12B vLLM booted successfully on L4 ×4 / TP=4
-- **304.35 s**, **3 / 32** tool calls
-- patch: **0 chars**
-- `test_exit_code=-1`
-- `resolved=false`
-- verifier never reached
-- trace: **20,130 prompt / 7,416 completion / 27,546 total tokens**, 8 steps
+No raw reference patch, gold patch, solution patch, or hidden `test_patch` is persisted into the SFT record.
 
-Primary failure: F8 BUDGET. 12B spent the task budget reasoning before meaningful editing/testing work.
+Implementation:
 
-### 12B @ thinking budget 1024 — FAIL
+- `kaggle/verifier_gold_teacher_supervision.py`
+- `kaggle/verifier_sft_teacher_runtime.py`
+- `scripts/render_verifier_sft_teacher.py`
+- `.github/workflows/run-verifier-sft-teacher.yml`
+- existing contract checker `scripts/build_verifier_sft.py`
 
-Branch `exp/12b-thinking1024-rich3278`, PR #2 closed unmerged. This changed only `thinking_budget: 4096 → 1024` relative to the first 12B experiment, plus the matching contract-test expectation/workflow trigger.
+## Current execution status
 
-TDD evidence:
+### GitHub validation
 
-- RED run `41215255226`: 25 tests, exactly one expected failure while production still had 4096.
-- GREEN run `41215313144`: compile, **25/25** tests, real 129-task corpus gate, and restore-CLI smoke passed after setting 1024.
+Branch `exp/verifier-lora-v0`, PR #4.
 
-Official Kaggle run `41215364633`:
+Latest durable contract change: `41a16bbb14ab37d837ec1dd011f9146c2a653cbc`.
 
-- runtime/infrastructure: PASS
-- **302.32 s**, **18 / 32** tool calls
-- tool mix from trace: **11 read_file / 7 run_command / 0 edit_file**
-- patch: **0 chars**
-- `test_exit_code=-1`
-- `resolved=false`
-- verifier never reached
-- trace: **192,885 prompt / 15,722 completion / 208,607 total tokens**, 27 steps
+Full repo validation run `41308873255`: **PASS**.
 
-Lowering thinking budget recovered action throughput but not task progress. The model repeatedly reread the same `rich/ansi.py` regex, repeatedly reconstructed it incorrectly in ad-hoc commands, emitted another malformed text-only tool call, and exhausted the 5-minute budget without modifying the working tree.
+The suite currently runs **129 tests** plus compile/corpus/restore checks.
 
-Primary failure: **F8 BUDGET**. Secondary: **F6 CONTEXT / F7 TOOL**.
+### Deterministic SFT teacher run
 
-Conclusion: **stop the 12B path for now.** The 1024 follow-up falsified the narrow hypothesis that 12B failed only because 4096-token thinking was too slow. E4B remains better for this budget because it at least reaches edit/test/verifier.
+Run `41308606160` was launched from commit `82ed6b813d1ac53aeceb8b670629a9a751019afb`.
 
-## Static current-wheel validation note
+The first attempt exposed a Kaggle packaging bug: script kernels materialized only the configured `code_file`, so sibling Python helpers were not importable. The root cause was fixed by bundling the runtime and both local helper modules into one standalone Kaggle script. The replacement run passed render and push and is executing inside Kaggle.
 
-GitHub Actions run `41199130515` is **infrastructure-confounded, not a submission failure**. The vanilla runner filled its disk while pip tried to resolve/download a large PyTorch/CUDA/vLLM dependency stack; the actual `validate_directory()` step never ran. Kaggle smoke is the authoritative current-environment validation path for now.
+**Do not declare Task 4 complete until its artifact is inspected.** Required evidence is a non-empty contract-checked `verifier-sft-v0.jsonl` built only from approved deterministic records.
 
-## HTTPX exclusion
+## Task 5 gate — not started
 
-`httpx_3672` remains harness-confounded:
+Do not launch LoRA training until Task 4 evidence is verified.
 
-- E4B smoke produced a patch but verifier returned exit 2.
-- Gold reference patch also returned exit 2 due test-collection failure (`httpx.Stream` mismatch).
-- Exclude it from agent-quality conclusions unless the harness changes.
+When the gate opens, the frozen v0 training configuration is:
 
-## Canonical artifacts
+- base: `google/gemma-4-E4B-it-qat-q4_0-unquantized`;
+- PEFT/TRL SFT;
+- rank `r=8`;
+- alpha `16`;
+- dropout `0.05`;
+- causal LM;
+- save adapter only: `adapter_config.json` + `adapter_model.safetensors`;
+- one run, **no hyperparameter sweep**.
 
-- Current state: `NOW.md`
-- Current fact check: `docs/research/competition-recon-2026-10-31.md`
-- Public corpus profile: `docs/evaluation/public-corpus-summary.md`
-- Failure taxonomy: `docs/evaluation/failure-taxonomy.md`
-- 12B A/B record: `docs/evaluation/12b-rich3278-model-size-ab-2026-10-31.md`
-- Candidate submission: `submission/`
-- Smoke runtime: `kaggle/smoke_runtime.py`
+The coder stays unadapted. Adapter evaluation must keep coder, topology, prompts, tools, sampling, time limits, and base family fixed.
 
-## Data mirror
+## Stop / promotion rule
 
-**COMPLETE and checksummed.**
+Training loss is not a promotion metric.
 
-- Private Release: `kaggle-data-2026-10-31`.
-- **13/13** archive parts uploaded.
-- Archive size: **21,929,290,938 bytes**.
-- Kaggle HTTP Content-Length matched exactly.
-- Whole-archive SHA-256: `69c4c4c3f98bc5e9b0ff80f8660cd1435f69dcc3a3c041198f4b974da5ffea69`.
-- Durable manifests: `manifests/latest.json` and `manifests/kaggle-data-2026-10-31.json`.
+After one adapter is frozen, compare it against the base verifier on development diagnostics and the independent frozen blind set. Promotion requires materially better verifier behavior/resolution without unacceptable runtime/tool-call cost.
 
-## Score status
+If v0 fails the frozen blind evaluation, stop v0 rather than immediately sweeping rank, epochs, learning rate, or other knobs.
 
-**NO CLEAN RESOLVED AGENT CASE YET. NO LEADERBOARD SCORE RECORDED.**
+## Immediate next step
 
-Gold `rich_3278` passes. E4B reaches edit/test/verifier but remains semantically unreliable. 12B failed the same clean diagnostic at both 4096 and 1024 thinking budgets without producing a patch. The canonical candidate therefore remains E4B root-LlmAgent + verifier-AgentTool.
-
-## Next step
-
-1. Keep `main/submission/` on E4B. The 12B experiment branches stay closed/unmerged evidence only.
-2. Inspect the current declarative agent compiler/harness for the smallest **supported** lifecycle/topology change that specifically targets E4B F4/F5 verification-and-repair failure while preserving a root `LlmAgent` for compaction.
-3. Do not assume an arbitrary custom deterministic verification tool can be submitted; the tool registry is closed.
-4. If no supported topology can structurally improve the gate without reintroducing compaction failure or uncontrolled reruns, move to a small LoRA/training experiment targeted at verification/test-feedback discipline rather than adding more prompt text.
+1. Finish run `41308606160` and inspect the raw supervision artifact plus generated SFT JSONL.
+2. If at least one clean approved example survives `build_verifier_sft.py`, record the exact approved IDs/count and freeze Task 4 evidence.
+3. Only then implement/run Task 5 rank-8 verifier LoRA training.
+4. Do not inspect blind task-level failure traces before the adapter is frozen.
