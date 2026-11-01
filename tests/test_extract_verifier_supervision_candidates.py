@@ -95,25 +95,7 @@ Fix traceback recursion
             ],
         }
 
-    def test_extracts_only_verifier_steps_with_exact_arguments_and_results(self):
-        candidate = extract_candidate("rich_3772", self.trace())
-        self.assertEqual(candidate["instance_id"], "rich_3772")
-        self.assertFalse(candidate["approved"])
-        self.assertEqual(candidate["source"], "base_trace_curated_candidate")
-        self.assertEqual(candidate["problem_description"], "Fix traceback recursion")
-        self.assertEqual(len(candidate["steps"]), 3)
-        self.assertEqual(candidate["steps"][0]["arguments"], {"command": "git diff"})
-        self.assertEqual(candidate["steps"][0]["result"]["exit_code"], 0)
-        self.assertEqual(candidate["steps"][1]["result"]["exit_code"], 2)
-        self.assertEqual(candidate["steps"][2]["tool"], "submit_patch")
-
-    def test_marks_behavioral_violations_without_auto_approving(self):
-        candidate = extract_candidate("rich_3772", self.trace())
-        self.assertIn("broad_pytest", candidate["audit_flags"])
-        self.assertIn("submit_after_failed_test", candidate["audit_flags"])
-        self.assertNotIn("reference_patch", repr(candidate))
-
-    def test_normalizes_successful_targeted_test(self):
+    def targeted_pass_trace(self):
         trace = self.trace()
         trace["steps"][3]["tool_calls"][0]["arguments"]["command"] = (
             "pytest tests/test_syntax.py::test_case -q"
@@ -121,12 +103,51 @@ Fix traceback recursion
         trace["steps"][3]["observation"] = {
             "content": '{"status":"ok","stdout":"1 passed","stderr":"","exit_code":0}'
         }
-        candidate = extract_candidate("rich_3772", trace)
+        return trace
+
+    def test_extracts_only_verifier_steps_with_exact_arguments_and_results(self):
+        candidate = extract_candidate("rich_3772", self.trace(), evaluator_resolved=False)
+        self.assertEqual(candidate["instance_id"], "rich_3772")
+        self.assertFalse(candidate["approved"])
+        self.assertEqual(candidate["source"], "base_trace_curated_candidate")
+        self.assertEqual(candidate["problem_description"], "Fix traceback recursion")
+        self.assertFalse(candidate["evaluator_resolved"])
+        self.assertEqual(len(candidate["steps"]), 3)
+        self.assertEqual(candidate["steps"][0]["arguments"], {"command": "git diff"})
+        self.assertEqual(candidate["steps"][0]["result"]["exit_code"], 0)
+        self.assertEqual(candidate["steps"][1]["result"]["exit_code"], 2)
+        self.assertEqual(candidate["steps"][2]["tool"], "submit_patch")
+
+    def test_marks_behavioral_violations_without_auto_approving(self):
+        candidate = extract_candidate("rich_3772", self.trace(), evaluator_resolved=False)
+        self.assertIn("broad_pytest", candidate["audit_flags"])
+        self.assertIn("submit_after_failed_test", candidate["audit_flags"])
+        self.assertIn("final_evaluator_unresolved", candidate["audit_flags"])
+        self.assertNotIn("reference_patch", repr(candidate))
+
+    def test_targeted_pass_does_not_suggest_positive_when_evaluator_unresolved(self):
+        candidate = extract_candidate(
+            "rich_3772", self.targeted_pass_trace(), evaluator_resolved=False
+        )
         self.assertNotIn("broad_pytest", candidate["audit_flags"])
         self.assertNotIn("submit_after_failed_test", candidate["audit_flags"])
+        self.assertIn("final_evaluator_unresolved", candidate["audit_flags"])
+        self.assertIsNone(candidate["suggested_label"])
+        self.assertFalse(candidate["approved"])
+
+    def test_targeted_pass_can_only_suggest_positive_when_evaluator_resolved(self):
+        candidate = extract_candidate(
+            "rich_3772", self.targeted_pass_trace(), evaluator_resolved=True
+        )
+        self.assertNotIn("final_evaluator_unresolved", candidate["audit_flags"])
         self.assertIn("missing_final_diff_check", candidate["audit_flags"])
         self.assertEqual(candidate["suggested_label"], "verified_submit")
         self.assertFalse(candidate["approved"])
+
+    def test_missing_evaluator_outcome_never_suggests_positive(self):
+        candidate = extract_candidate("rich_3772", self.targeted_pass_trace())
+        self.assertIn("missing_evaluator_outcome", candidate["audit_flags"])
+        self.assertIsNone(candidate["suggested_label"])
 
     def test_counts_multiple_successful_repairs(self):
         trace = self.trace()
@@ -148,14 +169,14 @@ Fix traceback recursion
         }
         trace["steps"].insert(-1, edit)
         trace["steps"].insert(-1, edit.copy())
-        candidate = extract_candidate("rich_3772", trace)
+        candidate = extract_candidate("rich_3772", trace, evaluator_resolved=False)
         self.assertIn("multiple_repairs", candidate["audit_flags"])
 
     def test_rejects_trace_without_task_prompt(self):
         trace = self.trace()
         trace["steps"] = [step for step in trace["steps"] if step.get("source") != "user"]
         with self.assertRaisesRegex(ValueError, "problem statement"):
-            extract_candidate("rich_3772", trace)
+            extract_candidate("rich_3772", trace, evaluator_resolved=False)
 
 
 if __name__ == "__main__":
