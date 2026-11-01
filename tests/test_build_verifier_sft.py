@@ -10,6 +10,7 @@ from scripts.build_verifier_sft import (
 VERIFIER_TEMPLATE = "Verifier policy for task:\n{problem_description}"
 TRAIN_IDS = {"train_1", "train_2"}
 BLIND_IDS = {"blind_1"}
+INLINE_ASSERT = "python -c \"x=1; assert x == 1\""
 
 
 def step(tool, arguments=None, *, exit_code=None, output=""):
@@ -23,9 +24,17 @@ def step(tool, arguments=None, *, exit_code=None, output=""):
     return item
 
 
-def record(instance_id="train_1", *, label="verified_submit", approved=True, steps=None):
+def record(
+    instance_id="train_1",
+    *,
+    example_id=None,
+    label="verified_submit",
+    approved=True,
+    steps=None,
+):
     return {
         "instance_id": instance_id,
+        "example_id": example_id or instance_id,
         "approved": approved,
         "label": label,
         "source": "base_trace_curated",
@@ -42,6 +51,10 @@ class TestCommandClassification(unittest.TestCase):
             "targeted",
         )
 
+    def test_inline_python_assertion_is_targeted(self):
+        self.assertEqual(classify_test_command(INLINE_ASSERT), "targeted")
+        self.assertEqual(classify_test_command("python -c \"print('no assert')\""), "not_test")
+
     def test_repo_wide_pytest_is_broad(self):
         self.assertEqual(classify_test_command("pytest"), "broad")
         self.assertEqual(classify_test_command("pytest -q"), "broad")
@@ -53,7 +66,7 @@ class TestBuildExamples(unittest.TestCase):
     def good_submit_steps(self):
         return [
             step("run_command", {"command": "git diff --check && git diff"}, exit_code=0),
-            step("run_command", {"command": "pytest tests/test_api.py::test_case -q"}, exit_code=0),
+            step("run_command", {"command": INLINE_ASSERT}, exit_code=0),
             step("run_command", {"command": "git diff --check && git diff"}, exit_code=0),
             step("submit_patch", {}),
         ]
@@ -68,6 +81,7 @@ class TestBuildExamples(unittest.TestCase):
         self.assertEqual(len(examples), 1)
         example = examples[0]
         self.assertEqual(example["instance_id"], "train_1")
+        self.assertEqual(example["example_id"], "train_1")
         self.assertEqual(example["label"], "verified_submit")
         self.assertEqual(example["messages"][0]["role"], "system")
         self.assertIn("Fix the requested behavior", example["messages"][0]["content"])
@@ -78,6 +92,46 @@ class TestBuildExamples(unittest.TestCase):
         self.assertIn("run_command", tool_names)
         self.assertIn("submit_patch", tool_names)
         self.assertTrue(any("tool_calls" in message for message in example["messages"]))
+
+    def test_allows_paired_examples_for_one_training_task(self):
+        submit = record(
+            example_id="train_1:gold-pass",
+            steps=self.good_submit_steps(),
+        )
+        safe_stop = record(
+            example_id="train_1:base-fail",
+            label="safe_stop",
+            steps=[
+                step("run_command", {"command": "git diff --check && git diff"}, exit_code=0),
+                step("run_command", {"command": INLINE_ASSERT}, exit_code=1),
+                step("run_command", {"command": "git diff --check && git diff"}, exit_code=0),
+            ],
+        )
+        examples = build_examples(
+            [safe_stop, submit],
+            allowed_training_ids=TRAIN_IDS,
+            forbidden_ids=BLIND_IDS,
+            verifier_template=VERIFIER_TEMPLATE,
+        )
+        self.assertEqual(len(examples), 2)
+        self.assertEqual(
+            {item["example_id"] for item in examples},
+            {"train_1:base-fail", "train_1:gold-pass"},
+        )
+        self.assertEqual({item["instance_id"] for item in examples}, {"train_1"})
+
+    def test_rejects_duplicate_example_id_even_when_task_is_same(self):
+        records = [
+            record(example_id="train_1:dup", steps=self.good_submit_steps()),
+            record(example_id="train_1:dup", steps=self.good_submit_steps()),
+        ]
+        with self.assertRaisesRegex(SupervisionError, "duplicate supervision example"):
+            build_examples(
+                records,
+                allowed_training_ids=TRAIN_IDS,
+                forbidden_ids=BLIND_IDS,
+                verifier_template=VERIFIER_TEMPLATE,
+            )
 
     def test_rejects_unapproved_raw_trace(self):
         with self.assertRaisesRegex(SupervisionError, "approved"):
@@ -178,7 +232,7 @@ class TestBuildExamples(unittest.TestCase):
     def test_safe_stop_requires_failed_targeted_test_and_no_submit(self):
         safe_stop = [
             step("run_command", {"command": "git diff --check && git diff"}, exit_code=0),
-            step("run_command", {"command": "pytest tests/test_api.py -q"}, exit_code=1),
+            step("run_command", {"command": INLINE_ASSERT}, exit_code=1),
         ]
         examples = build_examples(
             [record(label="safe_stop", steps=safe_stop)],
