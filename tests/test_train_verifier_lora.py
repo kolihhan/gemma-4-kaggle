@@ -150,32 +150,45 @@ class VerifierLoraTrainingContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Gemma4ForConditionalGeneration"):
             validate_model_class(BadModel())
 
-    def test_text_only_lora_target_guard_uses_language_model_decoder(self):
+    def test_text_only_lora_target_selection_filters_multimodal_towers(self):
         from kaggle.train_verifier_lora import validate_lora_target_modules
+
+        decoder_names = [
+            "model.language_model.layers.0.self_attn.q_proj",
+            "model.language_model.layers.0.self_attn.k_proj",
+            "model.language_model.layers.0.self_attn.v_proj",
+            "model.language_model.layers.0.self_attn.o_proj",
+            "model.language_model.layers.0.mlp.gate_proj",
+            "model.language_model.layers.0.mlp.up_proj",
+            "model.language_model.layers.0.mlp.down_proj",
+        ]
 
         class FakeModel:
             def named_modules(self):
                 return iter(
-                    [
-                        ("model.language_model.layers.0.self_attn.q_proj", object()),
-                        ("model.language_model.layers.0.self_attn.k_proj", object()),
-                        ("model.language_model.layers.0.self_attn.v_proj", object()),
-                        ("model.language_model.layers.0.self_attn.o_proj", object()),
-                        ("model.language_model.layers.0.mlp.gate_proj", object()),
-                        ("model.language_model.layers.0.mlp.up_proj", object()),
-                        ("model.language_model.layers.0.mlp.down_proj", object()),
+                    [(name, object()) for name in decoder_names]
+                    + [
+                        ("model.vision_tower.layers.0.q_proj", object()),
+                        ("model.audio_tower.layers.0.gate_proj", object()),
                     ]
                 )
 
-        matches = validate_lora_target_modules(FakeModel(), ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"])
-        self.assertEqual(len(matches), 7)
+        matches = validate_lora_target_modules(
+            FakeModel(),
+            ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        )
+        self.assertEqual(matches, decoder_names)
+        self.assertTrue(all(name.startswith("model.language_model.layers.") for name in matches))
 
-        class BadModel(FakeModel):
+    def test_text_decoder_target_selection_fails_if_any_requested_projection_is_missing(self):
+        from kaggle.train_verifier_lora import validate_lora_target_modules
+
+        class MissingModel:
             def named_modules(self):
-                return iter(list(super().named_modules()) + [("model.vision_tower.layers.0.q_proj", object())])
+                return iter([("model.language_model.layers.0.self_attn.q_proj", object())])
 
-        with self.assertRaisesRegex(ValueError, "outside model.language_model.layers"):
-            validate_lora_target_modules(BadModel(), ["q_proj"])
+        with self.assertRaisesRegex(ValueError, "missing from decoder"):
+            validate_lora_target_modules(MissingModel(), ["q_proj", "k_proj"])
 
 
 if __name__ == "__main__":
