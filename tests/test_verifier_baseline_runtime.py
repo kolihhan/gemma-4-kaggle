@@ -81,6 +81,15 @@ class VerifierBaselineRuntimeContractTests(unittest.TestCase):
         self.assertIn(f'"id": "{EXPECTED_KERNEL_REF}"', text)
         self.assertNotIn("kolihhan/gemma-4-verifier-baseline-v0", text)
 
+    def test_workflow_asserts_results_in_filtered_frozen_split_order(self):
+        text = WORKFLOW.read_text(encoding="utf-8")
+
+        self.assertNotIn('expected_ids = screen["clean_instance_ids"]', text)
+        self.assertIn('manifest = json.loads(', text)
+        self.assertIn('clean_ids = set(screen["clean_instance_ids"])', text)
+        self.assertIn('for item in manifest["holdout"]', text)
+        self.assertIn('if item["instance_id"] in clean_ids', text)
+
 
 if __name__ == "__main__":
     unittest.main()
