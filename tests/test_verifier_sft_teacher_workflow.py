@@ -7,6 +7,7 @@ from kaggle.verifier_gold_teacher_supervision import DIFF_COMMAND
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "kaggle" / "verifier_sft_teacher_runtime.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "run-verifier-sft-teacher.yml"
+BUNDLER = ROOT / "scripts" / "render_verifier_sft_teacher.py"
 PLAN = ROOT / "docs" / "evaluation" / "verifier-lora-targeted-tests-v0.json"
 
 
@@ -15,8 +16,6 @@ class VerifierSftTeacherRuntimeContractTests(unittest.TestCase):
         self.assertTrue(RUNTIME.is_file())
         source = RUNTIME.read_text(encoding="utf-8")
         self.assertIn('TARGETED_TEST_PLAN_JSON = "__VERIFIER_LORA_TARGETED_TEST_PLAN_JSON__"', source)
-        self.assertIn('GOLD_RUNTIME_SOURCE_B64 = "__VERIFIER_GOLD_RUNTIME_SOURCE_B64__"', source)
-        self.assertIn('SUPERVISION_HELPER_SOURCE_B64 = "__VERIFIER_GOLD_SUPERVISION_HELPER_SOURCE_B64__"', source)
         self.assertIn("load_targeted_test_plan", source)
         self.assertIn("build_teacher_supervision_record", source)
         self.assertIn("apply_patch_in_container", source)
@@ -27,13 +26,29 @@ class VerifierSftTeacherRuntimeContractTests(unittest.TestCase):
         self.assertNotIn("blind_evaluation", source)
         self.assertNotIn("test_patch", source)
 
-    def test_workflow_embeds_helpers_into_single_kaggle_code_file(self):
+    def test_renderer_bundles_sibling_modules_into_one_code_file(self):
+        self.assertTrue(BUNDLER.is_file())
+        from scripts.render_verifier_sft_teacher import bundle_runtime
+
+        bundled = bundle_runtime(
+            RUNTIME.read_text(encoding="utf-8"),
+            "MODEL_NAME = 'dummy'\nWORKING_DIR = None\nAGENT_DIR = None\n",
+            "DIFF_COMMAND = 'git diff --check && git diff'\n"
+            "def build_teacher_supervision_record(**kwargs): return kwargs\n"
+            "def load_targeted_test_plan(*args): return {}\n",
+        )
+        self.assertNotIn("import verifier_gold_teacher_runtime as gold", bundled)
+        self.assertNotIn("from verifier_gold_teacher_supervision import (", bundled)
+        self.assertIn("_load_embedded_module", bundled)
+        compile(bundled, "bundled_verifier_sft_teacher.py", "exec")
+
+    def test_workflow_uses_single_file_renderer_instead_of_sibling_copies(self):
         self.assertTrue(WORKFLOW.is_file())
         source = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("render_verifier_sft_teacher", source)
+        self.assertIn("bundle_runtime", source)
         self.assertIn("verifier_gold_teacher_runtime.py", source)
         self.assertIn("verifier_gold_teacher_supervision.py", source)
-        self.assertIn("__VERIFIER_GOLD_RUNTIME_SOURCE_B64__", source)
-        self.assertIn("__VERIFIER_GOLD_SUPERVISION_HELPER_SOURCE_B64__", source)
         self.assertNotIn("shutil.copy2(helper", source)
         self.assertNotIn("shutil.copy2(gold_runtime", source)
 
