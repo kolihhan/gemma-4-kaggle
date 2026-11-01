@@ -5,6 +5,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "kaggle" / "verifier_training_trace_runtime.py"
+WORKFLOW = ROOT / ".github" / "workflows" / "run-verifier-training-trace-harvest.yml"
+EXPECTED_KERNEL_REF = "kolihhan/gemma-4-verifier-training-trace-harvest-v0"
 
 
 class VerifierTrainingTraceRuntimeTests(unittest.TestCase):
@@ -12,6 +14,11 @@ class VerifierTrainingTraceRuntimeTests(unittest.TestCase):
         if not RUNTIME.is_file():
             self.skipTest("training trace runtime not implemented yet")
         return RUNTIME.read_text(encoding="utf-8")
+
+    def require_workflow(self) -> str:
+        if not WORKFLOW.is_file():
+            self.skipTest("training trace workflow not implemented yet")
+        return WORKFLOW.read_text(encoding="utf-8")
 
     def test_runtime_exists(self):
         self.assertTrue(RUNTIME.is_file())
@@ -85,6 +92,42 @@ class VerifierTrainingTraceRuntimeTests(unittest.TestCase):
         self.assertNotIn("FAIL_TO_PASS", text)
         self.assertNotIn("PASS_TO_PASS", text)
         self.assertNotIn('"agent_patch":', text)
+
+    def test_training_trace_workflow_exists(self):
+        self.assertTrue(WORKFLOW.is_file())
+
+    def test_workflow_locks_kernel_identity_gpu_and_timeouts(self):
+        text = self.require_workflow()
+
+        self.assertIn("timeout-minutes: 150", text)
+        self.assertIn(f"KERNEL_REF: {EXPECTED_KERNEL_REF}", text)
+        self.assertIn(f'"id": "{EXPECTED_KERNEL_REF}"', text)
+        self.assertIn('"machine_shape": "NvidiaL4"', text)
+        self.assertIn("--accelerator NvidiaL4 -t 7200", text)
+        self.assertIn(
+            '"google/gemma-4/Other/gemma-4-e4b-it-qat-w4a16-ct/2"',
+            text,
+        )
+
+    def test_workflow_embeds_frozen_training_manifest_and_asserts_all_ids_in_order(self):
+        text = self.require_workflow()
+
+        self.assertIn("verifier-lora-train-subset-v0.json", text)
+        self.assertIn("__VERIFIER_LORA_TRAINING_MANIFEST_JSON__", text)
+        self.assertIn('expected_ids = [item["instance_id"] for item in manifest["tasks"]]', text)
+        self.assertIn('result.get("requested") == len(expected_ids)', text)
+        self.assertIn(
+            '[item.get("instance_id") for item in result.get("results", [])] == expected_ids',
+            text,
+        )
+
+    def test_workflow_always_uploads_full_training_trace_evidence(self):
+        text = self.require_workflow()
+
+        self.assertIn("name: gemma4-verifier-training-trace-harvest-v0-evidence", text)
+        self.assertIn("if: always()", text)
+        self.assertIn("verifier_training_trace_results.json", text)
+        self.assertIn("verifier-training-trace-results", text)
 
 
 if __name__ == "__main__":
