@@ -69,10 +69,7 @@ def _task_prompt(trace: dict[str, Any]) -> str:
         if not isinstance(step, dict):
             continue
         extra = step.get("extra") or {}
-        if (
-            step.get("source") == "user"
-            or extra.get("event_type") == "task_prompt"
-        ):
+        if step.get("source") == "user" or extra.get("event_type") == "task_prompt":
             message = step.get("message")
             if isinstance(message, str) and "Problem Statement:" in message:
                 return message
@@ -130,7 +127,9 @@ def _command(step: dict[str, Any]) -> str:
     return command if isinstance(command, str) else ""
 
 
-def _audit(steps: list[dict[str, Any]]) -> tuple[list[str], str | None]:
+def _audit(
+    steps: list[dict[str, Any]], evaluator_resolved: bool | None
+) -> tuple[list[str], str | None]:
     flags: set[str] = set()
     test_events: list[tuple[int, str, int | None]] = []
     submit_indices: list[int] = []
@@ -151,7 +150,11 @@ def _audit(steps: list[dict[str, Any]]) -> tuple[list[str], str | None]:
         command = _command(step)
         if "git diff" in command and first_diff is None:
             first_diff = index
-        if "git diff --check" in command and "git diff" in command and _exit_code(step) == 0:
+        if (
+            "git diff --check" in command
+            and "git diff" in command
+            and _exit_code(step) == 0
+        ):
             final_diff_checks.append(index)
         classification = classify_test_command(command)
         if classification in {"broad", "targeted"}:
@@ -182,12 +185,29 @@ def _audit(steps: list[dict[str, Any]]) -> tuple[list[str], str | None]:
         if submits_after and last_exit not in (None, 0):
             flags.add("submit_after_failed_test")
         if submits_after and last_test_kind == "targeted" and last_exit == 0:
-            suggested_label = "verified_submit"
             submit_index = submits_after[0]
             if not any(last_test_index < i < submit_index for i in final_diff_checks):
                 flags.add("missing_final_diff_check")
-        elif not submit_indices and last_test_kind == "targeted" and last_exit not in (None, 0):
+            # A local targeted pass is necessary but not sufficient for a
+            # positive submit label. The official final evaluator must also
+            # resolve the task; rich_3772 is a real counterexample.
+            if evaluator_resolved is True:
+                suggested_label = "verified_submit"
+        elif (
+            not submit_indices
+            and last_test_kind == "targeted"
+            and last_exit not in (None, 0)
+        ):
             suggested_label = "safe_stop"
+
+    if evaluator_resolved is None:
+        flags.add("missing_evaluator_outcome")
+        if suggested_label == "verified_submit":
+            suggested_label = None
+    elif evaluator_resolved is False:
+        flags.add("final_evaluator_unresolved")
+        if suggested_label == "verified_submit":
+            suggested_label = None
 
     if not any(kind == "targeted" for _, kind, _ in test_events):
         flags.add("no_targeted_pytest")
@@ -197,14 +217,20 @@ def _audit(steps: list[dict[str, Any]]) -> tuple[list[str], str | None]:
     return sorted(flags), suggested_label
 
 
-def extract_candidate(instance_id: str, trace: dict[str, Any]) -> dict[str, Any]:
+def extract_candidate(
+    instance_id: str,
+    trace: dict[str, Any],
+    evaluator_resolved: bool | None = None,
+) -> dict[str, Any]:
     if not isinstance(instance_id, str) or not instance_id:
         raise ValueError("instance_id is required")
     if not isinstance(trace, dict):
         raise ValueError("trace must be an object")
+    if evaluator_resolved is not None and not isinstance(evaluator_resolved, bool):
+        raise ValueError("evaluator_resolved must be bool or None")
     problem_description = extract_problem_description(_task_prompt(trace))
     steps = _verifier_steps(trace)
-    audit_flags, suggested_label = _audit(steps)
+    audit_flags, suggested_label = _audit(steps, evaluator_resolved)
     return {
         "instance_id": instance_id,
         "approved": False,
@@ -212,6 +238,7 @@ def extract_candidate(instance_id: str, trace: dict[str, Any]) -> dict[str, Any]
         "suggested_label": suggested_label,
         "source": "base_trace_curated_candidate",
         "problem_description": problem_description,
+        "evaluator_resolved": evaluator_resolved,
         "steps": steps,
         "audit_flags": audit_flags,
     }
@@ -232,6 +259,37 @@ def _load_training_ids(path: Path) -> list[str]:
     return ids
 
 
+def _load_evaluator_results(path: Path, expected_ids: list[str]) -> dict[str, bool]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    results = payload.get("results")
+    if not isinstance(results, list):
+        raise ValueError("evaluator results file has no results[]")
+
+    resolved_by_id: dict[str, bool] = {}
+    for item in results:
+        if not isinstance(item, dict):
+            raise ValueError("evaluator result is not an object")
+        instance_id = item.get("instance_id")
+        resolved = item.get("resolved")
+        if not isinstance(instance_id, str) or not instance_id:
+            raise ValueError("evaluator result has no instance_id")
+        if not isinstance(resolved, bool):
+            raise ValueError(f"{instance_id}: evaluator resolved must be boolean")
+        if instance_id in resolved_by_id:
+            raise ValueError(f"duplicate evaluator result: {instance_id}")
+        resolved_by_id[instance_id] = resolved
+
+    expected = set(expected_ids)
+    actual = set(resolved_by_id)
+    if actual != expected:
+        missing = sorted(expected - actual)
+        extras = sorted(actual - expected)
+        raise ValueError(
+            f"evaluator/training ID mismatch: missing={missing!r} extras={extras!r}"
+        )
+    return resolved_by_id
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("trace_dir", type=Path)
@@ -239,6 +297,15 @@ def main(argv: list[str] | None = None) -> int:
         "--train-manifest",
         type=Path,
         default=Path("docs/evaluation/verifier-lora-train-subset-v0.json"),
+    )
+    parser.add_argument(
+        "--results",
+        type=Path,
+        default=None,
+        help=(
+            "final evaluator summary JSON; defaults to "
+            "<trace_dir>/../../verifier_training_trace_results.json"
+        ),
     )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
@@ -255,10 +322,25 @@ def main(argv: list[str] | None = None) -> int:
             f"trace/manifest mismatch: missing={missing!r} extras={extras!r}"
         )
 
+    results_path = (
+        args.results
+        if args.results is not None
+        else args.trace_dir.parent.parent / "verifier_training_trace_results.json"
+    )
+    if not results_path.is_file():
+        raise SystemExit(f"missing final evaluator results: {results_path}")
+    resolved_by_id = _load_evaluator_results(results_path, training_ids)
+
     candidates = []
     for instance_id in training_ids:
         trace = json.loads(trace_files[instance_id].read_text(encoding="utf-8"))
-        candidates.append(extract_candidate(instance_id, trace))
+        candidates.append(
+            extract_candidate(
+                instance_id,
+                trace,
+                evaluator_resolved=resolved_by_id[instance_id],
+            )
+        )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", encoding="utf-8") as handle:
@@ -275,6 +357,9 @@ def main(argv: list[str] | None = None) -> int:
                 "status": "completed",
                 "candidates": len(candidates),
                 "approved": 0,
+                "evaluator_resolved": sum(
+                    candidate["evaluator_resolved"] is True for candidate in candidates
+                ),
                 "suggested_labels": {
                     label: sum(c.get("suggested_label") == label for c in candidates)
                     for label in ("verified_submit", "safe_stop")
