@@ -237,6 +237,8 @@ async def _collect_task_records(
 
 
 async def run_teacher() -> dict[str, Any]:
+    gold.install_official_wheelhouse()
+
     from adk_submission import ModelRegistry
     from swegemma.config import EvalConfig
     from swegemma.evaluate import Evaluator
@@ -249,7 +251,6 @@ async def run_teacher() -> dict[str, Any]:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     EMPTY_SUBMISSION_DIR.mkdir(parents=True, exist_ok=True)
 
-    gold.install_official_wheelhouse()
     gold.TRAINING_MANIFEST_JSON = TRAINING_MANIFEST_JSON
     training_ids = gold._load_training_ids()
     clean_ids = gold.load_clean_training_ids(TRAINING_GOLD_SCREEN_JSON, set(training_ids))
