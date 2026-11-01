@@ -1,19 +1,20 @@
-"""Deterministic training-only verifier supervision collector for LoRA v0.
+"""Model-free deterministic training supervision collector for verifier-LoRA v0.
 
-For each frozen training target the collector captures two states before any
-model mutation can matter:
+For each frozen training-only target, this runtime creates the same prepared
+workspace used by the official harness, then records two public-regression
+states without running an LLM or submission agent:
 
-1. clean base workspace + public regression gate -> safe-stop candidate;
-2. gold-patched workspace + the same gate -> verified-submit candidate.
+1. clean baseline + failing public behavior assertion -> safe-stop candidate;
+2. reference-patched workspace + passing same assertion -> submit candidate.
 
-Blind tasks and hidden test patches are never read here.
+Only frozen training IDs are accepted. Blind evaluation data is never read.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
-import os
+import tempfile
 import traceback
 from pathlib import Path
 from typing import Any
@@ -35,8 +36,8 @@ TEACHER_BUILD_ID = "__VERIFIER_SFT_TEACHER_BUILD_ID__"
 MODEL_NAME = gold.MODEL_NAME
 
 WORKING_DIR = gold.WORKING_DIR
-AGENT_DIR = gold.AGENT_DIR
 RESULTS_DIR = WORKING_DIR / "verifier-sft-teacher-results"
+EMPTY_SUBMISSION_DIR = WORKING_DIR / "verifier-sft-teacher-empty-submission"
 SUPERVISION_PATH = WORKING_DIR / "verifier_gold_teacher_supervision.json"
 
 
@@ -54,86 +55,8 @@ def _exec_evidence(result: Any) -> dict[str, Any]:
     return {"exit_code": exit_code, "output": output}
 
 
-def _run_gate(docker, container_id: str, command: str) -> dict[str, Any]:
+def _run_gate(docker: Any, container_id: str, command: str) -> dict[str, Any]:
     return _exec_evidence(docker.exec(container_id, f"cd /workspace && {command}"))
-
-
-def install_deterministic_teacher_hook(targeted_commands: dict[str, str]):
-    """Capture paired deterministic evidence immediately after baseline setup."""
-    import swegemma.harness.agent_runner as agent_runner
-    from swegemma.harness.container_setup import apply_patch_in_container
-
-    original_setup_baseline_commit = agent_runner.setup_baseline_commit
-    state: dict[str, Any] = {
-        "patch_path": None,
-        "task_id": None,
-        "problem_description": None,
-        "records": {},
-    }
-
-    def setup_baseline_then_collect(docker, container_id, commit_msg="baseline"):
-        original_setup_baseline_commit(docker, container_id, commit_msg)
-        patch_path = state.get("patch_path")
-        task_id = state.get("task_id")
-        problem_description = state.get("problem_description")
-        if not isinstance(task_id, str) or task_id not in targeted_commands:
-            raise RuntimeError(f"deterministic teacher has no active targeted task: {task_id!r}")
-        if not isinstance(problem_description, str) or not problem_description.strip():
-            raise RuntimeError(f"deterministic teacher has no problem description for {task_id}")
-        if patch_path is None:
-            raise RuntimeError(f"deterministic teacher has no active reference patch for {task_id}")
-        patch_path = Path(patch_path)
-        if not patch_path.is_file() or patch_path.stat().st_size == 0:
-            raise RuntimeError(f"deterministic teacher reference patch is missing/empty: {patch_path}")
-
-        targeted_command = targeted_commands[task_id]
-        paired_records: list[dict[str, Any]] = []
-
-        base_pre_diff = _run_gate(docker, container_id, DIFF_COMMAND)
-        base_targeted_test = _run_gate(docker, container_id, targeted_command)
-        base_final_diff = _run_gate(docker, container_id, DIFF_COMMAND)
-        paired_records.append(
-            build_teacher_safe_stop_record(
-                instance_id=task_id,
-                problem_description=problem_description,
-                targeted_command=targeted_command,
-                pre_diff=base_pre_diff,
-                targeted_test=base_targeted_test,
-                final_diff=base_final_diff,
-            )
-        )
-
-        container_patch = "/tmp/verifier_sft_teacher_reference.patch"
-        docker.copy_to(container_id, patch_path, container_patch)
-        try:
-            exit_code, stdout, stderr = apply_patch_in_container(
-                docker, container_id, container_patch
-            )
-            if exit_code != 0:
-                raise RuntimeError(
-                    "failed to apply deterministic teacher patch: "
-                    f"exit={exit_code} stdout={stdout[-1000:]!r} stderr={stderr[-1000:]!r}"
-                )
-
-            gold_pre_diff = _run_gate(docker, container_id, DIFF_COMMAND)
-            gold_targeted_test = _run_gate(docker, container_id, targeted_command)
-            gold_final_diff = _run_gate(docker, container_id, DIFF_COMMAND)
-            paired_records.append(
-                build_teacher_supervision_record(
-                    instance_id=task_id,
-                    problem_description=problem_description,
-                    targeted_command=targeted_command,
-                    pre_diff=gold_pre_diff,
-                    targeted_test=gold_targeted_test,
-                    final_diff=gold_final_diff,
-                )
-            )
-            state["records"][task_id] = paired_records
-        finally:
-            docker.exec(container_id, f"rm -f {container_patch}")
-
-    agent_runner.setup_baseline_commit = setup_baseline_then_collect
-    return state, original_setup_baseline_commit
 
 
 def _unapproved_error_record(
@@ -164,6 +87,7 @@ def write_failure(exc: BaseException) -> None:
                 "version": "verifier-lora-v0-deterministic-teacher",
                 "status": "error",
                 "teacher_build_id": TEACHER_BUILD_ID,
+                "execution_mode": "deterministic_model_free",
                 "error_type": type(exc).__name__,
                 "error": str(exc),
                 "traceback": traceback.format_exc(),
@@ -176,53 +100,164 @@ def write_failure(exc: BaseException) -> None:
     )
 
 
-def main() -> None:
+async def _collect_task_records(
+    *,
+    evaluator: Any,
+    task: Any,
+    snapshots_dir: Path,
+    targeted_command: str,
+    problem_description: str,
+) -> list[dict[str, Any]]:
+    from swegemma.deduplication import resolve_task_snapshot_paths
+    from swegemma.harness.container_setup import (
+        apply_patch_in_container,
+        extract_snapshot,
+        install_editable_package,
+        install_test_dependencies,
+        setup_baseline_commit,
+        setup_container_wheels,
+        setup_git_exclude,
+        setup_synthetic_hardware,
+        setup_workspace_test_config,
+    )
+    from swegemma.sandbox import sandbox_start, sandbox_stop
+
+    reference_patch = task.patch or ""
+    if not reference_patch.strip():
+        raise RuntimeError("deterministic teacher reference patch unavailable after hydration")
+
+    snapshot_path, base_snapshot_path, patch_path = resolve_task_snapshot_paths(
+        snapshots_dir,
+        task.instance_id,
+        task.repo,
+    )
+
+    docker = evaluator.docker
+    sandbox_id = await sandbox_start(docker)
+    records: list[dict[str, Any]] = []
+    host_patch_path: Path | None = None
+    container_patch = "/tmp/verifier_sft_teacher_reference.patch"
+    try:
+        await asyncio.to_thread(setup_container_wheels, docker, sandbox_id, evaluator.config)
+        await asyncio.to_thread(
+            extract_snapshot,
+            docker,
+            sandbox_id,
+            snapshot_path,
+            patch_path=patch_path,
+            base_snapshot_path=base_snapshot_path,
+        )
+        await asyncio.to_thread(setup_synthetic_hardware, docker, sandbox_id)
+        await asyncio.to_thread(setup_git_exclude, docker, sandbox_id)
+        await asyncio.to_thread(install_editable_package, docker, sandbox_id)
+        await asyncio.to_thread(
+            install_test_dependencies,
+            docker,
+            sandbox_id,
+            task.repo,
+            fast_path=True,
+            config=evaluator.config,
+        )
+        await asyncio.to_thread(
+            setup_workspace_test_config,
+            docker,
+            sandbox_id,
+            repo=task.repo,
+        )
+        await asyncio.to_thread(
+            setup_baseline_commit,
+            docker,
+            sandbox_id,
+            "verifier_sft_teacher_baseline",
+        )
+
+        base_pre_diff = _run_gate(docker, sandbox_id, DIFF_COMMAND)
+        base_targeted_test = _run_gate(docker, sandbox_id, targeted_command)
+        base_final_diff = _run_gate(docker, sandbox_id, DIFF_COMMAND)
+        records.append(
+            build_teacher_safe_stop_record(
+                instance_id=task.instance_id,
+                problem_description=problem_description,
+                targeted_command=targeted_command,
+                pre_diff=base_pre_diff,
+                targeted_test=base_targeted_test,
+                final_diff=base_final_diff,
+            )
+        )
+
+        with tempfile.NamedTemporaryFile("w", suffix=".patch", delete=False) as handle:
+            handle.write(reference_patch if reference_patch.endswith("\n") else reference_patch + "\n")
+            host_patch_path = Path(handle.name)
+        await asyncio.to_thread(docker.copy_to, sandbox_id, host_patch_path, container_patch)
+        exit_code, stdout, stderr = await asyncio.to_thread(
+            apply_patch_in_container,
+            docker,
+            sandbox_id,
+            container_patch,
+        )
+        if exit_code != 0:
+            raise RuntimeError(
+                "failed to apply deterministic teacher patch: "
+                f"exit={exit_code} stdout={stdout[-1000:]!r} stderr={stderr[-1000:]!r}"
+            )
+
+        gold_pre_diff = _run_gate(docker, sandbox_id, DIFF_COMMAND)
+        gold_targeted_test = _run_gate(docker, sandbox_id, targeted_command)
+        gold_final_diff = _run_gate(docker, sandbox_id, DIFF_COMMAND)
+        records.append(
+            build_teacher_supervision_record(
+                instance_id=task.instance_id,
+                problem_description=problem_description,
+                targeted_command=targeted_command,
+                pre_diff=gold_pre_diff,
+                targeted_test=gold_targeted_test,
+                final_diff=gold_final_diff,
+            )
+        )
+        return records
+    except BaseException as exc:
+        if not records:
+            return [
+                _unapproved_error_record(task.instance_id, problem_description, exc, "base-fail"),
+                _unapproved_error_record(task.instance_id, problem_description, exc, "gold-pass"),
+            ]
+        if len(records) == 1:
+            return records + [
+                _unapproved_error_record(task.instance_id, problem_description, exc, "gold-pass")
+            ]
+        raise
+    finally:
+        try:
+            docker.exec(sandbox_id, f"rm -f {container_patch}")
+        except BaseException:
+            pass
+        if host_patch_path is not None:
+            host_patch_path.unlink(missing_ok=True)
+        await sandbox_stop(docker, sandbox_id)
+
+
+async def run_teacher() -> dict[str, Any]:
+    from adk_submission import ModelRegistry
+    from swegemma.config import EvalConfig
+    from swegemma.evaluate import Evaluator
+    from swegemma.models import load_tasks
+
     if not TEACHER_BUILD_ID or TEACHER_BUILD_ID.startswith("__"):
         raise RuntimeError("deterministic teacher build ID placeholder was not rendered")
 
     WORKING_DIR.mkdir(parents=True, exist_ok=True)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    EMPTY_SUBMISSION_DIR.mkdir(parents=True, exist_ok=True)
 
-    gold.SUBMISSION_PAYLOAD_B64 = SUBMISSION_PAYLOAD_B64
-    gold.TRAINING_MANIFEST_JSON = TRAINING_MANIFEST_JSON
-    gold.TRAINING_GOLD_SCREEN_JSON = TRAINING_GOLD_SCREEN_JSON
-    gold.configure_environment()
     gold.install_official_wheelhouse()
-    gold.materialize_submission()
-
+    gold.TRAINING_MANIFEST_JSON = TRAINING_MANIFEST_JSON
     training_ids = gold._load_training_ids()
     clean_ids = gold.load_clean_training_ids(TRAINING_GOLD_SCREEN_JSON, set(training_ids))
     targeted_commands = load_targeted_test_plan(TARGETED_TEST_PLAN_JSON, set(clean_ids))
     target_ids = list(targeted_commands)
 
-    import litellm
-    import torch
-    import yaml
-    import swegemma.harness.agent_runner as agent_runner
-    from adk_submission import VllmConfig, VllmServer, discover_adapters, validate_directory
-    from adk_submission.discovery import discover_declared_models
-    from google.adk.agents.context_cache_config import ContextCacheConfig
-    from google.adk.apps._configs import EventsCompactionConfig
-    from swegemma.config import ALLOWED_ADAPTER_EXTENSIONS, EvalConfig, build_submission_limits
-    from swegemma.evaluate import Evaluator
-    from swegemma.models import load_tasks
-
-    litellm.drop_params = True
-    limits, generation_constraints = build_submission_limits()
-    validate_directory(AGENT_DIR, limits=limits)
-    declared_models = discover_declared_models(AGENT_DIR)
-    if declared_models != {MODEL_NAME}:
-        raise RuntimeError(f"expected only {MODEL_NAME}, got {sorted(declared_models)}")
-    adapters = discover_adapters(str(AGENT_DIR), adapter_extensions=ALLOWED_ADAPTER_EXTENSIONS)
-    adapter_map = getattr(adapters, "adapters", None) or {}
-    if adapter_map:
-        raise RuntimeError(f"deterministic teacher must not contain adapters: {sorted(adapter_map)}")
-
-    model_path = Path(f"/kaggle/input/models/google/gemma-4/other/{MODEL_NAME}/2")
-    if not model_path.exists():
-        raise FileNotFoundError(f"E4B model weights not found: {model_path}")
-
     tasks_path = gold.DATA_DIR / "tasks.jsonl"
+    snapshots_dir = gold.DATA_DIR / "snapshots"
     public_tasks = load_tasks(tasks_path)
     selected = set(target_ids)
     tasks_by_id = {task.instance_id: task for task in public_tasks if task.instance_id in selected}
@@ -230,185 +265,86 @@ def main() -> None:
     if missing:
         raise RuntimeError(f"deterministic-teacher task(s) missing from public corpus: {missing}")
 
-    raw_eval = yaml.safe_load((AGENT_DIR / "eval_config.yaml").read_text(encoding="utf-8")) or {}
-    eval_section = raw_eval.get("evaluation", raw_eval)
-    timeout_seconds = int(eval_section.get("timeout_seconds", 300))
-    verification_timeout_seconds = int(eval_section.get("verification_timeout_seconds", 300))
+    config = EvalConfig(
+        tasks_path=tasks_path,
+        snapshots_dir=snapshots_dir,
+        results_dir=RESULTS_DIR,
+        submission_dir=EMPTY_SUBMISSION_DIR,
+        models=ModelRegistry(),
+        sandbox="subprocess",
+        wheels_dir=gold.DATA_DIR / "wheels",
+        timeout_seconds=300,
+        verification_timeout_seconds=300,
+        verbose=False,
+    )
+    evaluator = Evaluator(config)
 
-    max_tool_calls = 1
-    max_time_minutes = 3.0
-    max_turns = 1
-
-    gpu_count = torch.cuda.device_count() if torch.cuda.is_available() else 0
-    if gpu_count < 1:
-        raise RuntimeError("Kaggle deterministic-teacher kernel has no visible GPU")
-    tp_size = 4 if gpu_count >= 4 else (2 if gpu_count >= 2 else 1)
-
-    server = None
-    hook_state = None
-    original_setup_baseline_commit = None
     records: list[dict[str, Any]] = []
-    try:
-        server = VllmServer(
-            VllmConfig(
-                model=str(model_path),
-                port=8000,
-                host="127.0.0.1",
-                tool_call_parser="gemma4",
-                reasoning_parser="gemma4",
-                max_model_len=32768,
-                dtype="bfloat16" if torch.cuda.is_bf16_supported() else "auto",
-                gpu_memory_utilization=0.90,
-                enable_auto_tool_choice=True,
-                enable_lora=False,
-                max_loras=1,
-                max_lora_rank=128,
-                scheduler_reserve_full_isl=False,
-                tensor_parallel_size=tp_size,
-                startup_timeout=60 * 20,
-                extra_args=(),
-            ),
-            adapter_manifest=adapters,
-        )
-        server.start()
-        models = server.create_model_registry(
-            aliases=[MODEL_NAME], model_prefix="openai/", api_key=os.environ["LOCAL_API_KEY"]
-        )
-        eval_config = EvalConfig(
-            tasks_path=tasks_path,
-            snapshots_dir=gold.DATA_DIR / "snapshots",
-            results_dir=RESULTS_DIR,
-            submission_dir=AGENT_DIR,
-            models=models,
-            sandbox="subprocess",
-            timeout_seconds=timeout_seconds,
-            verification_timeout_seconds=verification_timeout_seconds,
-            max_time_minutes=max_time_minutes,
-            max_tool_calls=max_tool_calls,
-            max_turns=max_turns,
-            limits=limits,
-            generation_constraints=generation_constraints,
-            adapter_manifest=adapters,
-            context_cache_config=ContextCacheConfig(
-                min_tokens=2048, ttl_seconds=1800, cache_intervals=10
-            ),
-            events_compaction_config=EventsCompactionConfig(
-                compaction_interval=15,
-                overlap_size=2,
-                token_threshold=14336,
-                event_retention_size=5,
-            ),
-            graph_dir=str(gold.DATA_DIR / "graphs"),
-            embeddings_dir=str(gold.DATA_DIR / "embeddings"),
-            wheels_dir=gold.DATA_DIR / "wheels",
-            verbose=False,
-        )
-        evaluator = Evaluator(eval_config)
-        hook_state, original_setup_baseline_commit = install_deterministic_teacher_hook(
-            targeted_commands
-        )
+    for index, task_id in enumerate(target_ids, 1):
+        public_task = tasks_by_id[task_id]
+        problem_description = public_task.problem_statement or ""
+        print(f"[{index:02d}/{len(target_ids):02d}] deterministic-teacher {task_id}", flush=True)
+        try:
+            task = evaluator._hydrate_task_from_secret(public_task)
+            task_records = await _collect_task_records(
+                evaluator=evaluator,
+                task=task,
+                snapshots_dir=snapshots_dir,
+                targeted_command=targeted_commands[task_id],
+                problem_description=problem_description,
+            )
+        except BaseException as exc:
+            task_records = [
+                _unapproved_error_record(task_id, problem_description, exc, "base-fail"),
+                _unapproved_error_record(task_id, problem_description, exc, "gold-pass"),
+            ]
 
-        for index, task_id in enumerate(target_ids, 1):
-            public_task = tasks_by_id[task_id]
-            problem_description = public_task.problem_statement or ""
-            patch_path = Path(f"/tmp/verifier-sft-teacher-{task_id}.patch")
-            eval_error: BaseException | None = None
-            try:
-                task = evaluator._hydrate_task_from_secret(public_task)
-                reference_patch = task.patch or ""
-                if not reference_patch.strip():
-                    raise RuntimeError("deterministic teacher reference patch unavailable after hydration")
-                patch_path.write_text(reference_patch, encoding="utf-8")
-                hook_state["patch_path"] = patch_path
-                hook_state["task_id"] = task_id
-                hook_state["problem_description"] = problem_description
-                try:
-                    gold.run_maybe_async(
-                        evaluator.evaluate_task(
-                            task=task,
-                            task_index=index,
-                            total_tasks=len(target_ids),
-                        )
-                    )
-                except BaseException as exc:
-                    eval_error = exc
-            except BaseException as exc:
-                eval_error = exc
-            finally:
-                if hook_state is not None:
-                    hook_state["patch_path"] = None
-                    hook_state["task_id"] = None
-                    hook_state["problem_description"] = None
-                try:
-                    patch_path.unlink()
-                except OSError:
-                    pass
+        records.extend(task_records)
+        for record in task_records:
+            print(
+                "SFT_TEACHER_RECORD",
+                json.dumps(
+                    {
+                        "instance_id": task_id,
+                        "example_id": record.get("example_id"),
+                        "approved": record.get("approved"),
+                        "label": record.get("label"),
+                        "audit_flags": record.get("audit_flags"),
+                    },
+                    sort_keys=True,
+                ),
+                flush=True,
+            )
 
-            task_records = [] if hook_state is None else hook_state["records"].get(task_id, [])
-            if not task_records:
-                if eval_error is None:
-                    eval_error = RuntimeError("deterministic evidence hook produced no records")
-                task_records = [
-                    _unapproved_error_record(task_id, problem_description, eval_error, "base-fail"),
-                    _unapproved_error_record(task_id, problem_description, eval_error, "gold-pass"),
-                ]
-            elif eval_error is not None:
-                annotated = []
-                for record in task_records:
-                    record = dict(record)
-                    record["collector_post_capture_error_type"] = type(eval_error).__name__
-                    record["collector_post_capture_error"] = str(eval_error)
-                    annotated.append(record)
-                task_records = annotated
+    approved_example_ids = [
+        str(record["example_id"])
+        for record in records
+        if record.get("approved") is True
+    ]
+    return {
+        "version": "verifier-lora-v0-deterministic-teacher",
+        "status": "completed",
+        "teacher_build_id": TEACHER_BUILD_ID,
+        "execution_mode": "deterministic_model_free",
+        "model": MODEL_NAME,
+        "requested": len(target_ids),
+        "record_count": len(records),
+        "approved": len(approved_example_ids),
+        "approved_example_ids": approved_example_ids,
+        "records": records,
+    }
 
-            records.extend(task_records)
-            for record in task_records:
-                print(
-                    "SFT_TEACHER_RECORD",
-                    json.dumps(
-                        {
-                            "instance_id": task_id,
-                            "example_id": record.get("example_id"),
-                            "approved": record.get("approved"),
-                            "label": record.get("label"),
-                            "audit_flags": record.get("audit_flags"),
-                        },
-                        sort_keys=True,
-                    ),
-                    flush=True,
-                )
 
-        approved_example_ids = [
-            str(record["example_id"])
-            for record in records
-            if record.get("approved") is True
-        ]
-        output = {
-            "version": "verifier-lora-v0-deterministic-teacher",
-            "status": "completed",
-            "teacher_build_id": TEACHER_BUILD_ID,
-            "model": MODEL_NAME,
-            "requested": len(target_ids),
-            "record_count": len(records),
-            "approved": len(approved_example_ids),
-            "approved_example_ids": approved_example_ids,
-            "visible_gpus": gpu_count,
-            "tensor_parallel_size": tp_size,
-            "records": records,
-        }
-        SUPERVISION_PATH.write_text(
-            json.dumps(output, indent=2, sort_keys=True), encoding="utf-8"
-        )
-        print(
-            "SFT_TEACHER_SUMMARY",
-            json.dumps({k: v for k, v in output.items() if k != "records"}, sort_keys=True),
-            flush=True,
-        )
-    finally:
-        if original_setup_baseline_commit is not None:
-            agent_runner.setup_baseline_commit = original_setup_baseline_commit
-        if server is not None:
-            server.stop()
+def main() -> None:
+    output = asyncio.run(run_teacher())
+    SUPERVISION_PATH.write_text(
+        json.dumps(output, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    print(
+        "SFT_TEACHER_SUMMARY",
+        json.dumps({key: value for key, value in output.items() if key != "records"}, sort_keys=True),
+        flush=True,
+    )
 
 
 if __name__ == "__main__":
