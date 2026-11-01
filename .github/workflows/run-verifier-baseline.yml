@@ -216,10 +216,18 @@ jobs:
 
           output_dir = Path(os.environ["OUTPUT_DIR"])
           result = json.loads((output_dir / "verifier_baseline_results.json").read_text(encoding="utf-8"))
+          manifest = json.loads(
+              Path("docs/evaluation/verifier-lora-split-v0.json").read_text(encoding="utf-8")
+          )
           screen = json.loads(
               Path("docs/evaluation/verifier-lora-gold-screen-v0.json").read_text(encoding="utf-8")
           )
-          expected_ids = screen["clean_instance_ids"]
+          clean_ids = set(screen["clean_instance_ids"])
+          expected_ids = [
+              item["instance_id"]
+              for item in manifest["holdout"]
+              if item["instance_id"] in clean_ids
+          ]
           assert result.get("version") == "verifier-lora-v0", result
           assert result.get("model") == "gemma-4-e4b-it-qat-w4a16-ct", result
           assert result.get("status") == "completed", result
