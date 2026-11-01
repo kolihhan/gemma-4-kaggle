@@ -8,10 +8,13 @@ Source evidence:
 
 - GitHub Actions run: `41281236175`
 - artifact: `gemma4-verifier-training-trace-harvest-v0-evidence`
+- artifact ID: `13074443459`
 - artifact digest: `sha256:c1e303062b7b2588dacfdf4519aef2957d9980e61ad1e231701ae0f8087bf765`
 - model: `gemma-4-e4b-it-qat-w4a16-ct`
 - requested/completed: `18/18`
 - resolved: `2/18` (`requests_6644`, `rich_3882`)
+
+The artifact contains the full evaluator trace JSON for every frozen training task, including exact verifier tool-call arguments and tool observations. A new harvest is therefore **not** required merely to recover tool-level supervision evidence.
 
 ## FACTS
 
@@ -40,6 +43,31 @@ For the 10 verifier-side submissions:
 - 7 followed a broad pytest command that returned an error status.
 
 Those seven broad-test errors are **not automatically task-relevant failures**: several repositories have environment/dependency collection failures. They are evidence that the raw trajectory is not a trustworthy positive label, not proof that every corresponding submission was semantically wrong.
+
+## Executable curation audit
+
+The branch now contains two explicit gates:
+
+- `scripts/extract_verifier_supervision_candidates.py` faithfully extracts verifier-only tool arguments/results from full training traces, marks every record `approved: false`, and attaches behavioral audit flags;
+- `scripts/build_verifier_sft.py` rejects unapproved/raw records, blind or non-training IDs, broad pytest positives, submit-after-failure positives, multiple repairs, and missing targeted/final verification evidence.
+
+Tests cover both contracts. The implementation-side validation run for the candidate extractor is GitHub Actions run `41290607206`, which passed.
+
+Applying the extractor's audit logic to all 18 frozen training traces gives:
+
+| Audit flag | Tasks |
+|---|---:|
+| no targeted pytest | 17/18 |
+| broad pytest present | 11/18 |
+| missing initial diff inspection | 8/18 |
+| submit after latest failing test | 7/18 |
+| no verifier tool steps | 5/18 |
+| multiple successful verifier repairs | 3/18 |
+| targeted-pass submit but missing final diff check | 1/18 |
+
+Only `rich_3772` reaches the weak candidate state "targeted pytest passed before submit". It still has broad pytest earlier in the verifier trajectory and lacks the full initial/final diff-gating contract, so **zero raw trajectories are directly approvable as positive SFT examples under v0**.
+
+This is a supervision-quality blocker, not a trace-capture blocker.
 
 ## VERDICT
 
@@ -72,4 +100,7 @@ The builder must reject blind IDs and record provenance/approval for every emitt
 
 This strengthens, rather than weakens, the verifier-LoRA hypothesis as a **behavioral falsification test**: the observed verifier has a real discipline problem. It does not establish that fixing that behavior will materially raise resolved count, because five training tasks never reached the verifier and many unresolved tasks may arrive with a fundamentally wrong coder patch.
 
-Do not start adapter training until the independent blind evaluation set is gold-control eligible, frozen, and excluded from all training sources.
+Do not start adapter training until both conditions hold:
+
+1. the independent blind evaluation set is gold-control eligible, frozen, and excluded from all training sources;
+2. a non-empty approved supervision dataset passes the SFT builder contract.
