@@ -1,0 +1,230 @@
+name: Run verifier LoRA gold teacher
+
+on:
+  push:
+    branches: [exp/verifier-lora-v0]
+    paths:
+      - "docs/evaluation/verifier-lora-training-gold-screen-v0.json"
+      - "kaggle/verifier_gold_teacher_runtime.py"
+      - "submission/prompts/verifier.md"
+      - "submission/configs/sampling.yaml"
+      - "submission/eval_config.yaml"
+      - ".github/workflows/run-verifier-gold-teacher.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gemma4-verifier-gold-teacher-v0
+  cancel-in-progress: true
+
+jobs:
+  teacher:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma-4-verifier-gold-teacher-v0
+      KERNEL_DIR: /tmp/gemma4-verifier-gold-teacher-v0
+      OUTPUT_DIR: /tmp/gemma4-verifier-gold-teacher-v0-output
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Kaggle CLI
+        run: |
+          python -m pip install --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python -c "import kaggle, six"
+
+      - name: Render private verifier gold-teacher kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$KERNEL_DIR" "$OUTPUT_DIR"
+          mkdir -p "$KERNEL_DIR" "$OUTPUT_DIR"
+          python - <<'PY'
+          import base64
+          import json
+          import os
+          from pathlib import Path
+
+          repo = Path.cwd()
+          submission = repo / "submission"
+          runtime_template = repo / "kaggle" / "verifier_gold_teacher_runtime.py"
+          training_path = repo / "docs" / "evaluation" / "verifier-lora-train-subset-v0.json"
+          screen_path = repo / "docs" / "evaluation" / "verifier-lora-training-gold-screen-v0.json"
+          kernel_dir = Path(os.environ["KERNEL_DIR"])
+
+          payload = {}
+          for path in sorted(submission.rglob("*")):
+              if path.is_file():
+                  relative = path.relative_to(submission).as_posix()
+                  payload[relative] = path.read_text(encoding="utf-8")
+          if "agent.yaml" not in payload:
+              raise SystemExit("canonical submission is missing agent.yaml")
+          if any(path.startswith("adapters/") for path in payload):
+              raise SystemExit("training gold teacher must use base submission without adapters")
+
+          training = json.loads(training_path.read_text(encoding="utf-8"))
+          if training.get("version") != "verifier-lora-v0-train-harvest":
+              raise SystemExit(f"unexpected training manifest version: {training.get('version')!r}")
+          training_ids = [str(item.get("instance_id") or "") for item in training.get("tasks") or []]
+          if len(training_ids) != 18 or len(training_ids) != len(set(training_ids)) or any(not x for x in training_ids):
+              raise SystemExit("frozen training subset must contain exactly 18 unique task IDs")
+
+          screen = json.loads(screen_path.read_text(encoding="utf-8"))
+          if screen.get("version") != "verifier-lora-v0-training-gold-screen" or screen.get("status") != "frozen":
+              raise SystemExit("training gold screen is not frozen v0")
+          clean_ids = screen.get("clean_instance_ids") or []
+          if len(clean_ids) != 12:
+              raise SystemExit(f"expected exactly 12 frozen clean training tasks, got {len(clean_ids)}")
+          if len(clean_ids) != len(set(clean_ids)) or not set(clean_ids) <= set(training_ids):
+              raise SystemExit("training gold screen contains duplicate or non-training IDs")
+
+          encoded_submission = base64.b64encode(
+              json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+          ).decode("ascii")
+          training_text = json.dumps(training, sort_keys=True)
+          screen_text = json.dumps(screen, sort_keys=True)
+          template = runtime_template.read_text(encoding="utf-8")
+
+          replacements = {
+              'SUBMISSION_PAYLOAD_B64 = "__SUBMISSION_PAYLOAD_B64__"':
+                  f"SUBMISSION_PAYLOAD_B64 = {encoded_submission!r}",
+              'TRAINING_MANIFEST_JSON = "__VERIFIER_LORA_TRAINING_MANIFEST_JSON__"':
+                  f"TRAINING_MANIFEST_JSON = {training_text!r}",
+              'TRAINING_GOLD_SCREEN_JSON = "__VERIFIER_LORA_TRAINING_GOLD_SCREEN_JSON__"':
+                  f"TRAINING_GOLD_SCREEN_JSON = {screen_text!r}",
+          }
+          rendered = template
+          for old, new in replacements.items():
+              if rendered.count(old) != 1:
+                  raise SystemExit(f"unexpected runtime placeholder count for {old!r}: {rendered.count(old)}")
+              rendered = rendered.replace(old, new, 1)
+          compile(rendered, "verifier_gold_teacher_runtime.py", "exec")
+          (kernel_dir / "verifier_gold_teacher_runtime.py").write_text(rendered, encoding="utf-8")
+
+          metadata = {
+              "id": "kolihhan/gemma-4-verifier-gold-teacher-v0",
+              "title": "Gemma 4 Verifier Gold Teacher v0",
+              "code_file": "verifier_gold_teacher_runtime.py",
+              "language": "python",
+              "kernel_type": "script",
+              "is_private": True,
+              "enable_gpu": True,
+              "enable_tpu": False,
+              "enable_internet": False,
+              "machine_shape": "NvidiaL4",
+              "docker_image": "gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461",
+              "dataset_sources": ["metric/gemma-4-developer-agent-wheelhouse"],
+              "competition_sources": ["gemma-4-developer-agent"],
+              "kernel_sources": [],
+              "model_sources": [
+                  "google/gemma-4/Other/gemma-4-e4b-it-qat-w4a16-ct/2"
+              ],
+          }
+          (kernel_dir / "kernel-metadata.json").write_text(
+              json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
+          )
+          print("rendered_gold_teacher_ids=", clean_ids)
+          PY
+
+      - name: Push private Kaggle L4 gold-teacher kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle kernels push -p "$KERNEL_DIR" --accelerator NvidiaL4 -t 7200
+
+      - name: Poll Kaggle kernel to terminal state
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 300); do
+            status_output="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            printf '[%03d] %s\n' "$attempt" "$status_output"
+            lower="$(printf '%s' "$status_output" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then
+              terminal="complete"
+              break
+            fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then
+              terminal="error"
+              break
+            fi
+            sleep 25
+          done
+          if [[ -z "$terminal" ]]; then
+            terminal="timeout"
+          fi
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          echo "Kaggle terminal state: $terminal"
+
+      - name: Collect gold-teacher logs and outputs
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          mkdir -p "$OUTPUT_DIR"
+          kaggle kernels logs "$KERNEL_REF" > "$OUTPUT_DIR/kernel.log" 2>&1
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o > "$OUTPUT_DIR/output-download.log" 2>&1
+          find "$OUTPUT_DIR" -maxdepth 6 -type f -printf '%P %s bytes\n' | sort
+          if [[ -f "$OUTPUT_DIR/verifier_gold_teacher_results.json" ]]; then
+            python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          path = Path(os.environ["OUTPUT_DIR"]) / "verifier_gold_teacher_results.json"
+          result = json.loads(path.read_text(encoding="utf-8"))
+          print(json.dumps({k: v for k, v in result.items() if k != "results"}, indent=2, sort_keys=True))
+          PY
+          fi
+          tail -n 240 "$OUTPUT_DIR/kernel.log" || true
+
+      - name: Assert gold-teacher run produced structured results
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.poll.outputs.terminal }}" != "complete" ]]; then
+            echo "Kaggle gold-teacher kernel did not complete successfully: ${{ steps.poll.outputs.terminal }}" >&2
+            exit 1
+          fi
+          test -f "$OUTPUT_DIR/verifier_gold_teacher_results.json"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          result = json.loads(
+              (Path(os.environ["OUTPUT_DIR"]) / "verifier_gold_teacher_results.json").read_text(encoding="utf-8")
+          )
+          screen = json.loads(
+              Path("docs/evaluation/verifier-lora-training-gold-screen-v0.json").read_text(encoding="utf-8")
+          )
+          expected_ids = screen["clean_instance_ids"]
+          assert len(expected_ids) == 12, expected_ids
+          assert result.get("version") == "verifier-lora-v0-gold-teacher", result
+          assert result.get("model") == "gemma-4-e4b-it-qat-w4a16-ct", result
+          assert result.get("status") == "completed", result
+          assert result.get("requested") == 12, result
+          assert len(result.get("results", [])) == 12, result
+          assert [item.get("instance_id") for item in result["results"]] == expected_ids, result
+          for item in result["results"]:
+              assert "reference_patch" not in item, item
+              assert "agent_patch" not in item, item
+          print(json.dumps({k: v for k, v in result.items() if k != "results"}, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload gold-teacher evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemma4-verifier-gold-teacher-v0-evidence
+          path: /tmp/gemma4-verifier-gold-teacher-v0-output
+          if-no-files-found: warn
+          retention-days: 14
