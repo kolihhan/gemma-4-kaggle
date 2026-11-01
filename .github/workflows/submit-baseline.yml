@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       confirm:
-        description: 'Type SUBMIT to consume today\'s competition submission quota'
+        description: "Type SUBMIT to consume today's competition submission quota"
         required: true
         type: string
       message:
