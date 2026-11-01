@@ -4,6 +4,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "submit-baseline.yml"
+PREFLIGHT = ROOT / ".github" / "workflows" / "validate-baseline-submission.yml"
 
 
 class CompetitionSubmissionWorkflowTests(unittest.TestCase):
@@ -26,6 +27,18 @@ class CompetitionSubmissionWorkflowTests(unittest.TestCase):
         source = WORKFLOW.read_text(encoding="utf-8")
         self.assertNotIn("\n  push:", source)
         self.assertNotIn("\n  pull_request:", source)
+
+    def test_pr_preflight_validates_and_packages_without_submitting(self):
+        self.assertTrue(PREFLIGHT.is_file())
+        source = PREFLIGHT.read_text(encoding="utf-8")
+        self.assertIn("pull_request", source)
+        self.assertIn("submission/agent.yaml", source)
+        self.assertIn("validate_directory", source)
+        self.assertIn("discover_declared_models", source)
+        self.assertIn("gemma-4-e4b-it-qat-w4a16-ct", source)
+        self.assertIn("submission.zip", source)
+        self.assertIn("actions/upload-artifact@v4", source)
+        self.assertNotIn("kaggle competitions submit", source)
 
 
 if __name__ == "__main__":
