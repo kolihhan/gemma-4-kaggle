@@ -3,6 +3,10 @@ name: Submit baseline E4B agent to Kaggle
 on:
   workflow_dispatch:
     inputs:
+      validated_sha256:
+        description: 'SHA-256 printed by the successful baseline preflight'
+        required: true
+        type: string
       confirm:
         description: 'Type SUBMIT to consume today\'s competition submission quota'
         required: true
@@ -18,12 +22,10 @@ permissions:
 jobs:
   submit:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     env:
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
       COMPETITION: gemma-4-developer-agent
-      WHEELHOUSE: metric/gemma-4-developer-agent-wheelhouse
-      MODEL_NAME: gemma-4-e4b-it-qat-w4a16-ct
 
     steps:
       - uses: actions/checkout@v4
@@ -32,87 +34,28 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Kaggle CLI
-        run: |
-          python -m pip install --disable-pip-version-check 'kaggle==2.2.5' 'six==1.17.0'
-          kaggle --version
-
-      - name: Download current official scorer wheelhouse
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -rf /tmp/scorer-wheelhouse /tmp/wheelhouse-fixed
-          mkdir -p /tmp/scorer-wheelhouse /tmp/wheelhouse-fixed
-          kaggle datasets download -d "$WHEELHOUSE" -p /tmp/scorer-wheelhouse --unzip
-          python - <<'PY'
-          import shutil
-          from pathlib import Path
-
-          src = Path('/tmp/scorer-wheelhouse')
-          dst = Path('/tmp/wheelhouse-fixed')
-          for wheel in src.glob('*.whl'):
-              if 'cutlass' in wheel.name.lower():
-                  continue
-              name = wheel.name.replace('cu128', '+cu128') if ('cu128' in wheel.name and '+' not in wheel.name) else wheel.name
-              target = dst / name
-              if not target.exists():
-                  try:
-                      target.symlink_to(wheel)
-                  except OSError:
-                      shutil.copyfile(wheel, target)
-          wheels = sorted(dst.glob('*.whl'))
-          if not wheels:
-              raise SystemExit('no scorer wheels found')
-          print('prepared scorer wheels:', len(wheels))
-          PY
-
-      - name: Install current scorer validation packages
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m pip install --disable-pip-version-check \
-            --find-links /tmp/wheelhouse-fixed \
-            /tmp/wheelhouse-fixed/adk_submission-*.whl \
-            /tmp/wheelhouse-fixed/swegemma-*.whl
-          mapfile -d '' wheels < <(find /tmp/wheelhouse-fixed -maxdepth 1 \( -type f -o -type l \) -name '*.whl' -print0)
-          python -m pip install -q --no-deps --force-reinstall "${wheels[@]}"
-
-      - name: Validate canonical submission against current scorer packages
+      - name: Package canonical submission.zip deterministically
         shell: bash
         run: |
           set -euo pipefail
           test -f submission/agent.yaml
+          rm -f submission.zip submission.sha256
           python - <<'PY'
           from pathlib import Path
-          from adk_submission import validate_directory
-          from adk_submission.discovery import discover_declared_models
-          from swegemma.config import build_submission_limits
-
-          submission = Path('submission')
-          limits, _generation_constraints = build_submission_limits()
-          validate_directory(submission, limits=limits)
-          models = discover_declared_models(submission)
-          expected = {'gemma-4-e4b-it-qat-w4a16-ct'}
-          if models != expected:
-              raise SystemExit(f'unexpected declared models: {sorted(models)}')
-          print('validated models:', sorted(models))
-          PY
-
-      - name: Package submission.zip with agent.yaml at archive root
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -f submission.zip
-          python - <<'PY'
-          from pathlib import Path
+          import hashlib
           import zipfile
 
           root = Path('submission')
           out = Path('submission.zip')
           with zipfile.ZipFile(out, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
               for path in sorted(root.rglob('*')):
-                  if path.is_file():
-                      zf.write(path, path.relative_to(root).as_posix())
+                  if not path.is_file():
+                      continue
+                  info = zipfile.ZipInfo(path.relative_to(root).as_posix())
+                  info.date_time = (1980, 1, 1, 0, 0, 0)
+                  info.compress_type = zipfile.ZIP_DEFLATED
+                  info.external_attr = 0o100644 << 16
+                  zf.writestr(info, path.read_bytes())
 
           with zipfile.ZipFile(out) as zf:
               names = zf.namelist()
@@ -120,17 +63,46 @@ jobs:
               raise SystemExit('submission.zip is missing root agent.yaml')
           if any(name.startswith('submission/') for name in names):
               raise SystemExit('submission.zip incorrectly contains a submission/ wrapper directory')
+          digest = hashlib.sha256(out.read_bytes()).hexdigest()
+          Path('submission.sha256').write_text(f'{digest}  submission.zip\n', encoding='utf-8')
           print('submission.zip bytes:', out.stat().st_size)
+          print('submission.zip sha256:', digest)
           print('submission.zip files:', names)
           PY
+
+      - name: Require exact prevalidated archive SHA
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.validated_sha256 }}
+        run: |
+          set -euo pipefail
+          ACTUAL_SHA="$(awk '{print $1}' submission.sha256)"
+          EXPECTED_SHA="$(printf '%s' "$EXPECTED_SHA" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+          if [[ ! "$EXPECTED_SHA" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "validated SHA must be exactly 64 hexadecimal characters" >&2
+            exit 1
+          fi
+          if [[ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]]; then
+            echo "validated SHA mismatch: actual=$ACTUAL_SHA expected=$EXPECTED_SHA" >&2
+            exit 1
+          fi
+          sha256sum -c submission.sha256
+          echo "Exact prevalidated archive confirmed: $ACTUAL_SHA"
 
       - name: Upload exact submission artifact before quota-consuming action
         uses: actions/upload-artifact@v4
         with:
           name: gemma4-baseline-e4b-submission-${{ github.sha }}
-          path: submission.zip
+          path: |
+            submission.zip
+            submission.sha256
           if-no-files-found: error
           retention-days: 30
+
+      - name: Install Kaggle CLI
+        run: |
+          python -m pip install --disable-pip-version-check 'kaggle==2.2.5' 'six==1.17.0'
+          kaggle --version
 
       - name: Show current competition submissions
         shell: bash
@@ -149,12 +121,13 @@ jobs:
             exit 1
           fi
 
-      - name: Submit baseline to Kaggle
+      - name: Submit exact validated baseline to Kaggle
         shell: bash
         env:
           INPUT_MESSAGE: ${{ inputs.message }}
         run: |
           set -euo pipefail
+          sha256sum -c submission.sha256
           message="$INPUT_MESSAGE"
           if [[ -z "$message" ]]; then
             message="baseline-e4b-v0 ${GITHUB_SHA:0:12}"
