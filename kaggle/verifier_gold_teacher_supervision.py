@@ -128,8 +128,9 @@ def build_teacher_supervision_record(
     """Build one normalized record from deterministic gold-workspace evidence.
 
     A record is auto-approved only when both diff gates and the targeted pytest
-    gate all return zero. Failed evidence is retained for audit but never gets a
-    positive label or submit action.
+    gate return zero, the patch diff is non-empty, and the targeted test leaves
+    that diff unchanged. Failed or unstable evidence is retained for audit but
+    never gets a positive label or submit action.
     """
     if not isinstance(instance_id, str) or not instance_id:
         raise ValueError("instance_id is required")
@@ -141,7 +142,11 @@ def build_teacher_supervision_record(
     pre = _normalize_evidence("pre_diff", pre_diff)
     test = _normalize_evidence("targeted_test", targeted_test)
     final = _normalize_evidence("final_diff", final_diff)
-    approved = pre["exit_code"] == test["exit_code"] == final["exit_code"] == 0
+
+    all_exit_zero = pre["exit_code"] == test["exit_code"] == final["exit_code"] == 0
+    diff_empty = not pre["output"].strip() or not final["output"].strip()
+    diff_changed_during_test = pre["output"] != final["output"]
+    approved = all_exit_zero and not diff_empty and not diff_changed_during_test
 
     steps: list[dict[str, Any]] = [
         {
@@ -172,8 +177,8 @@ def build_teacher_supervision_record(
             }
         )
 
-    failed_gates = [
-        name
+    audit_flags = [
+        f"failed_{name}"
         for name, evidence in (
             ("pre_diff", pre),
             ("targeted_test", test),
@@ -181,6 +186,11 @@ def build_teacher_supervision_record(
         )
         if evidence["exit_code"] != 0
     ]
+    if diff_empty:
+        audit_flags.append("empty_diff")
+    if diff_changed_during_test:
+        audit_flags.append("diff_changed_during_test")
+
     return {
         "instance_id": instance_id,
         "approved": approved,
@@ -188,5 +198,5 @@ def build_teacher_supervision_record(
         "source": "gold_patch_targeted_test",
         "problem_description": problem_description.strip(),
         "steps": steps,
-        "audit_flags": [f"failed_{name}" for name in failed_gates],
+        "audit_flags": audit_flags,
     }
