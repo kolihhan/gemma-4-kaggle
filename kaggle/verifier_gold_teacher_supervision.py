@@ -9,13 +9,57 @@ consumed by ``scripts/build_verifier_sft.py``.
 from __future__ import annotations
 
 import ast
+import csv
 import json
+from pathlib import Path
 import shlex
+import sys
 from typing import Any
 
 
 TARGET_PLAN_VERSION = "verifier-lora-v0-targeted-tests"
 DIFF_COMMAND = "git diff --check && git diff"
+
+
+def load_reference_patch_map(secret_dir: Path) -> dict[str, str]:
+    """Load only training reference patches from perfect_submission.
+
+    The competition secret bundle also contains hidden verifier test patches in
+    ``solution.*``. This loader intentionally never opens those files.
+    """
+    secret_dir = Path(secret_dir)
+    parquet_path = secret_dir / "perfect_submission.parquet"
+    csv_path = secret_dir / "perfect_submission.csv"
+    patch_map: dict[str, str] = {}
+
+    if parquet_path.is_file():
+        import pandas as pd
+
+        frame = pd.read_parquet(parquet_path)
+        for row in frame.to_dict(orient="records"):
+            instance_id = str(row.get("id") or row.get("instance_id") or "").strip()
+            patch = str(row.get("prediction") or row.get("patch") or "")
+            if instance_id and patch:
+                patch_map[instance_id] = patch
+    elif csv_path.is_file():
+        try:
+            csv.field_size_limit(sys.maxsize)
+        except OverflowError:
+            csv.field_size_limit(2**31 - 1)
+        with csv_path.open(encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle):
+                instance_id = str(row.get("id") or row.get("instance_id") or "").strip()
+                patch = str(row.get("prediction") or row.get("patch") or "")
+                if instance_id and patch:
+                    patch_map[instance_id] = patch
+    else:
+        raise FileNotFoundError(
+            f"perfect_submission reference-patch bundle not found under {secret_dir}"
+        )
+
+    if not patch_map:
+        raise ValueError("perfect_submission contains no reference patches")
+    return patch_map
 
 
 def _classify_verification(command: str) -> str:
