@@ -48,6 +48,21 @@
         ],
         "round": 1,
         "same_repo_fallback_allowed": false
+      },
+      {
+        "reason": "gold_control_confounded",
+        "replacements": [
+          {
+            "from": "fastapi_14356",
+            "from_patch_bucket": "11-30",
+            "repo": "fastapi/fastapi",
+            "selection_scope": "same_repo_same_bucket",
+            "to": "fastapi_14873",
+            "to_patch_bucket": "11-30"
+          }
+        ],
+        "round": 2,
+        "same_repo_fallback_allowed": false
       }
     ],
     "hash_namespace": "verifier-lora-v0-blind:<instance_id>",
@@ -100,7 +115,7 @@
       "repo": "fastapi/fastapi"
     },
     {
-      "instance_id": "fastapi_14356",
+      "instance_id": "fastapi_14873",
       "patch_bucket": "11-30",
       "repo": "fastapi/fastapi"
     },
