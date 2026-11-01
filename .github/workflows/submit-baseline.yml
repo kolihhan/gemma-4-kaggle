@@ -1,0 +1,139 @@
+name: Submit baseline E4B agent to Kaggle
+
+on:
+  workflow_dispatch:
+    inputs:
+      validated_sha256:
+        description: 'SHA-256 printed by the successful baseline preflight'
+        required: true
+        type: string
+      confirm:
+        description: 'Type SUBMIT to consume today\'s competition submission quota'
+        required: true
+        type: string
+      message:
+        description: 'Kaggle submission message (optional)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      COMPETITION: gemma-4-developer-agent
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Package canonical submission.zip deterministically
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f submission/agent.yaml
+          rm -f submission.zip submission.sha256
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import zipfile
+
+          root = Path('submission')
+          out = Path('submission.zip')
+          with zipfile.ZipFile(out, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+              for path in sorted(root.rglob('*')):
+                  if not path.is_file():
+                      continue
+                  info = zipfile.ZipInfo(path.relative_to(root).as_posix())
+                  info.date_time = (1980, 1, 1, 0, 0, 0)
+                  info.compress_type = zipfile.ZIP_DEFLATED
+                  info.external_attr = 0o100644 << 16
+                  zf.writestr(info, path.read_bytes())
+
+          with zipfile.ZipFile(out) as zf:
+              names = zf.namelist()
+          if 'agent.yaml' not in names:
+              raise SystemExit('submission.zip is missing root agent.yaml')
+          if any(name.startswith('submission/') for name in names):
+              raise SystemExit('submission.zip incorrectly contains a submission/ wrapper directory')
+          digest = hashlib.sha256(out.read_bytes()).hexdigest()
+          Path('submission.sha256').write_text(f'{digest}  submission.zip\n', encoding='utf-8')
+          print('submission.zip bytes:', out.stat().st_size)
+          print('submission.zip sha256:', digest)
+          print('submission.zip files:', names)
+          PY
+
+      - name: Require exact prevalidated archive SHA
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.validated_sha256 }}
+        run: |
+          set -euo pipefail
+          ACTUAL_SHA="$(awk '{print $1}' submission.sha256)"
+          EXPECTED_SHA="$(printf '%s' "$EXPECTED_SHA" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+          if [[ ! "$EXPECTED_SHA" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "validated SHA must be exactly 64 hexadecimal characters" >&2
+            exit 1
+          fi
+          if [[ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]]; then
+            echo "validated SHA mismatch: actual=$ACTUAL_SHA expected=$EXPECTED_SHA" >&2
+            exit 1
+          fi
+          sha256sum -c submission.sha256
+          echo "Exact prevalidated archive confirmed: $ACTUAL_SHA"
+
+      - name: Upload exact submission artifact before quota-consuming action
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemma4-baseline-e4b-submission-${{ github.sha }}
+          path: |
+            submission.zip
+            submission.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Install Kaggle CLI
+        run: |
+          python -m pip install --disable-pip-version-check 'kaggle==2.2.5' 'six==1.17.0'
+          kaggle --version
+
+      - name: Show current competition submissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle competitions submissions "$COMPETITION" --page-size 10 || true
+
+      - name: Require explicit quota confirmation
+        shell: bash
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          if [[ "$CONFIRM" != 'SUBMIT' ]]; then
+            echo "Refusing Kaggle submission: confirm input must equal SUBMIT" >&2
+            exit 1
+          fi
+
+      - name: Submit exact validated baseline to Kaggle
+        shell: bash
+        env:
+          INPUT_MESSAGE: ${{ inputs.message }}
+        run: |
+          set -euo pipefail
+          sha256sum -c submission.sha256
+          message="$INPUT_MESSAGE"
+          if [[ -z "$message" ]]; then
+            message="baseline-e4b-v0 ${GITHUB_SHA:0:12}"
+          fi
+          kaggle competitions submit "$COMPETITION" \
+            -f submission.zip \
+            -m "$message" | tee kaggle-submit.txt
+          echo '--- latest submissions ---'
+          kaggle competitions submissions "$COMPETITION" --page-size 10 || true
