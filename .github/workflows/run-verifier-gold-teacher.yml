@@ -4,6 +4,7 @@ on:
   push:
     branches: [exp/verifier-lora-v0]
     paths:
+      - "docs/evaluation/verifier-lora-train-subset-v0.json"
       - "docs/evaluation/verifier-lora-training-gold-screen-v0.json"
       - "kaggle/verifier_gold_teacher_runtime.py"
       - "submission/prompts/verifier.md"
