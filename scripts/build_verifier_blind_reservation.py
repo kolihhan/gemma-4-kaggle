@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Reserve verifier-LoRA blind candidates from metadata-only training manifests."""
+"""Reserve and replace verifier-LoRA blind candidates from metadata only."""
 
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 from collections import Counter, defaultdict
@@ -49,6 +50,14 @@ def _validate_item(item: dict, *, where: str) -> None:
     for key in ("instance_id", "repo", "patch_bucket"):
         if not str(item.get(key) or ""):
             raise ValueError(f"{where} item missing {key}: {item!r}")
+
+
+def _clean_item(item: dict) -> dict[str, str]:
+    return {
+        "instance_id": str(item["instance_id"]),
+        "repo": str(item["repo"]),
+        "patch_bucket": str(item["patch_bucket"]),
+    }
 
 
 def _choose_repo(candidates: list[dict], quota: int, repo: str) -> list[dict]:
@@ -113,14 +122,7 @@ def build_blind_reservation(
             raise ValueError(f"negative blind quota for {repo}: {repo_count}")
         selected.extend(_choose_repo(by_repo.get(repo, []), repo_count, repo))
 
-    selected = [
-        {
-            "instance_id": str(item["instance_id"]),
-            "repo": str(item["repo"]),
-            "patch_bucket": str(item["patch_bucket"]),
-        }
-        for item in selected
-    ]
+    selected = [_clean_item(item) for item in selected]
     selected.sort(key=_manifest_sort_key)
     selected_ids = [item["instance_id"] for item in selected]
     if len(selected_ids) != len(set(selected_ids)):
@@ -147,6 +149,153 @@ def build_blind_reservation(
     }
 
 
+def _historical_blind_ids(reservation: dict) -> set[str]:
+    ids = {
+        str(item.get("instance_id") or "")
+        for item in reservation.get("tasks") or []
+        if isinstance(item, dict) and str(item.get("instance_id") or "")
+    }
+    selection = reservation.get("selection") or {}
+    rounds = selection.get("gold_control_replacement_rounds") or []
+    if not isinstance(rounds, list):
+        raise ValueError("blind replacement history must be a list")
+    for round_item in rounds:
+        if not isinstance(round_item, dict):
+            raise ValueError("blind replacement round must be an object")
+        replacements = round_item.get("replacements") or []
+        if not isinstance(replacements, list):
+            raise ValueError("blind replacement entries must be a list")
+        for replacement in replacements:
+            if not isinstance(replacement, dict):
+                raise ValueError("blind replacement entry must be an object")
+            for key in ("from", "to"):
+                value = str(replacement.get(key) or "")
+                if value:
+                    ids.add(value)
+    return ids
+
+
+def replace_confounded_blind(
+    reservation: dict,
+    split: dict,
+    training_subset: dict,
+    confounded_ids: set[str],
+    *,
+    allow_same_repo_fallback: bool = False,
+) -> dict:
+    """Replace gold-confounded blind slots without consulting task content.
+
+    By default a replacement must come from the same repository and patch-size
+    bucket. If that exact bucket is exhausted, callers may *explicitly* enable a
+    deterministic same-repository fallback. Harvested tasks, current blind IDs,
+    and every historical blind ID are permanently ineligible.
+    """
+    if reservation.get("version") != VERSION:
+        raise ValueError(f"unexpected blind reservation version: {reservation.get('version')!r}")
+    if split.get("version") != "verifier-lora-v0":
+        raise ValueError(f"unexpected split version: {split.get('version')!r}")
+    if training_subset.get("version") != "verifier-lora-v0-train-harvest":
+        raise ValueError(f"unexpected training subset version: {training_subset.get('version')!r}")
+
+    current = list(reservation.get("tasks") or [])
+    train = list(split.get("train") or [])
+    harvested = list(training_subset.get("tasks") or [])
+    for item in current:
+        _validate_item(item, where="reservation.tasks")
+    for item in train:
+        _validate_item(item, where="split.train")
+    for item in harvested:
+        _validate_item(item, where="training_subset.tasks")
+
+    confounded = {str(value) for value in confounded_ids if str(value)}
+    if not confounded:
+        return copy.deepcopy(reservation)
+    current_by_id = {str(item["instance_id"]): item for item in current}
+    missing = sorted(confounded - set(current_by_id))
+    if missing:
+        raise ValueError(f"confounded id(s) are not in current blind reservation: {missing}")
+
+    harvested_ids = {str(item["instance_id"]) for item in harvested}
+    blocked_ids = _historical_blind_ids(reservation) | harvested_ids
+    pool = [
+        item
+        for item in train
+        if str(item["instance_id"]) not in blocked_ids
+    ]
+
+    result = copy.deepcopy(reservation)
+    tasks = list(result.get("tasks") or [])
+    replacement_log: list[dict[str, str]] = []
+
+    for failed_id in sorted(confounded, key=lambda value: _manifest_sort_key(current_by_id[value])):
+        failed = current_by_id[failed_id]
+        repo = str(failed["repo"])
+        bucket = str(failed["patch_bucket"])
+        candidates = [
+            item
+            for item in pool
+            if str(item["repo"]) == repo and str(item["patch_bucket"]) == bucket
+        ]
+        selection_scope = "same_repo_same_bucket"
+        if not candidates and allow_same_repo_fallback:
+            candidates = [item for item in pool if str(item["repo"]) == repo]
+            selection_scope = "same_repo_fallback"
+        if not candidates:
+            raise ValueError(
+                f"no same repo/bucket blind replacement candidate for {failed_id}: {repo} / {bucket}"
+            )
+
+        replacement = min(candidates, key=lambda item: _stable_key(str(item["instance_id"])))
+        replacement = _clean_item(replacement)
+        replacement_id = replacement["instance_id"]
+        pool = [item for item in pool if str(item["instance_id"]) != replacement_id]
+        blocked_ids.add(replacement_id)
+        tasks = [item for item in tasks if str(item["instance_id"]) != failed_id]
+        tasks.append(replacement)
+        replacement_log.append(
+            {
+                "from": failed_id,
+                "to": replacement_id,
+                "repo": repo,
+                "selection_scope": selection_scope,
+                "from_patch_bucket": bucket,
+                "to_patch_bucket": replacement["patch_bucket"],
+            }
+        )
+
+    tasks.sort(key=_manifest_sort_key)
+    task_ids = [str(item["instance_id"]) for item in tasks]
+    if len(task_ids) != len(set(task_ids)):
+        raise ValueError("replacement produced duplicate blind task IDs")
+
+    original_counts = copy.deepcopy(reservation.get("counts") or {})
+    expected_tasks = int(original_counts.get("tasks") or len(current))
+    if len(tasks) != expected_tasks:
+        raise ValueError(
+            f"replacement changed blind denominator size: {len(tasks)} != {expected_tasks}"
+        )
+    original_repo_counts = Counter(str(item["repo"]) for item in current)
+    new_repo_counts = Counter(str(item["repo"]) for item in tasks)
+    if original_repo_counts != new_repo_counts:
+        raise ValueError("replacement changed blind repository quotas")
+
+    selection = copy.deepcopy(result.get("selection") or {})
+    rounds = list(selection.get("gold_control_replacement_rounds") or [])
+    rounds.append(
+        {
+            "round": len(rounds) + 1,
+            "reason": "gold_control_confounded",
+            "same_repo_fallback_allowed": bool(allow_same_repo_fallback),
+            "replacements": replacement_log,
+        }
+    )
+    selection["gold_control_replacement_rounds"] = rounds
+    result["selection"] = selection
+    result["tasks"] = tasks
+    result["counts"] = original_counts
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -160,6 +309,17 @@ def main() -> int:
         default=Path("docs/evaluation/verifier-lora-train-subset-v0.json"),
     )
     parser.add_argument(
+        "--input-reservation",
+        type=Path,
+        help="existing blind reservation to update after automated gold-control screening",
+    )
+    parser.add_argument("--replace-confounded", nargs="*", default=[])
+    parser.add_argument(
+        "--allow-same-repo-fallback",
+        action="store_true",
+        help="when the exact patch bucket is exhausted, allow a deterministic same-repo replacement",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path("docs/evaluation/verifier-lora-blind-reservation-v0.json"),
@@ -168,7 +328,24 @@ def main() -> int:
 
     split = json.loads(args.split.read_text(encoding="utf-8"))
     training_subset = json.loads(args.training_subset.read_text(encoding="utf-8"))
-    reservation = build_blind_reservation(split, training_subset)
+    if args.input_reservation is not None:
+        if not args.replace_confounded:
+            parser.error("--input-reservation requires one or more --replace-confounded IDs")
+        reservation = json.loads(args.input_reservation.read_text(encoding="utf-8"))
+        reservation = replace_confounded_blind(
+            reservation,
+            split,
+            training_subset,
+            set(args.replace_confounded),
+            allow_same_repo_fallback=args.allow_same_repo_fallback,
+        )
+    else:
+        if args.replace_confounded:
+            parser.error("--replace-confounded requires --input-reservation")
+        if args.allow_same_repo_fallback:
+            parser.error("--allow-same-repo-fallback requires --input-reservation")
+        reservation = build_blind_reservation(split, training_subset)
+
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(reservation, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(reservation, indent=2, sort_keys=True))
