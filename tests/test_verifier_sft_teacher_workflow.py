@@ -1,6 +1,8 @@
 from pathlib import Path
 import unittest
 
+from kaggle.verifier_gold_teacher_supervision import DIFF_COMMAND
+
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "kaggle" / "verifier_sft_teacher_runtime.py"
@@ -17,7 +19,8 @@ class VerifierSftTeacherRuntimeContractTests(unittest.TestCase):
         self.assertIn("build_teacher_supervision_record", source)
         self.assertIn("apply_patch_in_container", source)
         self.assertIn("original_setup_baseline_commit", source)
-        self.assertIn("git diff --check && git diff", source)
+        self.assertEqual(DIFF_COMMAND, "git diff --check && git diff")
+        self.assertIn("DIFF_COMMAND", source)
         self.assertIn('SUPERVISION_PATH = WORKING_DIR / "verifier_gold_teacher_supervision.json"', source)
         self.assertNotIn("blind_evaluation", source)
         self.assertNotIn("test_patch", source)
