@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ROOT / "docs" / "evaluation" / "verifier-lora-eval-contract-v1.json"
 SCREEN = ROOT / "docs" / "evaluation" / "verifier-lora-gold-screen-v0.json"
 TRAIN_SUBSET = ROOT / "docs" / "evaluation" / "verifier-lora-train-subset-v0.json"
+BLIND_RESERVATION = ROOT / "docs" / "evaluation" / "verifier-lora-blind-reservation-v0.json"
 
 EXPECTED_DEV_IDS = {
     "rich_3061",
@@ -26,6 +27,7 @@ class VerifierEvaluationContractTests(unittest.TestCase):
         self.contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
         self.screen = json.loads(SCREEN.read_text(encoding="utf-8"))
         self.train_subset = json.loads(TRAIN_SUBSET.read_text(encoding="utf-8"))
+        self.blind_reservation = json.loads(BLIND_RESERVATION.read_text(encoding="utf-8"))
 
     def test_inspected_clean_set_is_development_validation_not_blind(self):
         dev_ids = set(self.contract["development_validation"]["instance_ids"])
@@ -39,23 +41,24 @@ class VerifierEvaluationContractTests(unittest.TestCase):
         self.assertEqual(coverage, {"Textualize/rich": 4, "fastapi/fastapi": 5, "psf/requests": 0})
         self.assertIn("Requests", self.contract["development_validation"]["claim_limit"])
 
-    def test_blind_set_must_be_frozen_before_promotion(self):
+    def test_blind_contract_matches_frozen_reservation_exactly(self):
         blind = self.contract["blind_evaluation"]
-        self.assertIn(blind["status"], {"pending_freeze", "frozen"})
+        reservation_ids = [item["instance_id"] for item in self.blind_reservation["tasks"]]
+        self.assertEqual(blind["status"], "frozen")
+        self.assertEqual(blind["source"], "docs/evaluation/verifier-lora-blind-reservation-v0.json")
+        self.assertEqual(blind["instance_ids"], reservation_ids)
+        self.assertEqual(blind["coverage"], self.blind_reservation["counts"]["by_repo"])
+        self.assertEqual(blind["claim_limit"], self.blind_reservation["coverage_limit"])
+        self.assertTrue(blind["automated_gold_control_only"])
+        self.assertTrue(blind["base_failure_traces_uninspected_before_adapter_freeze"])
         self.assertTrue(self.contract["promotion"]["requires_frozen_blind_evaluation"])
 
         blind_ids = set(blind["instance_ids"])
         harvested_ids = {item["instance_id"] for item in self.train_subset["tasks"]}
         self.assertFalse(blind_ids & harvested_ids)
+        self.assertEqual(len(blind_ids), 10)
 
-        if blind["status"] == "pending_freeze":
-            self.assertEqual(blind_ids, set())
-        else:
-            self.assertTrue(blind_ids)
-            self.assertTrue(blind["automated_gold_control_only"])
-            self.assertTrue(blind["base_failure_traces_uninspected_before_adapter_freeze"])
-
-    def test_no_adapter_artifact_is_promotable_while_blind_is_pending(self):
+    def test_no_adapter_artifact_is_promotable_without_frozen_blind_contract(self):
         adapter_dir = ROOT / "submission" / "adapters"
         adapter_files = list(adapter_dir.rglob("*.safetensors")) if adapter_dir.exists() else []
         if adapter_files:
