@@ -5,6 +5,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "kaggle" / "verifier_baseline_runtime.py"
+WORKFLOW = ROOT / ".github" / "workflows" / "run-verifier-baseline.yml"
+EXPECTED_KERNEL_REF = "kolihhan/gemma-4-verifier-heldout-e4b-baseline-v0"
 
 
 class VerifierBaselineRuntimeContractTests(unittest.TestCase):
@@ -71,6 +73,13 @@ class VerifierBaselineRuntimeContractTests(unittest.TestCase):
             self.assertIn(token, text)
         self.assertNotIn('"agent_patch":', text)
         self.assertIn("BASELINE_RESULT", text)
+
+    def test_workflow_uses_actual_kaggle_kernel_slug_for_push_poll_and_collect(self):
+        text = WORKFLOW.read_text(encoding="utf-8")
+
+        self.assertIn(f"KERNEL_REF: {EXPECTED_KERNEL_REF}", text)
+        self.assertIn(f'"id": "{EXPECTED_KERNEL_REF}"', text)
+        self.assertNotIn("kolihhan/gemma-4-verifier-baseline-v0", text)
 
 
 if __name__ == "__main__":
