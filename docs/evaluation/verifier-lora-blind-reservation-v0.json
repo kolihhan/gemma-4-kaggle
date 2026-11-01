@@ -1,0 +1,83 @@
+{
+  "counts": {
+    "by_repo": {
+      "Textualize/rich": 4,
+      "fastapi/fastapi": 6,
+      "psf/requests": 0
+    },
+    "tasks": 10
+  },
+  "coverage_limit": "No untouched Requests tasks remain in the current training-side pool: both Requests train tasks are already in the frozen trace-harvest subset. Blind v0 therefore supports Rich/FastAPI only and cannot establish Requests generalization.",
+  "selection": {
+    "hash_namespace": "verifier-lora-v0-blind:<instance_id>",
+    "metadata_only": true,
+    "method": "bucket-round-robin-sha256-from-unharvested-training-pool",
+    "patch_bucket_order": [
+      "1-10",
+      "11-30",
+      "31-80",
+      "81+",
+      "0"
+    ],
+    "quota_by_repo": {
+      "Textualize/rich": 4,
+      "fastapi/fastapi": 6,
+      "psf/requests": 0
+    }
+  },
+  "source_split_version": "verifier-lora-v0",
+  "source_training_subset_version": "verifier-lora-v0-train-harvest",
+  "tasks": [
+    {
+      "instance_id": "rich_3105",
+      "patch_bucket": "1-10",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3469",
+      "patch_bucket": "1-10",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3777",
+      "patch_bucket": "11-30",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3052",
+      "patch_bucket": "31-80",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "fastapi_14791",
+      "patch_bucket": "1-10",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_9425",
+      "patch_bucket": "1-10",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14349",
+      "patch_bucket": "11-30",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_9555",
+      "patch_bucket": "11-30",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_15280",
+      "patch_bucket": "31-80",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_15745",
+      "patch_bucket": "81+",
+      "repo": "fastapi/fastapi"
+    }
+  ],
+  "version": "verifier-lora-v0-blind-reservation"
+}
