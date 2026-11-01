@@ -6,6 +6,7 @@ import unittest
 
 from kaggle.verifier_gold_teacher_supervision import (
     build_teacher_safe_stop_record,
+    find_reference_patch_dir,
     load_reference_patch_map,
 )
 
@@ -24,6 +25,29 @@ INLINE_ASSERT = (
 
 
 class VerifierSftTeacherModelFreeContractTests(unittest.TestCase):
+    def test_reference_patch_dir_discovery_ignores_hidden_only_secret_dir(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            competition = root / "competitions" / "example"
+            competition.mkdir(parents=True)
+            tasks_path = competition / "tasks.jsonl"
+            tasks_path.write_text("", encoding="utf-8")
+
+            near_secret = competition / "secret"
+            near_secret.mkdir()
+            (near_secret / "solution.csv").write_text("hidden-only\n", encoding="utf-8")
+
+            reference_secret = root / "competitions" / "secret"
+            reference_secret.mkdir(parents=True)
+            (reference_secret / "perfect_submission.csv").write_text(
+                "id,prediction\ntask_1,patch\n", encoding="utf-8"
+            )
+
+            self.assertEqual(
+                find_reference_patch_dir([tasks_path]),
+                reference_secret,
+            )
+
     def test_reference_patch_loader_uses_only_perfect_submission(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             secret_dir = Path(temp_dir)
@@ -67,6 +91,7 @@ class VerifierSftTeacherModelFreeContractTests(unittest.TestCase):
 
     def test_teacher_never_hydrates_hidden_test_patch_bundle(self):
         source = RUNTIME.read_text(encoding="utf-8")
+        self.assertIn("find_reference_patch_dir", source)
         self.assertIn("load_reference_patch_map", source)
         self.assertNotIn("_hydrate_task_from_secret", source)
         self.assertNotIn("_get_secret_bundle_data", source)
