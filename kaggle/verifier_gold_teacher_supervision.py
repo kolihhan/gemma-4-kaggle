@@ -1,13 +1,14 @@
 """Leakage-bounded helpers for deterministic verifier-LoRA supervision.
 
 This module does not read blind tasks or hidden test patches. It validates a
-frozen training-only targeted-test plan and converts deterministic evidence from
-a gold-patched training workspace into the normalized record contract consumed
-by ``scripts/build_verifier_sft.py``.
+frozen training-only verification plan and converts deterministic evidence from
+base and gold-patched training workspaces into the normalized record contract
+consumed by ``scripts/build_verifier_sft.py``.
 """
 
 from __future__ import annotations
 
+import ast
 import json
 import shlex
 from typing import Any
@@ -17,15 +18,23 @@ TARGET_PLAN_VERSION = "verifier-lora-v0-targeted-tests"
 DIFF_COMMAND = "git diff --check && git diff"
 
 
-def _classify_pytest(command: str) -> str:
+def _classify_verification(command: str) -> str:
     if not isinstance(command, str) or not command.strip():
         return "not_test"
-    if any(token in command for token in (";", "&&", "||", "|", "`", "$((", "$(")):
-        return "unsafe"
     try:
         tokens = shlex.split(command)
     except ValueError:
         return "unsafe"
+    if not tokens or any(token in {"&&", "||", "|", ";", "`"} for token in tokens):
+        return "unsafe"
+
+    executable = tokens[0].rsplit("/", 1)[-1]
+    if executable in {"python", "python3"} and len(tokens) == 3 and tokens[1] == "-c":
+        try:
+            tree = ast.parse(tokens[2])
+        except SyntaxError:
+            return "unsafe"
+        return "targeted" if any(isinstance(node, ast.Assert) for node in ast.walk(tree)) else "not_test"
 
     pytest_index = None
     for index, token in enumerate(tokens):
@@ -71,7 +80,7 @@ def _classify_pytest(command: str) -> str:
 
 
 def load_targeted_test_plan(plan_json: str, clean_training_ids: set[str]) -> dict[str, str]:
-    """Validate a frozen targeted-test plan against gold-clean training IDs."""
+    """Validate a frozen targeted verification plan against gold-clean training IDs."""
     try:
         payload = json.loads(plan_json)
     except json.JSONDecodeError as exc:
@@ -98,8 +107,8 @@ def load_targeted_test_plan(plan_json: str, clean_training_ids: set[str]) -> dic
             raise ValueError(f"duplicate targeted-test task: {instance_id}")
         if instance_id not in clean_training_ids:
             raise ValueError(f"targeted-test task is not gold-clean training data: {instance_id}")
-        if not isinstance(command, str) or _classify_pytest(command) != "targeted":
-            raise ValueError(f"{instance_id}: command is not a safe targeted pytest gate")
+        if not isinstance(command, str) or _classify_verification(command) != "targeted":
+            raise ValueError(f"{instance_id}: command is not a safe targeted verification gate")
         result[instance_id] = command
     return result
 
@@ -116,6 +125,85 @@ def _normalize_evidence(name: str, value: dict[str, Any]) -> dict[str, Any]:
     return {"exit_code": exit_code, "output": output}
 
 
+def _evidence_steps(
+    targeted_command: str,
+    pre: dict[str, Any],
+    test: dict[str, Any],
+    final: dict[str, Any],
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "tool": "run_command",
+            "arguments": {"command": DIFF_COMMAND},
+            "assistant_text": "Inspect the current patch before verification.",
+            "result": pre,
+        },
+        {
+            "tool": "run_command",
+            "arguments": {"command": targeted_command},
+            "assistant_text": "Run the smallest task-relevant regression check.",
+            "result": test,
+        },
+        {
+            "tool": "run_command",
+            "arguments": {"command": DIFF_COMMAND},
+            "assistant_text": "Re-check the working tree after verification.",
+            "result": final,
+        },
+    ]
+
+
+def build_teacher_safe_stop_record(
+    *,
+    instance_id: str,
+    problem_description: str,
+    targeted_command: str,
+    pre_diff: dict[str, Any],
+    targeted_test: dict[str, Any],
+    final_diff: dict[str, Any],
+) -> dict[str, Any]:
+    """Build safe-stop supervision from a clean base state with failing evidence."""
+    if not isinstance(instance_id, str) or not instance_id:
+        raise ValueError("instance_id is required")
+    if not isinstance(problem_description, str) or not problem_description.strip():
+        raise ValueError("problem_description is required")
+    if _classify_verification(targeted_command) != "targeted":
+        raise ValueError("targeted_command must be a safe targeted verification gate")
+
+    pre = _normalize_evidence("pre_diff", pre_diff)
+    test = _normalize_evidence("targeted_test", targeted_test)
+    final = _normalize_evidence("final_diff", final_diff)
+
+    diff_clean = not pre["output"].strip() and not final["output"].strip()
+    diff_stable = pre["output"] == final["output"]
+    diff_checks_pass = pre["exit_code"] == 0 and final["exit_code"] == 0
+    targeted_failed = test["exit_code"] != 0
+    approved = diff_clean and diff_stable and diff_checks_pass and targeted_failed
+
+    audit_flags: list[str] = []
+    if pre["exit_code"] != 0:
+        audit_flags.append("failed_pre_diff")
+    if final["exit_code"] != 0:
+        audit_flags.append("failed_final_diff")
+    if test["exit_code"] == 0:
+        audit_flags.append("targeted_test_unexpectedly_passed")
+    if pre["output"].strip() or final["output"].strip():
+        audit_flags.append("dirty_base_diff")
+    if not diff_stable:
+        audit_flags.append("base_diff_changed_during_test")
+
+    return {
+        "instance_id": instance_id,
+        "example_id": f"{instance_id}:base-fail",
+        "approved": approved,
+        "label": "safe_stop" if approved else None,
+        "source": "base_targeted_failure",
+        "problem_description": problem_description.strip(),
+        "steps": _evidence_steps(targeted_command, pre, test, final),
+        "audit_flags": audit_flags,
+    }
+
+
 def build_teacher_supervision_record(
     *,
     instance_id: str,
@@ -125,19 +213,13 @@ def build_teacher_supervision_record(
     targeted_test: dict[str, Any],
     final_diff: dict[str, Any],
 ) -> dict[str, Any]:
-    """Build one normalized record from deterministic gold-workspace evidence.
-
-    A record is auto-approved only when both diff gates and the targeted pytest
-    gate return zero, the patch diff is non-empty, and the targeted test leaves
-    that diff unchanged. Failed or unstable evidence is retained for audit but
-    never gets a positive label or submit action.
-    """
+    """Build verified-submit supervision from deterministic gold-workspace evidence."""
     if not isinstance(instance_id, str) or not instance_id:
         raise ValueError("instance_id is required")
     if not isinstance(problem_description, str) or not problem_description.strip():
         raise ValueError("problem_description is required")
-    if _classify_pytest(targeted_command) != "targeted":
-        raise ValueError("targeted_command must be a safe targeted pytest gate")
+    if _classify_verification(targeted_command) != "targeted":
+        raise ValueError("targeted_command must be a safe targeted verification gate")
 
     pre = _normalize_evidence("pre_diff", pre_diff)
     test = _normalize_evidence("targeted_test", targeted_test)
@@ -148,26 +230,7 @@ def build_teacher_supervision_record(
     diff_changed_during_test = pre["output"] != final["output"]
     approved = all_exit_zero and not diff_empty and not diff_changed_during_test
 
-    steps: list[dict[str, Any]] = [
-        {
-            "tool": "run_command",
-            "arguments": {"command": DIFF_COMMAND},
-            "assistant_text": "Inspect the current patch before verification.",
-            "result": pre,
-        },
-        {
-            "tool": "run_command",
-            "arguments": {"command": targeted_command},
-            "assistant_text": "Run the smallest task-relevant regression test.",
-            "result": test,
-        },
-        {
-            "tool": "run_command",
-            "arguments": {"command": DIFF_COMMAND},
-            "assistant_text": "Re-check patch integrity immediately before submission.",
-            "result": final,
-        },
-    ]
+    steps = _evidence_steps(targeted_command, pre, test, final)
     if approved:
         steps.append(
             {
@@ -193,6 +256,7 @@ def build_teacher_supervision_record(
 
     return {
         "instance_id": instance_id,
+        "example_id": f"{instance_id}:gold-pass",
         "approved": approved,
         "label": "verified_submit" if approved else None,
         "source": "gold_patch_targeted_test",
