@@ -10,6 +10,7 @@ on:
       - "kaggle/verifier_gold_teacher_runtime.py"
       - "kaggle/verifier_gold_teacher_supervision.py"
       - "kaggle/verifier_sft_teacher_runtime.py"
+      - "scripts/render_verifier_sft_teacher.py"
       - "scripts/build_verifier_sft.py"
       - "submission/prompts/verifier.md"
       - "submission/configs/sampling.yaml"
@@ -56,8 +57,9 @@ jobs:
           import base64
           import json
           import os
-          import shutil
           from pathlib import Path
+
+          from scripts.render_verifier_sft_teacher import bundle_runtime
 
           repo = Path.cwd()
           submission = repo / "submission"
@@ -117,15 +119,17 @@ jobs:
               'TARGETED_TEST_PLAN_JSON = "__VERIFIER_LORA_TARGETED_TEST_PLAN_JSON__"':
                   f"TARGETED_TEST_PLAN_JSON = {json.dumps(plan, sort_keys=True)!r}",
           }
-          rendered = runtime_template.read_text(encoding="utf-8")
+          rendered = bundle_runtime(
+              runtime_template.read_text(encoding="utf-8"),
+              gold_runtime.read_text(encoding="utf-8"),
+              helper.read_text(encoding="utf-8"),
+          )
           for old, new in replacements.items():
               if rendered.count(old) != 1:
                   raise SystemExit(f"unexpected runtime placeholder count for {old!r}: {rendered.count(old)}")
               rendered = rendered.replace(old, new, 1)
           compile(rendered, "verifier_sft_teacher_runtime.py", "exec")
           (kernel_dir / "verifier_sft_teacher_runtime.py").write_text(rendered, encoding="utf-8")
-          shutil.copy2(helper, kernel_dir / "verifier_gold_teacher_supervision.py")
-          shutil.copy2(gold_runtime, kernel_dir / "verifier_gold_teacher_runtime.py")
 
           metadata = {
               "id": "kolihhan/gemma-4-verifier-sft-teacher-v0",
@@ -150,6 +154,7 @@ jobs:
               json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
           )
           print("rendered_sft_teacher_ids=", target_ids)
+          print("rendered_code_files=", [p.name for p in kernel_dir.iterdir() if p.is_file()])
           PY
 
       - name: Push private Kaggle L4 deterministic-teacher kernel
