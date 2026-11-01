@@ -33,5 +33,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "--- google/gemma-4 variations ---"
-          kaggle models variations list google/gemma-4 -v --page-size 200
+          echo "--- CLI help ---"
+          kaggle models variations list --help
+          echo "--- google/gemma-4 variations (table) ---"
+          kaggle models variations list google/gemma-4 --page-size 200
