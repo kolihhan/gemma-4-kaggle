@@ -5,6 +5,7 @@ on:
     branches: [exp/verifier-lora-v0]
     paths:
       - "docs/evaluation/verifier-lora-blind-reservation-v0.json"
+      - ".github/workflows/run-verifier-blind-gold-sweep.yml"
 
 permissions:
   contents: read
