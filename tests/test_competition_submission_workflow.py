@@ -28,17 +28,25 @@ class CompetitionSubmissionWorkflowTests(unittest.TestCase):
         self.assertNotIn("\n  push:", source)
         self.assertNotIn("\n  pull_request:", source)
 
-    def test_pr_preflight_validates_and_packages_without_submitting(self):
+    def test_pr_preflight_validates_exact_zip_on_private_cpu_kaggle_kernel(self):
         self.assertTrue(PREFLIGHT.is_file())
         source = PREFLIGHT.read_text(encoding="utf-8")
         self.assertIn("pull_request", source)
         self.assertIn("submission/agent.yaml", source)
+        self.assertIn("submission.zip", source)
+        self.assertIn("submission.sha256", source)
+        self.assertIn("kaggle kernels push", source)
+        self.assertIn("kaggle kernels status", source)
+        self.assertIn("kaggle kernels output", source)
+        self.assertIn('"enable_gpu": False', source)
+        self.assertIn('"is_private": True', source)
         self.assertIn("validate_directory", source)
         self.assertIn("discover_declared_models", source)
+        self.assertIn("archive_sha256", source)
         self.assertIn("gemma-4-e4b-it-qat-w4a16-ct", source)
-        self.assertIn("submission.zip", source)
         self.assertIn("actions/upload-artifact@v4", source)
         self.assertNotIn("kaggle competitions submit", source)
+        self.assertNotIn("Resolve runtime dependencies for vanilla GitHub runner", source)
 
 
 if __name__ == "__main__":
