@@ -16,6 +16,7 @@ class VerifierSftTeacherRuntimeContractTests(unittest.TestCase):
         self.assertTrue(RUNTIME.is_file())
         source = RUNTIME.read_text(encoding="utf-8")
         self.assertIn('TARGETED_TEST_PLAN_JSON = "__VERIFIER_LORA_TARGETED_TEST_PLAN_JSON__"', source)
+        self.assertIn('TEACHER_BUILD_ID = "__VERIFIER_SFT_TEACHER_BUILD_ID__"', source)
         self.assertIn("load_targeted_test_plan", source)
         self.assertIn("build_teacher_safe_stop_record", source)
         self.assertIn("build_teacher_supervision_record", source)
@@ -25,6 +26,7 @@ class VerifierSftTeacherRuntimeContractTests(unittest.TestCase):
         self.assertIn("original_setup_baseline_commit", source)
         self.assertEqual(DIFF_COMMAND, "git diff --check && git diff")
         self.assertIn("DIFF_COMMAND", source)
+        self.assertIn('"teacher_build_id": TEACHER_BUILD_ID', source)
         self.assertIn('SUPERVISION_PATH = WORKING_DIR / "verifier_gold_teacher_supervision.json"', source)
         self.assertNotIn("blind_evaluation", source)
         self.assertNotIn("test_patch", source)
@@ -56,6 +58,16 @@ class VerifierSftTeacherRuntimeContractTests(unittest.TestCase):
         self.assertIn("verifier_gold_teacher_supervision.py", source)
         self.assertNotIn("shutil.copy2(helper", source)
         self.assertNotIn("shutil.copy2(gold_runtime", source)
+
+    def test_workflow_fails_closed_on_push_error_and_stale_kernel_output(self):
+        source = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn('TEACHER_BUILD_ID: ${{ github.sha }}', source)
+        self.assertIn("push_output=", source)
+        self.assertIn("push_status=", source)
+        self.assertIn("Kernel push error", source)
+        self.assertIn("Maximum batch GPU session count", source)
+        self.assertIn('result.get("teacher_build_id") == os.environ["TEACHER_BUILD_ID"]', source)
+        self.assertIn('__VERIFIER_SFT_TEACHER_BUILD_ID__', source)
 
     def test_workflow_embeds_frozen_targets_and_builds_balanced_sft_artifact(self):
         self.assertTrue(WORKFLOW.is_file())
