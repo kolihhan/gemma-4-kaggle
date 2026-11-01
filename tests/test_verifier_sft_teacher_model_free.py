@@ -44,6 +44,12 @@ class VerifierSftTeacherModelFreeContractTests(unittest.TestCase):
         self.assertIn("Query parameter", command)
         self.assertNotIn("pytest tests/test_invalid_sequence_param.py", command)
 
+    def test_teacher_installs_official_wheelhouse_before_harness_imports(self):
+        source = RUNTIME.read_text(encoding="utf-8")
+        install_at = source.index("gold.install_official_wheelhouse()")
+        import_at = source.index("from adk_submission import ModelRegistry")
+        self.assertLess(install_at, import_at)
+
     def test_teacher_runtime_bootstraps_workspace_without_model_inference(self):
         source = RUNTIME.read_text(encoding="utf-8")
         for required in (
