@@ -1,17 +1,18 @@
 """One-shot verifier-only LoRA v0 trainer for Gemma 4 E4B.
 
-This script is intentionally narrow: it consumes exactly the five approved
-training-only deterministic verifier trajectories, renders them through the
-local Gemma 4 chat template, refuses truncation, and trains one rank-8 adapter.
-It does not read blind evaluation data and does not perform a hyperparameter
-sweep.
+This script is intentionally narrow: it consumes the frozen deterministic
+training-only verifier trajectories, requires gold-pass coverage for all six
+Task-4 targets plus at least one approved base-fail safe-stop example, renders
+them through the local Gemma 4 chat template, refuses truncation, and trains
+one rank-8 adapter. It does not read blind evaluation data and does not perform
+a hyperparameter sweep.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-import os
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -25,8 +26,9 @@ OUTPUT_ROOT = Path("/kaggle/working/verifier-lora-v0")
 ADAPTER_DIR = OUTPUT_ROOT / "adapter"
 REPORT_PATH = OUTPUT_ROOT / "training_report.json"
 
-EXPECTED_IDS = [
+EXPECTED_TASK_IDS = [
     "fastapi_14479",
+    "requests_6644",
     "rich_3718",
     "rich_3882",
     "rich_3953",
@@ -71,9 +73,10 @@ def _walk_forbidden(value: Any, path: str = "$") -> None:
 
 
 def load_sft_rows(payload: str) -> list[dict[str, Any]]:
-    """Parse and strictly validate the frozen Task-4 positive dataset."""
+    """Parse and strictly validate the frozen paired Task-4 dataset."""
     if not isinstance(payload, str) or not payload.strip():
         raise ValueError("SFT payload is empty")
+
     rows: list[dict[str, Any]] = []
     for line_number, line in enumerate(payload.splitlines(), 1):
         if not line.strip():
@@ -87,27 +90,70 @@ def load_sft_rows(payload: str) -> list[dict[str, Any]]:
         _walk_forbidden(row)
         rows.append(row)
 
-    ids = [row.get("instance_id") for row in rows]
-    if ids != EXPECTED_IDS:
-        raise ValueError(f"SFT IDs must equal frozen Task-4 IDs in order: {ids}")
-    if len(ids) != len(set(ids)):
-        raise ValueError("SFT dataset contains duplicate instance IDs")
+    if not rows:
+        raise ValueError("SFT dataset has no rows")
+
+    expected_tasks = set(EXPECTED_TASK_IDS)
+    seen_examples: set[str] = set()
+    gold_tasks: set[str] = set()
+    safe_stop_count = 0
 
     for row in rows:
-        task_id = row["instance_id"]
-        if row.get("label") != "verified_submit":
-            raise ValueError(f"{task_id}: unexpected label {row.get('label')!r}")
-        if row.get("source") != "gold_patch_targeted_test":
-            raise ValueError(f"{task_id}: unexpected source {row.get('source')!r}")
+        task_id = row.get("instance_id")
+        example_id = row.get("example_id")
+        if not isinstance(task_id, str) or task_id not in expected_tasks:
+            raise ValueError(f"unexpected SFT task ID: {task_id!r}")
+        if not isinstance(example_id, str) or not example_id:
+            raise ValueError(f"{task_id}: missing example_id")
+        if example_id in seen_examples:
+            raise ValueError(f"duplicate SFT example_id: {example_id}")
+        seen_examples.add(example_id)
+
+        label = row.get("label")
+        source = row.get("source")
+        if label == "verified_submit":
+            expected_example_id = f"{task_id}:gold-pass"
+            if example_id != expected_example_id:
+                raise ValueError(
+                    f"{task_id}: verified_submit must use example_id {expected_example_id!r}"
+                )
+            if source != "gold_patch_targeted_test":
+                raise ValueError(f"{task_id}: unexpected positive source {source!r}")
+            if task_id in gold_tasks:
+                raise ValueError(f"{task_id}: duplicate gold-pass supervision")
+            gold_tasks.add(task_id)
+        elif label == "safe_stop":
+            expected_example_id = f"{task_id}:base-fail"
+            if example_id != expected_example_id:
+                raise ValueError(
+                    f"{task_id}: safe_stop must use example_id {expected_example_id!r}"
+                )
+            if source != "base_targeted_failure":
+                raise ValueError(f"{task_id}: unexpected safe-stop source {source!r}")
+            safe_stop_count += 1
+        else:
+            raise ValueError(f"{task_id}: unexpected label {label!r}")
+
         messages = row.get("messages")
         tools = row.get("tools")
         if not isinstance(messages, list) or not messages:
-            raise ValueError(f"{task_id}: messages missing/empty")
+            raise ValueError(f"{example_id}: messages missing/empty")
         if not isinstance(tools, list) or not tools:
-            raise ValueError(f"{task_id}: tools missing/empty")
+            raise ValueError(f"{example_id}: tools missing/empty")
         roles = [message.get("role") for message in messages if isinstance(message, dict)]
         if "system" not in roles or "assistant" not in roles or "tool" not in roles:
-            raise ValueError(f"{task_id}: incomplete verifier trajectory roles: {roles}")
+            raise ValueError(f"{example_id}: incomplete verifier trajectory roles: {roles}")
+
+    if gold_tasks != expected_tasks:
+        missing = [task_id for task_id in EXPECTED_TASK_IDS if task_id not in gold_tasks]
+        extra = sorted(gold_tasks - expected_tasks)
+        raise ValueError(
+            f"SFT dataset must contain one gold-pass for every frozen target; "
+            f"missing={missing} extra={extra}"
+        )
+    if safe_stop_count < 1:
+        raise ValueError("SFT dataset must contain at least one approved safe_stop example")
+
     return rows
 
 
@@ -121,10 +167,13 @@ def _render_chat(processor: Any, row: dict[str, Any]) -> str:
         )
     except TypeError as exc:
         raise ValueError(
-            f"{row.get('instance_id')}: Gemma 4 chat template rejected tool-calling trajectory"
+            f"{row.get('example_id', row.get('instance_id'))}: "
+            "Gemma 4 chat template rejected tool-calling trajectory"
         ) from exc
     if not isinstance(text, str) or not text.strip():
-        raise ValueError(f"{row.get('instance_id')}: rendered chat is empty")
+        raise ValueError(
+            f"{row.get('example_id', row.get('instance_id'))}: rendered chat is empty"
+        )
     return text
 
 
@@ -146,13 +195,17 @@ def preflight_token_lengths(
     """Render/tokenize all examples and abort rather than silently truncate."""
     lengths: dict[str, int] = {}
     for row in rows:
-        task_id = str(row["instance_id"])
+        key = str(row.get("example_id") or row.get("instance_id") or "")
+        if not key:
+            raise ValueError("training row has no example identifier")
+        if key in lengths:
+            raise ValueError(f"duplicate example identifier in length preflight: {key}")
         text = _render_chat(processor, row)
         length = len(_tokenize_for_length(processor, text))
-        lengths[task_id] = length
+        lengths[key] = length
         if length > max_length:
             raise ValueError(
-                f"{task_id}: {length} tokens would truncate at max_length={max_length}"
+                f"{key}: {length} tokens would truncate at max_length={max_length}"
             )
     return lengths
 
@@ -235,9 +288,14 @@ def main() -> None:
         max_length=TRAINING_CONFIG["max_length"],
     )
     texts = render_training_texts(processor, rows)
+    example_ids = [str(row["example_id"]) for row in rows]
+    instance_ids = [str(row["instance_id"]) for row in rows]
+    labels = [str(row["label"]) for row in rows]
     train_dataset = Dataset.from_dict(
         {
-            "instance_id": EXPECTED_IDS,
+            "example_id": example_ids,
+            "instance_id": instance_ids,
+            "label": labels,
             "text": texts,
         }
     )
@@ -323,7 +381,10 @@ def main() -> None:
         "model_path": str(MODEL_PATH),
         "model_class": model.__class__.__name__,
         "dataset_sha256": dataset_sha256,
-        "instance_ids": EXPECTED_IDS,
+        "required_gold_task_ids": EXPECTED_TASK_IDS,
+        "example_ids": example_ids,
+        "instance_ids": instance_ids,
+        "label_counts": dict(Counter(labels)),
         "token_lengths": token_lengths,
         "max_observed_tokens": max(token_lengths.values()),
         "training_config": TRAINING_CONFIG,
