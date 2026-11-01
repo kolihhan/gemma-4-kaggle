@@ -12,17 +12,20 @@ PLAN = ROOT / "docs" / "evaluation" / "verifier-lora-targeted-tests-v0.json"
 
 
 class VerifierSftTeacherRuntimeContractTests(unittest.TestCase):
-    def test_runtime_collects_deterministic_gold_workspace_evidence(self):
+    def test_runtime_collects_paired_base_and_gold_deterministic_evidence(self):
         self.assertTrue(RUNTIME.is_file())
         source = RUNTIME.read_text(encoding="utf-8")
         self.assertIn('TARGETED_TEST_PLAN_JSON = "__VERIFIER_LORA_TARGETED_TEST_PLAN_JSON__"', source)
         self.assertIn("load_targeted_test_plan", source)
+        self.assertIn("build_teacher_safe_stop_record", source)
         self.assertIn("build_teacher_supervision_record", source)
         self.assertIn("apply_patch_in_container", source)
         self.assertIn("original_setup_baseline_commit", source)
         self.assertEqual(DIFF_COMMAND, "git diff --check && git diff")
         self.assertIn("DIFF_COMMAND", source)
         self.assertIn('SUPERVISION_PATH = WORKING_DIR / "verifier_gold_teacher_supervision.json"', source)
+        self.assertIn(":base-fail", source)
+        self.assertIn(":gold-pass", source)
         self.assertNotIn("blind_evaluation", source)
         self.assertNotIn("test_patch", source)
 
@@ -34,6 +37,7 @@ class VerifierSftTeacherRuntimeContractTests(unittest.TestCase):
             RUNTIME.read_text(encoding="utf-8"),
             "MODEL_NAME = 'dummy'\nWORKING_DIR = None\nAGENT_DIR = None\n",
             "DIFF_COMMAND = 'git diff --check && git diff'\n"
+            "def build_teacher_safe_stop_record(**kwargs): return kwargs\n"
             "def build_teacher_supervision_record(**kwargs): return kwargs\n"
             "def load_targeted_test_plan(*args): return {}\n",
         )
@@ -52,7 +56,7 @@ class VerifierSftTeacherRuntimeContractTests(unittest.TestCase):
         self.assertNotIn("shutil.copy2(helper", source)
         self.assertNotIn("shutil.copy2(gold_runtime", source)
 
-    def test_workflow_embeds_frozen_targets_and_builds_sft_artifact(self):
+    def test_workflow_embeds_frozen_targets_and_builds_balanced_sft_artifact(self):
         self.assertTrue(WORKFLOW.is_file())
         source = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("verifier-lora-targeted-tests-v0.json", source)
@@ -62,9 +66,12 @@ class VerifierSftTeacherRuntimeContractTests(unittest.TestCase):
         self.assertIn("is_private", source)
         self.assertIn("scripts/build_verifier_sft.py", source)
         self.assertIn("verifier-sft-v0.jsonl", source)
+        self.assertIn("example_id", source)
+        self.assertIn("safe_stop", source)
+        self.assertIn("verified_submit", source)
         self.assertIn("gemma4-verifier-sft-teacher-v0-evidence", source)
 
-    def test_frozen_plan_has_exact_six_training_targets(self):
+    def test_frozen_plan_has_exact_six_training_targets_and_requests_uses_inline_assertion(self):
         import json
 
         payload = json.loads(PLAN.read_text(encoding="utf-8"))
@@ -83,6 +90,10 @@ class VerifierSftTeacherRuntimeContractTests(unittest.TestCase):
             ],
         )
         self.assertEqual(len(ids), len(set(ids)))
+        commands = {item["instance_id"]: item["command"] for item in payload["targets"]}
+        self.assertIn("python -c", commands["requests_6644"])
+        self.assertIn("assert", commands["requests_6644"])
+        self.assertNotIn("tests/test_adapters.py", commands["requests_6644"])
 
 
 if __name__ == "__main__":
