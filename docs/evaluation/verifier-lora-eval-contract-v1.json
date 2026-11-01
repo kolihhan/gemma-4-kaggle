@@ -24,10 +24,28 @@
     "claim_limit": "This development set supports diagnostics for Rich and FastAPI only; it does not support Requests or broad cross-repository generalization claims."
   },
   "blind_evaluation": {
-    "status": "pending_freeze",
-    "instance_ids": [],
-    "candidate_source": "tasks currently in the training side of verifier-lora-split-v0 that have not been harvested, manually inspected, or otherwise development-seen",
-    "selection_rule": "Freeze task IDs from metadata only, then allow automated harness/gold-control eligibility screening. Do not inspect base-model blind failure traces, blind reference patches, or task-level blind outcomes before the verifier adapter is frozen.",
+    "status": "frozen",
+    "source": "docs/evaluation/verifier-lora-blind-reservation-v0.json",
+    "instance_ids": [
+      "rich_3105",
+      "rich_4079",
+      "rich_3777",
+      "rich_3052",
+      "fastapi_5077",
+      "fastapi_9425",
+      "fastapi_14873",
+      "fastapi_9555",
+      "fastapi_15280",
+      "fastapi_14448"
+    ],
+    "candidate_source": "tasks currently in the training side of verifier-lora-split-v0 that were not harvested, manually inspected, or otherwise development-seen before reservation",
+    "selection_rule": "Freeze task IDs from metadata only, then allow automated harness/gold-control eligibility screening and metadata-only same-repo replacement. Do not inspect base-model blind failure traces, blind reference patches, or task-level blind outcomes before the verifier adapter is frozen.",
+    "coverage": {
+      "Textualize/rich": 4,
+      "fastapi/fastapi": 6,
+      "psf/requests": 0
+    },
+    "claim_limit": "No untouched Requests tasks remain in the current training-side pool: both Requests train tasks are already in the frozen trace-harvest subset. Blind v0 therefore supports Rich/FastAPI only and cannot establish Requests generalization.",
     "automated_gold_control_only": true,
     "base_failure_traces_uninspected_before_adapter_freeze": true
   },
