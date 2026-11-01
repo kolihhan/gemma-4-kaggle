@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 150
     env:
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
-      KERNEL_REF: kolihhan/gemma-4-verifier-baseline-v0
+      KERNEL_REF: kolihhan/gemma-4-verifier-heldout-e4b-baseline-v0
       KERNEL_DIR: /tmp/gemma4-verifier-baseline-v0
       OUTPUT_DIR: /tmp/gemma4-verifier-baseline-v0-output
 
@@ -118,7 +118,7 @@ jobs:
           (kernel_dir / "verifier_baseline_runtime.py").write_text(rendered, encoding="utf-8")
 
           metadata = {
-              "id": "kolihhan/gemma-4-verifier-baseline-v0",
+              "id": "kolihhan/gemma-4-verifier-heldout-e4b-baseline-v0",
               "title": "Gemma 4 Verifier Heldout E4B Baseline v0",
               "code_file": "verifier_baseline_runtime.py",
               "language": "python",
