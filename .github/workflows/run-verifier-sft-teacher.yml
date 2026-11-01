@@ -228,15 +228,25 @@ jobs:
           result = json.loads((output_dir / "verifier_gold_teacher_supervision.json").read_text(encoding="utf-8"))
           plan = json.loads(Path("docs/evaluation/verifier-lora-targeted-tests-v0.json").read_text(encoding="utf-8"))
           expected_ids = [item["instance_id"] for item in plan["targets"]]
+          expected_example_ids = [
+              example_id
+              for instance_id in expected_ids
+              for example_id in (f"{instance_id}:base-fail", f"{instance_id}:gold-pass")
+          ]
           assert result.get("version") == "verifier-lora-v0-deterministic-teacher", result
           assert result.get("status") == "completed", result
           assert result.get("model") == "gemma-4-e4b-it-qat-w4a16-ct", result
           assert result.get("requested") == len(expected_ids) == 6, result
           records = result.get("records") or []
-          assert [item.get("instance_id") for item in records] == expected_ids, result
+          assert len(records) == 12, result
+          assert [item.get("example_id") for item in records] == expected_example_ids, result
+          assert [item.get("instance_id") for item in records] == [x for x in expected_ids for _ in range(2)], result
           approved = [item for item in records if item.get("approved") is True]
           if not approved:
               raise SystemExit("deterministic teacher produced zero approved records")
+          labels = {item.get("label") for item in approved}
+          if not {"safe_stop", "verified_submit"} <= labels:
+              raise SystemExit(f"paired supervision requires both labels, got {sorted(labels)}")
 
           forbidden_keys = {"reference_patch", "reference_solution", "gold_patch", "solution_patch", "test_patch"}
           def walk(value):
@@ -252,7 +262,8 @@ jobs:
           (output_dir / "approved_supervision.json").write_text(
               json.dumps({"records": approved}, indent=2, sort_keys=True), encoding="utf-8"
           )
-          print("approved_ids=", [item["instance_id"] for item in approved])
+          print("approved_example_ids=", [item["example_id"] for item in approved])
+          print("approved_labels=", [item["label"] for item in approved])
           PY
 
       - name: Build contract-checked verifier SFT JSONL
@@ -270,9 +281,12 @@ jobs:
           output = Path(os.environ["OUTPUT_DIR"]) / "verifier-sft-v0.jsonl"
           rows = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines() if line.strip()]
           assert rows, "SFT output is empty"
-          assert len(rows) == len({row["instance_id"] for row in rows}), rows
+          assert len(rows) == len({row["example_id"] for row in rows}), rows
+          labels = {row["label"] for row in rows}
+          assert {"safe_stop", "verified_submit"} <= labels, labels
           print("sft_examples=", len(rows))
-          print("sft_ids=", [row["instance_id"] for row in rows])
+          print("sft_example_ids=", [row["example_id"] for row in rows])
+          print("sft_labels=", [row["label"] for row in rows])
           PY
 
       - name: Upload deterministic SFT teacher evidence
