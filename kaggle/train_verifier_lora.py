@@ -214,8 +214,17 @@ def render_training_texts(processor: Any, rows: list[dict[str, Any]]) -> list[st
     return [_render_chat(processor, row) for row in rows]
 
 
+def validate_model_class(model: Any) -> None:
+    """Require the official multimodal Gemma 4 wrapper used by this checkpoint."""
+    name = model.__class__.__name__
+    if name != "Gemma4ForConditionalGeneration":
+        raise ValueError(
+            f"expected Gemma4ForConditionalGeneration for the E4B checkpoint, got {name}"
+        )
+
+
 def validate_lora_target_modules(model: Any, targets: list[str]) -> list[str]:
-    """Ensure suffix targets exist only inside the text decoder namespace."""
+    """Ensure suffix targets exist only inside the multimodal wrapper's text decoder."""
     target_set = set(targets)
     matches = [
         name
@@ -224,9 +233,12 @@ def validate_lora_target_modules(model: Any, targets: list[str]) -> list[str]:
     ]
     if not matches:
         raise ValueError("no LoRA target modules found")
-    outside = [name for name in matches if not name.startswith("model.layers.")]
+    decoder_prefix = "model.language_model.layers."
+    outside = [name for name in matches if not name.startswith(decoder_prefix)]
     if outside:
-        raise ValueError(f"LoRA target matched outside model.layers: {outside[:10]}")
+        raise ValueError(
+            f"LoRA target matched outside model.language_model.layers: {outside[:10]}"
+        )
     missing = [target for target in targets if not any(name.endswith(f".{target}") for name in matches)]
     if missing:
         raise ValueError(f"LoRA target modules missing from decoder: {missing}")
@@ -308,8 +320,7 @@ def main() -> None:
         low_cpu_mem_usage=True,
         device_map="auto",
     )
-    if model.__class__.__name__ != "Gemma4ForCausalLM":
-        raise RuntimeError(f"expected Gemma4ForCausalLM, got {model.__class__.__name__}")
+    validate_model_class(model)
     model.config.use_cache = False
     model.gradient_checkpointing_enable()
     matched_modules = validate_lora_target_modules(model, TRAINING_CONFIG["target_modules"])
