@@ -16,7 +16,7 @@ PATCH_BUCKET_ORDER = ("1-10", "11-30", "31-80", "81+", "0")
 DEFAULT_QUOTA = {
     "Textualize/rich": 4,
     "fastapi/fastapi": 6,
-    "psf/requests": 2,
+    "psf/requests": 0,
 }
 
 
@@ -52,6 +52,8 @@ def _validate_item(item: dict, *, where: str) -> None:
 
 
 def _choose_repo(candidates: list[dict], quota: int, repo: str) -> list[dict]:
+    if quota == 0:
+        return []
     if len(candidates) < quota:
         raise ValueError(f"not enough unharvested training tasks for {repo}: need {quota}, have {len(candidates)}")
 
@@ -136,6 +138,7 @@ def build_blind_reservation(
             "quota_by_repo": repo_quota,
             "metadata_only": True,
         },
+        "coverage_limit": "No untouched Requests tasks remain in the current training-side pool: both Requests train tasks are already in the frozen trace-harvest subset. Blind v0 therefore supports Rich/FastAPI only and cannot establish Requests generalization.",
         "counts": {
             "tasks": len(selected),
             "by_repo": {repo: counts.get(repo, 0) for repo in repo_quota},
