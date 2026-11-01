@@ -1,10 +1,12 @@
 """Deterministic training-only verifier supervision collector for LoRA v0.
 
-The collector reuses the frozen training gold screen, applies each training
-reference patch only after the official baseline commit, and executes one
-frozen targeted pytest gate between two diff-integrity checks. It records the
-result before the model can mutate the workspace. Blind tasks and hidden test
-patches are never read here.
+For each frozen training target the collector captures two states before any
+model mutation can matter:
+
+1. clean base workspace + public regression gate -> safe-stop candidate;
+2. gold-patched workspace + the same gate -> verified-submit candidate.
+
+Blind tasks and hidden test patches are never read here.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from typing import Any
 import verifier_gold_teacher_runtime as gold
 from verifier_gold_teacher_supervision import (
     DIFF_COMMAND,
+    build_teacher_safe_stop_record,
     build_teacher_supervision_record,
     load_targeted_test_plan,
 )
@@ -50,8 +53,12 @@ def _exec_evidence(result: Any) -> dict[str, Any]:
     return {"exit_code": exit_code, "output": output}
 
 
+def _run_gate(docker, container_id: str, command: str) -> dict[str, Any]:
+    return _exec_evidence(docker.exec(container_id, f"cd /workspace && {command}"))
+
+
 def install_deterministic_teacher_hook(targeted_commands: dict[str, str]):
-    """Capture deterministic evidence immediately after applying the gold patch."""
+    """Capture paired deterministic evidence immediately after baseline setup."""
     import swegemma.harness.agent_runner as agent_runner
     from swegemma.harness.container_setup import apply_patch_in_container
 
@@ -78,6 +85,27 @@ def install_deterministic_teacher_hook(targeted_commands: dict[str, str]):
         if not patch_path.is_file() or patch_path.stat().st_size == 0:
             raise RuntimeError(f"deterministic teacher reference patch is missing/empty: {patch_path}")
 
+        targeted_command = targeted_commands[task_id]
+        paired_records: list[dict[str, Any]] = []
+
+        # Negative supervision: the untouched base workspace must stay clean,
+        # and only a genuinely failing public regression gate can become safe-stop.
+        base_pre_diff = _run_gate(docker, container_id, DIFF_COMMAND)
+        base_targeted_test = _run_gate(docker, container_id, targeted_command)
+        base_final_diff = _run_gate(docker, container_id, DIFF_COMMAND)
+        paired_records.append(
+            build_teacher_safe_stop_record(
+                instance_id=task_id,
+                problem_description=problem_description,
+                targeted_command=targeted_command,
+                pre_diff=base_pre_diff,
+                targeted_test=base_targeted_test,
+                final_diff=base_final_diff,
+            )
+        )
+
+        # Positive supervision: apply the training-only reference patch only
+        # after the base evidence has been captured, then require the same gate.
         container_patch = "/tmp/verifier_sft_teacher_reference.patch"
         docker.copy_to(container_id, patch_path, container_patch)
         try:
@@ -90,24 +118,20 @@ def install_deterministic_teacher_hook(targeted_commands: dict[str, str]):
                     f"exit={exit_code} stdout={stdout[-1000:]!r} stderr={stderr[-1000:]!r}"
                 )
 
-            pre_diff = _exec_evidence(
-                docker.exec(container_id, f"cd /workspace && {DIFF_COMMAND}")
+            gold_pre_diff = _run_gate(docker, container_id, DIFF_COMMAND)
+            gold_targeted_test = _run_gate(docker, container_id, targeted_command)
+            gold_final_diff = _run_gate(docker, container_id, DIFF_COMMAND)
+            paired_records.append(
+                build_teacher_supervision_record(
+                    instance_id=task_id,
+                    problem_description=problem_description,
+                    targeted_command=targeted_command,
+                    pre_diff=gold_pre_diff,
+                    targeted_test=gold_targeted_test,
+                    final_diff=gold_final_diff,
+                )
             )
-            targeted_command = targeted_commands[task_id]
-            targeted_test = _exec_evidence(
-                docker.exec(container_id, f"cd /workspace && {targeted_command}")
-            )
-            final_diff = _exec_evidence(
-                docker.exec(container_id, f"cd /workspace && {DIFF_COMMAND}")
-            )
-            state["records"][task_id] = build_teacher_supervision_record(
-                instance_id=task_id,
-                problem_description=problem_description,
-                targeted_command=targeted_command,
-                pre_diff=pre_diff,
-                targeted_test=targeted_test,
-                final_diff=final_diff,
-            )
+            state["records"][task_id] = paired_records
         finally:
             docker.exec(container_id, f"rm -f {container_patch}")
 
@@ -119,12 +143,15 @@ def _unapproved_error_record(
     instance_id: str,
     problem_description: str,
     exc: BaseException,
+    phase: str,
 ) -> dict[str, Any]:
+    source = "base_targeted_failure" if phase == "base-fail" else "gold_patch_targeted_test"
     return {
         "instance_id": instance_id,
+        "example_id": f"{instance_id}:{phase}",
         "approved": False,
         "label": None,
-        "source": "gold_patch_targeted_test",
+        "source": source,
         "problem_description": problem_description.strip(),
         "steps": [],
         "audit_flags": ["collector_error"],
@@ -307,9 +334,7 @@ def main() -> None:
                         )
                     )
                 except BaseException as exc:
-                    # The model phase is deliberately bounded and is not a label.
-                    # Keep the error for audit, but deterministic hook evidence may
-                    # already be complete and valid.
+                    # Model-phase errors are post-capture audit only.
                     eval_error = exc
             except BaseException as exc:
                 eval_error = exc
@@ -323,31 +348,42 @@ def main() -> None:
                 except OSError:
                     pass
 
-            record = None if hook_state is None else hook_state["records"].get(task_id)
-            if record is None:
+            task_records = [] if hook_state is None else hook_state["records"].get(task_id, [])
+            if not task_records:
                 if eval_error is None:
-                    eval_error = RuntimeError("deterministic evidence hook produced no record")
-                record = _unapproved_error_record(task_id, problem_description, eval_error)
+                    eval_error = RuntimeError("deterministic evidence hook produced no records")
+                task_records = [
+                    _unapproved_error_record(task_id, problem_description, eval_error, "base-fail"),
+                    _unapproved_error_record(task_id, problem_description, eval_error, "gold-pass"),
+                ]
             elif eval_error is not None:
-                record = dict(record)
-                record["collector_post_capture_error_type"] = type(eval_error).__name__
-                record["collector_post_capture_error"] = str(eval_error)
-            records.append(record)
-            print(
-                "SFT_TEACHER_RECORD",
-                json.dumps(
-                    {
-                        "instance_id": task_id,
-                        "approved": record.get("approved"),
-                        "audit_flags": record.get("audit_flags"),
-                    },
-                    sort_keys=True,
-                ),
-                flush=True,
-            )
+                annotated = []
+                for record in task_records:
+                    record = dict(record)
+                    record["collector_post_capture_error_type"] = type(eval_error).__name__
+                    record["collector_post_capture_error"] = str(eval_error)
+                    annotated.append(record)
+                task_records = annotated
 
-        approved_ids = [
-            str(record["instance_id"])
+            records.extend(task_records)
+            for record in task_records:
+                print(
+                    "SFT_TEACHER_RECORD",
+                    json.dumps(
+                        {
+                            "instance_id": task_id,
+                            "example_id": record.get("example_id"),
+                            "approved": record.get("approved"),
+                            "label": record.get("label"),
+                            "audit_flags": record.get("audit_flags"),
+                        },
+                        sort_keys=True,
+                    ),
+                    flush=True,
+                )
+
+        approved_example_ids = [
+            str(record["example_id"])
             for record in records
             if record.get("approved") is True
         ]
@@ -356,8 +392,9 @@ def main() -> None:
             "status": "completed",
             "model": MODEL_NAME,
             "requested": len(target_ids),
-            "approved": len(approved_ids),
-            "approved_instance_ids": approved_ids,
+            "record_count": len(records),
+            "approved": len(approved_example_ids),
+            "approved_example_ids": approved_example_ids,
             "visible_gpus": gpu_count,
             "tensor_parallel_size": tp_size,
             "records": records,
