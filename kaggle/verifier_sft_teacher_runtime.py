@@ -31,6 +31,7 @@ SUBMISSION_PAYLOAD_B64 = "__SUBMISSION_PAYLOAD_B64__"
 TRAINING_MANIFEST_JSON = "__VERIFIER_LORA_TRAINING_MANIFEST_JSON__"
 TRAINING_GOLD_SCREEN_JSON = "__VERIFIER_LORA_TRAINING_GOLD_SCREEN_JSON__"
 TARGETED_TEST_PLAN_JSON = "__VERIFIER_LORA_TARGETED_TEST_PLAN_JSON__"
+TEACHER_BUILD_ID = "__VERIFIER_SFT_TEACHER_BUILD_ID__"
 MODEL_NAME = gold.MODEL_NAME
 
 WORKING_DIR = gold.WORKING_DIR
@@ -88,8 +89,6 @@ def install_deterministic_teacher_hook(targeted_commands: dict[str, str]):
         targeted_command = targeted_commands[task_id]
         paired_records: list[dict[str, Any]] = []
 
-        # Negative supervision: the untouched base workspace must stay clean,
-        # and only a genuinely failing public regression gate can become safe-stop.
         base_pre_diff = _run_gate(docker, container_id, DIFF_COMMAND)
         base_targeted_test = _run_gate(docker, container_id, targeted_command)
         base_final_diff = _run_gate(docker, container_id, DIFF_COMMAND)
@@ -104,8 +103,6 @@ def install_deterministic_teacher_hook(targeted_commands: dict[str, str]):
             )
         )
 
-        # Positive supervision: apply the training-only reference patch only
-        # after the base evidence has been captured, then require the same gate.
         container_patch = "/tmp/verifier_sft_teacher_reference.patch"
         docker.copy_to(container_id, patch_path, container_patch)
         try:
@@ -166,6 +163,7 @@ def write_failure(exc: BaseException) -> None:
             {
                 "version": "verifier-lora-v0-deterministic-teacher",
                 "status": "error",
+                "teacher_build_id": TEACHER_BUILD_ID,
                 "error_type": type(exc).__name__,
                 "error": str(exc),
                 "traceback": traceback.format_exc(),
@@ -179,10 +177,12 @@ def write_failure(exc: BaseException) -> None:
 
 
 def main() -> None:
+    if not TEACHER_BUILD_ID or TEACHER_BUILD_ID.startswith("__"):
+        raise RuntimeError("deterministic teacher build ID placeholder was not rendered")
+
     WORKING_DIR.mkdir(parents=True, exist_ok=True)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Reuse the already-tested gold-teacher environment/materialization path.
     gold.SUBMISSION_PAYLOAD_B64 = SUBMISSION_PAYLOAD_B64
     gold.TRAINING_MANIFEST_JSON = TRAINING_MANIFEST_JSON
     gold.TRAINING_GOLD_SCREEN_JSON = TRAINING_GOLD_SCREEN_JSON
@@ -235,9 +235,6 @@ def main() -> None:
     timeout_seconds = int(eval_section.get("timeout_seconds", 300))
     verification_timeout_seconds = int(eval_section.get("verification_timeout_seconds", 300))
 
-    # The deterministic evidence is captured before the model runs. Keep the
-    # post-capture agent phase tightly bounded so this collector is not another
-    # behavioral teacher run.
     max_tool_calls = 1
     max_time_minutes = 3.0
     max_turns = 1
@@ -334,7 +331,6 @@ def main() -> None:
                         )
                     )
                 except BaseException as exc:
-                    # Model-phase errors are post-capture audit only.
                     eval_error = exc
             except BaseException as exc:
                 eval_error = exc
@@ -390,6 +386,7 @@ def main() -> None:
         output = {
             "version": "verifier-lora-v0-deterministic-teacher",
             "status": "completed",
+            "teacher_build_id": TEACHER_BUILD_ID,
             "model": MODEL_NAME,
             "requested": len(target_ids),
             "record_count": len(records),
