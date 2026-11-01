@@ -1,11 +1,11 @@
 {
   "version": "verifier-lora-v0-targeted-tests",
   "status": "frozen",
-  "selection_policy": "training-only gold-clean tasks with a small reference patch and one bounded public upstream regression check; inline assertions are used when the upstream regression test file/function does not exist in the pre-fix snapshot",
+  "selection_policy": "training-only gold-clean tasks with a small reference patch and one bounded public upstream regression check; inline assertions are used when the upstream regression test file/function does not exist in the pre-fix snapshot or when the pre-fix test already passes without checking the fixed behavior",
   "targets": [
     {
       "instance_id": "fastapi_14479",
-      "command": "pytest tests/test_invalid_sequence_param.py -q",
+      "command": "python -c \"from fastapi import FastAPI, Query; from pydantic import BaseModel; ns={'FastAPI': FastAPI, 'Query': Query, 'BaseModel': BaseModel}; exec(\\\"class Item(BaseModel):\\n    name: str\\n\\ndef read_items(q: list[Item] = Query(default=None)):\\n    return {'q': q}\\n\\napp = FastAPI()\\ntry:\\n    app.get('/') (read_items)\\nexcept AssertionError as exc:\\n    message = str(exc)\\nelse:\\n    message = ''\\\", ns); assert ns['message'] == \\\"Query parameter 'q' must be one of the supported types\\\"\"",
       "upstream_pr": "fastapi/fastapi#14479"
     },
     {
