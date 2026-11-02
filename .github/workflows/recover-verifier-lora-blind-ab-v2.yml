@@ -1,0 +1,115 @@
+name: Recover frozen blind base-vs-LoRA v0 v2
+
+on:
+  push:
+    branches: [exp/public-train-once]
+    paths:
+      - ".github/workflows/recover-verifier-lora-blind-ab-v2.yml"
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+  BASE_KERNEL_REF: kolihhan/gemma4-frozen-blind-base-41434071381
+
+jobs:
+  recover-ab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned Kaggle CLI
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          kaggle --version
+      - name: Validate local evaluation scripts
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/render_frozen_blind_lora_kernel.py scripts/compare_frozen_blind_ab.py
+
+      - name: Poll existing frozen blind BASE
+        id: base_poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 300); do
+            out="$(kaggle kernels status "$BASE_KERNEL_REF" 2>&1 || true)"
+            printf '[BASE %03d] %s\n' "$attempt" "$out"
+            lower="$(printf '%s' "$out" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal=complete; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal=error; break; fi
+            sleep 20
+          done
+          test -n "$terminal" || terminal=timeout
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          test "$terminal" = complete
+
+      - name: Collect frozen blind BASE
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/blind-base-output
+          kaggle kernels logs "$BASE_KERNEL_REF" > /tmp/blind-base-output/kernel.log 2>&1 || true
+          kaggle kernels output "$BASE_KERNEL_REF" -p /tmp/blind-base-output -o > /tmp/blind-base-output/output-download.log 2>&1
+          test -s /tmp/blind-base-output/verifier_baseline_results.json
+          python -c "import json,pathlib; r=json.loads(pathlib.Path('/tmp/blind-base-output/verifier_baseline_results.json').read_text()); assert r.get('status')=='completed' and r.get('requested')==10 and len(r.get('results',[]))==10; print('BASE_BLIND_SUMMARY',json.dumps({k:v for k,v in r.items() if k!='results'},sort_keys=True))"
+
+      - name: Render and push frozen blind LoRA
+        shell: bash
+        env:
+          LORA_KERNEL_REF: kolihhan/gemma4-frozen-blind-lora-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/blind-lora-kernel
+          python scripts/render_frozen_blind_lora_kernel.py --repo . --kernel-dir /tmp/blind-lora-kernel --kernel-ref "$LORA_KERNEL_REF"
+          python -m json.tool /tmp/blind-lora-kernel/kernel-metadata.json >/dev/null
+          kaggle kernels push -p /tmp/blind-lora-kernel --accelerator NvidiaL4 -t 7200
+
+      - name: Poll frozen blind LoRA
+        id: lora_poll
+        shell: bash
+        env:
+          LORA_KERNEL_REF: kolihhan/gemma4-frozen-blind-lora-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 300); do
+            out="$(kaggle kernels status "$LORA_KERNEL_REF" 2>&1 || true)"
+            printf '[LORA %03d] %s\n' "$attempt" "$out"
+            lower="$(printf '%s' "$out" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal=complete; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal=error; break; fi
+            sleep 20
+          done
+          test -n "$terminal" || terminal=timeout
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          test "$terminal" = complete
+
+      - name: Collect frozen blind LoRA and compare
+        shell: bash
+        env:
+          LORA_KERNEL_REF: kolihhan/gemma4-frozen-blind-lora-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/blind-lora-output
+          kaggle kernels logs "$LORA_KERNEL_REF" > /tmp/blind-lora-output/kernel.log 2>&1 || true
+          kaggle kernels output "$LORA_KERNEL_REF" -p /tmp/blind-lora-output -o > /tmp/blind-lora-output/output-download.log 2>&1
+          test -s /tmp/blind-lora-output/verifier_baseline_results.json
+          python scripts/compare_frozen_blind_ab.py --base /tmp/blind-base-output/verifier_baseline_results.json --lora /tmp/blind-lora-output/verifier_baseline_results.json --output /tmp/blind-ab-comparison.json
+
+      - name: Upload frozen blind A/B evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemma4-verifier-lora-v0-frozen-blind-ab-v2-${{ github.run_id }}
+          path: |
+            /tmp/blind-base-output
+            /tmp/blind-lora-output
+            /tmp/blind-ab-comparison.json
+          if-no-files-found: warn
+          retention-days: 30
