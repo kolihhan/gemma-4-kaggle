@@ -1,0 +1,134 @@
+name: Smoke Kaggle native Trainer path once
+
+on:
+  push:
+    branches: [exp/verifier-lora-v0]
+    paths:
+      - .github/workflows/probe-native-trainer-now.yml
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+  KERNEL_REF: kolihhan/gemma4-native-trainer-smoke-${{ github.run_id }}
+  KERNEL_DIR: /tmp/gemma4-native-trainer-smoke
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Kaggle CLI
+        run: python -m pip install --disable-pip-version-check 'kaggle==2.2.5' 'six==1.17.0'
+
+      - name: Render CPU-only native trainer smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$KERNEL_DIR"
+          mkdir -p "$KERNEL_DIR"
+          cp kaggle/train_verifier_lora.py "$KERNEL_DIR/train_verifier_lora.py"
+          cat > "$KERNEL_DIR/smoke.py" <<'PY'
+          import json
+          import tempfile
+          from pathlib import Path
+
+          import torch
+          from datasets import Dataset
+          from peft import LoraConfig, get_peft_model
+          from transformers import Trainer, TrainingArguments
+
+          import train_verifier_lora as trainer_mod
+
+          class FakeTokenizer:
+              pad_token_id = 0
+
+          collator = trainer_mod.CausalLmCollator(FakeTokenizer())
+          batch = collator([
+              {"input_ids": [1, 2, 3], "attention_mask": [1, 1, 1], "labels": [1, 2, 3]},
+              {"input_ids": [4], "attention_mask": [1], "labels": [4]},
+          ])
+          assert tuple(batch["input_ids"].shape) == (2, 3)
+          assert batch["input_ids"].tolist() == [[1, 2, 3], [4, 0, 0]]
+          assert batch["labels"].tolist() == [[1, 2, 3], [4, -100, -100]]
+
+          ds = Dataset.from_list([
+              {"input_ids": [1, 2], "attention_mask": [1, 1], "labels": [1, 2]}
+          ])
+          assert len(ds) == 1
+
+          out = Path(tempfile.mkdtemp())
+          args = TrainingArguments(
+              output_dir=str(out),
+              learning_rate=1e-4,
+              num_train_epochs=3,
+              per_device_train_batch_size=1,
+              gradient_accumulation_steps=1,
+              gradient_checkpointing=True,
+              bf16=False,
+              fp16=False,
+              logging_steps=1,
+              save_strategy="no",
+              report_to="none",
+              seed=42,
+              data_seed=42,
+              remove_unused_columns=False,
+          )
+          assert args.learning_rate == 1e-4
+          assert args.num_train_epochs == 3
+          assert args.gradient_checkpointing is True
+          assert Trainer is not None
+          assert LoraConfig is not None
+          assert get_peft_model is not None
+          print("NATIVE_TRAINER_SMOKE", json.dumps({
+              "torch": torch.__version__,
+              "batch_shape": list(batch["input_ids"].shape),
+              "training_args_ok": True,
+              "trainer_import_ok": True,
+              "peft_import_ok": True,
+          }, sort_keys=True))
+          PY
+          cat > "$KERNEL_DIR/kernel-metadata.json" <<EOF
+          {
+            "id": "${KERNEL_REF}",
+            "title": "gemma4-native-trainer-smoke-${GITHUB_RUN_ID}",
+            "code_file": "smoke.py",
+            "language": "python",
+            "kernel_type": "script",
+            "is_private": true,
+            "enable_gpu": false,
+            "enable_tpu": false,
+            "enable_internet": false,
+            "dataset_sources": [],
+            "competition_sources": [],
+            "kernel_sources": [],
+            "model_sources": []
+          }
+          EOF
+
+      - name: Push CPU-only smoke
+        run: kaggle kernels push -p "$KERNEL_DIR" -t 600
+
+      - name: Poll smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            echo "[$attempt] $status"
+            lower="$(printf '%s' "$status" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then exit 0; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then exit 1; fi
+            sleep 10
+          done
+          exit 1
+
+      - name: Show smoke logs
+        if: always()
+        run: kaggle kernels logs "$KERNEL_REF" || true
