@@ -1,0 +1,282 @@
+name: Run verifier LoRA v0 training
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type TRAIN to launch the single frozen verifier LoRA v0 GPU run"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: verifier-lora-v0-training
+  cancel-in-progress: false
+
+env:
+  KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+  TEACHER_RUN_ID: "41373086676"
+  TEACHER_ARTIFACT_NAME: "gemma4-verifier-sft-teacher-v0-evidence"
+  EXPECTED_DATASET_SHA256: "188e22d59351ff08e1c3ced0365addaf19ffb9c68ce64df4cafd3e1cce7ecb8c"
+  MODEL_SOURCE: "google/gemma-4/transformers/gemma-4-e4b-it-qat-q4_0-unquantized/2"
+  TEACHER_DIR: /tmp/verifier-sft-teacher
+  KERNEL_DIR: /tmp/verifier-lora-kernel
+  OUTPUT_DIR: /tmp/verifier-lora-output
+  KERNEL_REF: kolihhan/gemma4-verifier-lora-v0-${{ github.run_id }}
+  KERNEL_TITLE: gemma4-verifier-lora-v0-${{ github.run_id }}
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download exact accepted teacher artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.TEACHER_ARTIFACT_NAME }}
+          path: ${{ env.TEACHER_DIR }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ env.TEACHER_RUN_ID }}
+
+      - name: Verify frozen SFT dataset contract and hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          SFT_PATH="$TEACHER_DIR/verifier-sft-v0.jsonl"
+          test -s "$SFT_PATH"
+          actual_sha="$(sha256sum "$SFT_PATH" | awk '{print $1}')"
+          echo "teacher_sft_sha256=$actual_sha"
+          if [[ "$actual_sha" != "$EXPECTED_DATASET_SHA256" ]]; then
+            echo "Teacher dataset SHA mismatch: expected=$EXPECTED_DATASET_SHA256 actual=$actual_sha" >&2
+            exit 1
+          fi
+          python - <<'PY'
+          import json
+          import os
+          from collections import Counter
+          from pathlib import Path
+
+          path = Path(os.environ["TEACHER_DIR"]) / "verifier-sft-v0.jsonl"
+          rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+          expected_tasks = [
+              "fastapi_14479",
+              "requests_6644",
+              "rich_3718",
+              "rich_3882",
+              "rich_3953",
+              "rich_4006",
+          ]
+          forbidden = {"reference_patch", "reference_solution", "gold_patch", "solution_patch", "test_patch"}
+
+          def walk(value, where="$"):
+              if isinstance(value, dict):
+                  for key, child in value.items():
+                      if key in forbidden:
+                          raise SystemExit(f"forbidden solution field at {where}.{key}")
+                      walk(child, f"{where}.{key}")
+              elif isinstance(value, list):
+                  for index, child in enumerate(value):
+                      walk(child, f"{where}[{index}]")
+
+          for row in rows:
+              walk(row)
+          labels = Counter(str(row.get("label")) for row in rows)
+          gold_tasks = [
+              str(row.get("instance_id"))
+              for row in rows
+              if row.get("label") == "verified_submit"
+          ]
+          if len(rows) != 9:
+              raise SystemExit(f"expected 9 accepted teacher rows, got {len(rows)}")
+          if labels != Counter({"verified_submit": 6, "safe_stop": 3}):
+              raise SystemExit(f"unexpected label counts: {dict(labels)}")
+          if gold_tasks != expected_tasks:
+              raise SystemExit(f"unexpected gold task order: {gold_tasks}")
+          if len({str(row.get("example_id")) for row in rows}) != len(rows):
+              raise SystemExit("duplicate example_id in accepted teacher artifact")
+          print("teacher_rows=", len(rows))
+          print("teacher_label_counts=", dict(labels))
+          print("teacher_gold_tasks=", gold_tasks)
+          PY
+
+      - name: Render one-file Kaggle trainer from frozen dataset
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$KERNEL_DIR"
+          mkdir -p "$KERNEL_DIR"
+          python - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          source_path = Path("kaggle/train_verifier_lora.py")
+          dataset_path = Path(os.environ["TEACHER_DIR"]) / "verifier-sft-v0.jsonl"
+          out_path = Path(os.environ["KERNEL_DIR"]) / "train_verifier_lora.py"
+          marker = 'SFT_JSONL_B64 = "__VERIFIER_SFT_JSONL_B64__"'
+          source = source_path.read_text(encoding="utf-8")
+          if source.count(marker) != 1:
+              raise SystemExit(f"unexpected SFT placeholder count: {source.count(marker)}")
+          encoded = base64.b64encode(dataset_path.read_bytes()).decode("ascii")
+          rendered = source.replace(marker, f"SFT_JSONL_B64 = {encoded!r}", 1)
+          compile(rendered, str(out_path), "exec")
+          out_path.write_text(rendered, encoding="utf-8")
+          print("rendered_trainer_bytes=", out_path.stat().st_size)
+          PY
+          cat > "$KERNEL_DIR/kernel-metadata.json" <<EOF
+          {
+            "id": "${KERNEL_REF}",
+            "title": "${KERNEL_TITLE}",
+            "code_file": "train_verifier_lora.py",
+            "language": "python",
+            "kernel_type": "script",
+            "is_private": true,
+            "enable_gpu": true,
+            "enable_tpu": false,
+            "enable_internet": false,
+            "machine_shape": "NvidiaL4",
+            "dataset_sources": [],
+            "competition_sources": [],
+            "kernel_sources": [],
+            "model_sources": ["${MODEL_SOURCE}"]
+          }
+          EOF
+          python -m json.tool "$KERNEL_DIR/kernel-metadata.json" >/dev/null
+          cat "$KERNEL_DIR/kernel-metadata.json"
+
+      - name: Require explicit GPU training confirmation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ inputs.confirm }}" != "TRAIN" ]]; then
+            echo "Refusing GPU launch without confirm=TRAIN" >&2
+            exit 1
+          fi
+
+      - name: Install pinned Kaggle CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check 'kaggle==2.2.5' 'six==1.17.0'
+          kaggle --version
+
+      - name: Push private Kaggle L4 training kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          push_status=0
+          push_output="$(kaggle kernels push -p "$KERNEL_DIR" -t 3600 2>&1)" || push_status=$?
+          printf '%s\n' "$push_output"
+          if [[ "$push_status" -ne 0 ]]; then
+            echo "Kernel push error (status=$push_status)" >&2
+            exit "$push_status"
+          fi
+
+      - name: Poll Kaggle kernel to terminal state
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 270); do
+            status_output="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            printf '[%03d] %s\n' "$attempt" "$status_output"
+            lower="$(printf '%s' "$status_output" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then
+              terminal="complete"
+              break
+            fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then
+              terminal="error"
+              break
+            fi
+            sleep 20
+          done
+          if [[ -z "$terminal" ]]; then
+            terminal="timeout"
+          fi
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          echo "Kaggle terminal state: $terminal"
+
+      - name: Collect Kaggle training logs and outputs
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          mkdir -p "$OUTPUT_DIR"
+          kaggle kernels logs "$KERNEL_REF" > "$OUTPUT_DIR/kernel.log" 2>&1
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o > "$OUTPUT_DIR/output-download.log" 2>&1
+          find "$OUTPUT_DIR" -maxdepth 8 -type f -printf '%P %s bytes\n' | sort
+          tail -n 240 "$OUTPUT_DIR/kernel.log" || true
+
+      - name: Assert frozen adapter artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.poll.outputs.terminal }}" != "complete" ]]; then
+            echo "Kaggle LoRA kernel did not complete successfully: ${{ steps.poll.outputs.terminal }}" >&2
+            exit 1
+          fi
+          REPORT="$OUTPUT_DIR/verifier-lora-v0/training_report.json"
+          ADAPTER_DIR="$OUTPUT_DIR/verifier-lora-v0/adapter"
+          test -s "$REPORT"
+          test -s "$ADAPTER_DIR/adapter_config.json"
+          test -s "$ADAPTER_DIR/adapter_model.safetensors"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["OUTPUT_DIR"]) / "verifier-lora-v0"
+          report = json.loads((root / "training_report.json").read_text(encoding="utf-8"))
+          config = json.loads((root / "adapter" / "adapter_config.json").read_text(encoding="utf-8"))
+          expected_tasks = [
+              "fastapi_14479",
+              "requests_6644",
+              "rich_3718",
+              "rich_3882",
+              "rich_3953",
+              "rich_4006",
+          ]
+          assert report.get("version") == "verifier-lora-v0-training", report
+          assert report.get("status") == "completed", report
+          assert report.get("dataset_sha256") == os.environ["EXPECTED_DATASET_SHA256"], report
+          assert report.get("required_gold_task_ids") == expected_tasks, report
+          assert report.get("label_counts") == {"safe_stop": 3, "verified_submit": 6}, report
+          assert report.get("training_config", {}).get("r") == 8, report
+          assert report.get("training_config", {}).get("lora_alpha") == 16, report
+          assert report.get("training_config", {}).get("num_train_epochs") == 3, report
+          assert report.get("training_config", {}).get("seed") == 42, report
+          assert report.get("max_observed_tokens", 10**9) <= 4096, report
+          assert report.get("model_class") == "Gemma4ForConditionalGeneration", report
+          assert int(report.get("visible_gpus", 0)) >= 1, report
+          assert int(config.get("r", -1)) == 8, config
+          files = set(report.get("adapter_files") or [])
+          assert {"adapter_config.json", "adapter_model.safetensors"} <= files, report
+          print(json.dumps(report, indent=2, sort_keys=True))
+          PY
+          (
+            cd "$OUTPUT_DIR/verifier-lora-v0"
+            sha256sum training_report.json adapter/adapter_config.json adapter/adapter_model.safetensors > artifact-sha256.txt
+            cat artifact-sha256.txt
+          )
+
+      - name: Upload verifier LoRA training evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemma4-verifier-lora-v0-${{ github.run_id }}
+          path: ${{ env.OUTPUT_DIR }}
+          if-no-files-found: warn
+          retention-days: 30
