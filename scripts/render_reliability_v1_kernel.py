@@ -10,7 +10,7 @@ from pathlib import Path
 EXPECTED_SHA256 = {
     'agent.yaml': '3e7b6878a07e01a6015c5949faaac6323460a01c246bcc1364ffbb9fb724a708',
     'eval_config.yaml': 'fb71231c07834b8fdc9b5e4d08c4d91b4bd6f4061b19a14dfc0bb98dff966412',
-    'configs/sampling.yaml': '3dab0b2506dae34ce92fef7b380d6073729104b23fe2cf66d44ac1d2f868777d2b70ba7d7e76',
+    'configs/sampling.yaml': '3dab0b2506dae34ce92fef7b380d6073729104b23fe2cf66d44ac1d2f213aa6a',
     'prompts/system.md': '8b0326e707778ad36722b65bf5d20122c1406ba582000ac599d5cf7af9a3466b',
     'prompts/coder.md': '95b6362f4538d76970b89e8103ff622e76138369e2d2f868777d2b70ba7d7e76',
 }
