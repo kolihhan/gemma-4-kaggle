@@ -39,6 +39,26 @@ class VerifierLoraMultiGpuPlacementTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "exactly 2 CUDA GPUs"):
             build_two_gpu_load_kwargs(OneGpuTorch, dtype="fp16")
 
+    def test_ple_projection_modules_share_device_with_both_text_embeddings(self):
+        from kaggle.train_verifier_lora import build_two_gpu_load_kwargs
+
+        class FakeCuda:
+            @staticmethod
+            def device_count():
+                return 2
+
+        class FakeTorch:
+            cuda = FakeCuda()
+
+        device_map = build_two_gpu_load_kwargs(FakeTorch, dtype="fp16")["device_map"]
+        ple_devices = {
+            device_map["model.language_model.embed_tokens"],
+            device_map["model.language_model.embed_tokens_per_layer"],
+            device_map["model.language_model.per_layer_model_projection"],
+            device_map["model.language_model.per_layer_projection_norm"],
+        }
+        self.assertEqual(ple_devices, {0})
+
     def test_validate_two_gpu_device_map_rejects_cpu_disk_or_single_gpu(self):
         from kaggle.train_verifier_lora import validate_two_gpu_device_map
 
