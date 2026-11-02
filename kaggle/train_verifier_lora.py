@@ -50,7 +50,7 @@ TRAINING_CONFIG = {
     "num_train_epochs": 3,
     "seed": 42,
     "max_length": 4096,
-    "loss_window_tokens": 256,
+    "logit_chunk_tokens": 256,
     "target_modules": [
         "q_proj",
         "k_proj",
@@ -355,15 +355,95 @@ def tokenize_training_texts(tokenizer: Any, texts: list[str]) -> list[dict[str, 
     return examples
 
 
-def final_window_loss_slice(sequence_length: int, loss_window_tokens: int) -> tuple[int, int]:
-    """Return kept-logit count and shifted-label start for a final-token loss window."""
-    if sequence_length <= 0:
-        raise ValueError("sequence_length must be positive")
-    if loss_window_tokens <= 0:
-        raise ValueError("loss_window_tokens must be positive")
-    keep_tokens = min(sequence_length, loss_window_tokens)
-    shift_start = sequence_length - keep_tokens
-    return keep_tokens, shift_start
+def full_sequence_chunk_ranges(sequence_length: int, chunk_tokens: int) -> list[tuple[int, int]]:
+    """Partition every shifted next-token position into bounded contiguous chunks."""
+    if sequence_length < 2:
+        raise ValueError("sequence_length must be at least 2")
+    if chunk_tokens <= 0:
+        raise ValueError("chunk_tokens must be positive")
+    shifted_length = sequence_length - 1
+    return [
+        (start, min(start + chunk_tokens, shifted_length))
+        for start in range(0, shifted_length, chunk_tokens)
+    ]
+
+
+def chunked_full_sequence_causal_lm_loss(
+    hidden_states: Any,
+    labels: Any,
+    lm_head: Any,
+    *,
+    chunk_tokens: int,
+    final_logit_softcapping: float | None = None,
+):
+    """Compute the exact full-sequence causal-LM mean loss with bounded vocab logits."""
+    import torch
+    import torch.nn.functional as F
+    from torch.utils.checkpoint import checkpoint
+
+    if getattr(hidden_states, "ndim", None) != 3:
+        raise ValueError("hidden_states must have shape [batch, sequence, hidden]")
+    if getattr(labels, "ndim", None) != 2:
+        raise ValueError("labels must have shape [batch, sequence]")
+    if tuple(hidden_states.shape[:2]) != tuple(labels.shape):
+        raise ValueError(
+            f"hidden_states/labels shape mismatch: "
+            f"hidden={tuple(hidden_states.shape)} labels={tuple(labels.shape)}"
+        )
+
+    ranges = full_sequence_chunk_ranges(int(hidden_states.shape[1]), chunk_tokens)
+    shifted_hidden = hidden_states[:, :-1, :]
+    shifted_labels = labels[:, 1:]
+    supervised_tokens = int((shifted_labels != -100).sum().item())
+    if supervised_tokens <= 0:
+        raise ValueError("full-sequence causal LM loss has no supervised tokens")
+
+    if final_logit_softcapping is not None and float(final_logit_softcapping) <= 0:
+        raise ValueError("final_logit_softcapping must be positive when set")
+
+    def chunk_loss(chunk_hidden, chunk_labels):
+        logits = lm_head(chunk_hidden).float()
+        if final_logit_softcapping is not None:
+            cap = float(final_logit_softcapping)
+            logits = torch.tanh(logits / cap) * cap
+        targets = chunk_labels.to(logits.device)
+        return F.cross_entropy(
+            logits.reshape(-1, logits.shape[-1]),
+            targets.reshape(-1),
+            ignore_index=-100,
+            reduction="sum",
+        )
+
+    total_loss = None
+    for start, end in ranges:
+        hidden_chunk = shifted_hidden[:, start:end, :]
+        label_chunk = shifted_labels[:, start:end]
+        if hidden_chunk.requires_grad:
+            piece = checkpoint(
+                chunk_loss,
+                hidden_chunk,
+                label_chunk,
+                use_reentrant=False,
+            )
+        else:
+            piece = chunk_loss(hidden_chunk, label_chunk)
+        total_loss = piece if total_loss is None else total_loss + piece
+
+    return total_loss / supervised_tokens
+
+
+def resolve_chunked_loss_components(model: Any) -> tuple[Any, Any, Any, float | None]:
+    """Resolve the injected Gemma 4 base model, backbone, LM head, and exact logit softcap."""
+    base_model = model.get_base_model() if hasattr(model, "get_base_model") else model
+    backbone = getattr(base_model, "model", None)
+    lm_head = getattr(base_model, "lm_head", None)
+    config = getattr(base_model, "config", None)
+    if backbone is None or lm_head is None or config is None:
+        raise RuntimeError("trainer could not resolve Gemma 4 backbone/lm_head/config")
+
+    text_config = config.get_text_config() if hasattr(config, "get_text_config") else config
+    softcap = getattr(text_config, "final_logit_softcapping", None)
+    return base_model, backbone, lm_head, softcap
 
 
 class CausalLmCollator:
@@ -453,7 +533,6 @@ def main() -> None:
     ensure_peft_torchao_compat()
 
     import torch
-    import torch.nn.functional as F
     from datasets import Dataset
     from transformers import (
         AutoModelForCausalLM,
@@ -464,8 +543,8 @@ def main() -> None:
     )
     from peft import LoraConfig, get_peft_model
 
-    class FinalWindowTrainer(Trainer):
-        """Keep full context, but compute vocab logits/loss only for the final decision window."""
+    class FullSequenceTrainer(Trainer):
+        """Preserve full causal-LM supervision while chunking only the vocab projection."""
 
         def compute_loss(
             self,
@@ -476,30 +555,19 @@ def main() -> None:
         ):
             model_inputs = dict(inputs)
             labels = model_inputs.pop("labels")
-            sequence_length = int(labels.shape[-1])
-            keep_tokens, shift_start = final_window_loss_slice(
-                sequence_length,
-                TRAINING_CONFIG["loss_window_tokens"],
-            )
-            outputs = model(
+            _, backbone, lm_head, softcap = resolve_chunked_loss_components(model)
+            outputs = backbone(
                 **model_inputs,
-                logits_to_keep=keep_tokens,
+                use_cache=False,
+                return_dict=True,
             )
-            logits = outputs.logits.float()
-            shifted_labels = F.pad(labels, (0, 1), value=-100)[..., 1:]
-            shifted_labels = shifted_labels[..., shift_start:].contiguous()
-            if logits.shape[:-1] != shifted_labels.shape:
-                raise RuntimeError(
-                    "final-window logits/label shape mismatch: "
-                    f"logits={tuple(logits.shape)} labels={tuple(shifted_labels.shape)}"
-                )
-            flat_logits = logits.reshape(-1, logits.shape[-1])
-            flat_labels = shifted_labels.reshape(-1).to(logits.device)
-            loss = F.cross_entropy(
-                flat_logits,
-                flat_labels,
-                ignore_index=-100,
-                reduction="mean",
+            hidden_states = outputs.last_hidden_state
+            loss = chunked_full_sequence_causal_lm_loss(
+                hidden_states,
+                labels,
+                lm_head,
+                chunk_tokens=TRAINING_CONFIG["logit_chunk_tokens"],
+                final_logit_softcapping=softcap,
             )
             return (loss, outputs) if return_outputs else loss
 
@@ -580,7 +648,7 @@ def main() -> None:
         data_seed=TRAINING_CONFIG["seed"],
         remove_unused_columns=False,
     )
-    trainer = FinalWindowTrainer(
+    trainer = FullSequenceTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
