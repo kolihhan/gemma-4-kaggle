@@ -7,6 +7,12 @@ on:
         description: "Type TRAIN to launch the single frozen verifier LoRA v0 GPU run"
         required: true
         type: string
+  workflow_call:
+    inputs:
+      confirm:
+        description: "Type TRAIN to launch the single frozen verifier LoRA v0 GPU run"
+        required: true
+        type: string
 
 permissions:
   contents: read
