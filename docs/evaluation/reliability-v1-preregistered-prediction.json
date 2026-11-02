@@ -1,0 +1,24 @@
+{
+  "experiment": "reliability-v1",
+  "date": "2026-11-03",
+  "candidate_zip_sha256": "85a175f9de8bc6e64a7b4499ba397a8da47061490cd2c953170521b65ed365ef",
+  "base_model": "gemma-4-e4b-it-qat-w4a16-ct",
+  "public_leaderboard_prediction": {
+    "point": 0.08,
+    "interval": [0.05, 0.12],
+    "purpose": "calibration, not selection"
+  },
+  "development_diagnostic_prediction": {
+    "resolved_17": [1, 3],
+    "bare_pytest_calls": 0,
+    "call_cap_exhaustions": [0, 1],
+    "expected_direction": "preserve or improve resolution while reducing avoidable localization/edit/verification failures"
+  },
+  "anti_overfit_contract": [
+    "The existing 17-task set is development-only because its task IDs and traces have been inspected.",
+    "Reliability-v1 is frozen before this leaderboard submission; task-specific prompt edits are forbidden.",
+    "The 17-task diagnostic result cannot veto or select this submission.",
+    "Any v1.1 change must name one major variable and use a new untouched set for promotion evidence.",
+    "Leaderboard feedback is used to calibrate which local signals predict transfer, not to add per-task rules."
+  ]
+}
