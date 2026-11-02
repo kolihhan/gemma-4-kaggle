@@ -1,6 +1,10 @@
 import json
+from pathlib import Path
 import unittest
 
+
+ROOT = Path(__file__).resolve().parents[1]
+TRAINER_SOURCE = ROOT / "kaggle" / "train_verifier_lora.py"
 
 EXPECTED_TASK_IDS = [
     "fastapi_14479",
@@ -53,6 +57,16 @@ class VerifierLoraTrainingContractTests(unittest.TestCase):
         )
         self.assertNotIn("sweep", TRAINING_CONFIG)
         self.assertNotIn("grid", TRAINING_CONFIG)
+
+    def test_kaggle_runtime_uses_native_transformers_trainer_not_trl(self):
+        source = TRAINER_SOURCE.read_text(encoding="utf-8")
+        self.assertNotIn("from trl", source)
+        self.assertNotIn("SFTTrainer", source)
+        self.assertNotIn("SFTConfig", source)
+        self.assertIn("Trainer", source)
+        self.assertIn("TrainingArguments", source)
+        self.assertIn("get_peft_model", source)
+        self.assertIn("CausalLmCollator", source)
 
     def test_dataset_loader_accepts_gold_coverage_plus_safe_stop_subset(self):
         from kaggle.train_verifier_lora import load_sft_rows
