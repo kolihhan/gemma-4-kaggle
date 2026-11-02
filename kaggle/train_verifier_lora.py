@@ -99,6 +99,61 @@ def ensure_peft_torchao_compat(*, version_lookup=None, runner=None) -> dict[str,
     return {"torchao_version": version, "action": "uninstalled_incompatible"}
 
 
+def build_two_gpu_load_kwargs(torch_module, *, dtype) -> dict[str, Any]:
+    device_count = int(torch_module.cuda.device_count())
+    if device_count != 2:
+        raise RuntimeError(f'verifier LoRA v0 requires exactly 2 CUDA GPUs; found {device_count}')
+    return {
+        'dtype': dtype,
+        'low_cpu_mem_usage': True,
+        'device_map': 'balanced',
+        'max_memory': {0: '13GiB', 1: '13GiB'},
+    }
+
+
+def validate_two_gpu_device_map(model) -> dict[str, Any]:
+    device_map = getattr(model, 'hf_device_map', None)
+    if not isinstance(device_map, Mapping) or not device_map:
+        raise RuntimeError('model is missing a non-empty hf_device_map')
+
+    accelerator_devices = set()
+    offloaded_devices = set()
+    for destination in device_map.values():
+        normalized = destination
+        if isinstance(destination, str):
+            normalized = destination.strip().lower()
+            if normalized.startswith('cuda:'):
+                normalized = int(normalized.split(':', 1)[1])
+            elif normalized.isdigit():
+                normalized = int(normalized)
+        elif getattr(destination, 'type', None) == 'cuda':
+            normalized = int(destination.index)
+
+        if normalized in {'cpu', 'disk'}:
+            offloaded_devices.add(str(normalized))
+        elif isinstance(normalized, int):
+            accelerator_devices.add(normalized)
+        else:
+            raise RuntimeError(f'unexpected device-map destination: {destination!r}')
+
+    if offloaded_devices:
+        raise RuntimeError(f'CPU/disk offload is forbidden for verifier LoRA v0: {sorted(offloaded_devices)}')
+    if accelerator_devices != {0, 1}:
+        raise RuntimeError(f'model must span both GPU 0 and GPU 1; got {sorted(accelerator_devices)}')
+    return {
+        'accelerator_devices': sorted(accelerator_devices),
+        'offloaded_devices': sorted(offloaded_devices),
+        'module_count': len(device_map),
+    }
+
+
+def validate_trainer_model_parallel(trainer) -> None:
+    if not bool(getattr(trainer, 'is_model_parallel', False)):
+        raise RuntimeError('Trainer did not recognize the two-GPU model-parallel placement')
+    if bool(getattr(trainer, 'place_model_on_device', True)):
+        raise RuntimeError('Trainer must not move the model after model-parallel loading')
+
+
 def _walk_forbidden(value: Any, path: str = "$") -> None:
     if isinstance(value, dict):
         for key, child in value.items():
@@ -407,13 +462,14 @@ def main() -> None:
     if not torch.cuda.is_available():
         raise RuntimeError("verifier LoRA training requires a visible CUDA GPU")
     dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+    load_kwargs = build_two_gpu_load_kwargs(torch, dtype=dtype)
     model = AutoModelForCausalLM.from_pretrained(
         str(MODEL_PATH),
         local_files_only=True,
-        dtype=dtype,
-        low_cpu_mem_usage=True,
+        **load_kwargs,
     )
     validate_model_class(model)
+    device_map_summary = validate_two_gpu_device_map(model)
     base_model_class = model.__class__.__name__
     model.config.use_cache = False
     model.gradient_checkpointing_enable()
@@ -428,6 +484,7 @@ def main() -> None:
         target_modules=matched_modules,
     )
     model = get_peft_model(model, peft_config)
+    device_map_summary = validate_two_gpu_device_map(model)
     if hasattr(model, "enable_input_require_grads"):
         model.enable_input_require_grads()
 
@@ -453,6 +510,7 @@ def main() -> None:
         train_dataset=train_dataset,
         data_collator=CausalLmCollator(tokenizer),
     )
+    validate_trainer_model_parallel(trainer)
 
     trainable_params = sum(p.numel() for p in trainer.model.parameters() if p.requires_grad)
     total_params = sum(p.numel() for p in trainer.model.parameters())
@@ -503,6 +561,7 @@ def main() -> None:
         "adapter_files": sorted(actual_files),
         "package_versions": _package_versions(),
         "visible_gpus": torch.cuda.device_count(),
+        "device_map_summary": device_map_summary,
     }
     REPORT_PATH.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
     print("VERIFIER_LORA_TRAINING_REPORT", json.dumps(report, sort_keys=True), flush=True)
