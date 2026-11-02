@@ -1,0 +1,131 @@
+name: Patch two-GPU verifier placement once
+
+on:
+  push:
+    branches: [exp/verifier-lora-v0]
+    paths:
+      - .github/workflows/patch-two-gpu-placement-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: exp/verifier-lora-v0
+
+      - name: Apply exact two-GPU placement contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("kaggle/train_verifier_lora.py")
+          source = path.read_text(encoding="utf-8")
+
+          anchor = '\n\ndef _walk_forbidden(value: Any, path: str = "$") -> None:\n'
+          helper_lines = [
+              "",
+              "",
+              "def build_two_gpu_load_kwargs(torch_module, *, dtype) -> dict[str, Any]:",
+              "    device_count = int(torch_module.cuda.device_count())",
+              "    if device_count != 2:",
+              "        raise RuntimeError(f'verifier LoRA v0 requires exactly 2 CUDA GPUs; found {device_count}')",
+              "    return {",
+              "        'dtype': dtype,",
+              "        'low_cpu_mem_usage': True,",
+              "        'device_map': 'balanced',",
+              "        'max_memory': {0: '13GiB', 1: '13GiB'},",
+              "    }",
+              "",
+              "",
+              "def validate_two_gpu_device_map(model) -> dict[str, Any]:",
+              "    device_map = getattr(model, 'hf_device_map', None)",
+              "    if not isinstance(device_map, Mapping) or not device_map:",
+              "        raise RuntimeError('model is missing a non-empty hf_device_map')",
+              "",
+              "    accelerator_devices = set()",
+              "    offloaded_devices = set()",
+              "    for destination in device_map.values():",
+              "        normalized = destination",
+              "        if isinstance(destination, str):",
+              "            normalized = destination.strip().lower()",
+              "            if normalized.startswith('cuda:'):",
+              "                normalized = int(normalized.split(':', 1)[1])",
+              "            elif normalized.isdigit():",
+              "                normalized = int(normalized)",
+              "        elif getattr(destination, 'type', None) == 'cuda':",
+              "            normalized = int(destination.index)",
+              "",
+              "        if normalized in {'cpu', 'disk'}:",
+              "            offloaded_devices.add(str(normalized))",
+              "        elif isinstance(normalized, int):",
+              "            accelerator_devices.add(normalized)",
+              "        else:",
+              "            raise RuntimeError(f'unexpected device-map destination: {destination!r}')",
+              "",
+              "    if offloaded_devices:",
+              "        raise RuntimeError(f'CPU/disk offload is forbidden for verifier LoRA v0: {sorted(offloaded_devices)}')",
+              "    if accelerator_devices != {0, 1}:",
+              "        raise RuntimeError(f'model must span both GPU 0 and GPU 1; got {sorted(accelerator_devices)}')",
+              "    return {",
+              "        'accelerator_devices': sorted(accelerator_devices),",
+              "        'offloaded_devices': sorted(offloaded_devices),",
+              "        'module_count': len(device_map),",
+              "    }",
+              "",
+              "",
+              "def validate_trainer_model_parallel(trainer) -> None:",
+              "    if not bool(getattr(trainer, 'is_model_parallel', False)):",
+              "        raise RuntimeError('Trainer did not recognize the two-GPU model-parallel placement')",
+              "    if bool(getattr(trainer, 'place_model_on_device', True)):",
+              "        raise RuntimeError('Trainer must not move the model after model-parallel loading')",
+          ]
+          helper = "\n".join(helper_lines) + "\n"
+          if source.count(anchor) != 1:
+              raise SystemExit(f"unexpected helper anchor count: {source.count(anchor)}")
+          source = source.replace(anchor, helper + anchor, 1)
+
+          old_load = '''    model = AutoModelForCausalLM.from_pretrained(\n        str(MODEL_PATH),\n        local_files_only=True,\n        dtype=dtype,\n        low_cpu_mem_usage=True,\n    )\n    validate_model_class(model)\n'''
+          new_load = '''    load_kwargs = build_two_gpu_load_kwargs(torch, dtype=dtype)\n    model = AutoModelForCausalLM.from_pretrained(\n        str(MODEL_PATH),\n        local_files_only=True,\n        **load_kwargs,\n    )\n    validate_model_class(model)\n    device_map_summary = validate_two_gpu_device_map(model)\n'''
+          if source.count(old_load) != 1:
+              raise SystemExit(f"unexpected model-load block count: {source.count(old_load)}")
+          source = source.replace(old_load, new_load, 1)
+
+          old_peft = '''    model = get_peft_model(model, peft_config)\n    if hasattr(model, "enable_input_require_grads"):\n'''
+          new_peft = '''    model = get_peft_model(model, peft_config)\n    device_map_summary = validate_two_gpu_device_map(model)\n    if hasattr(model, "enable_input_require_grads"):\n'''
+          if source.count(old_peft) != 1:
+              raise SystemExit(f"unexpected PEFT block count: {source.count(old_peft)}")
+          source = source.replace(old_peft, new_peft, 1)
+
+          old_trainer = '''    trainer = Trainer(\n        model=model,\n        args=training_args,\n        train_dataset=train_dataset,\n        data_collator=CausalLmCollator(tokenizer),\n    )\n\n    trainable_params = sum'''
+          new_trainer = '''    trainer = Trainer(\n        model=model,\n        args=training_args,\n        train_dataset=train_dataset,\n        data_collator=CausalLmCollator(tokenizer),\n    )\n    validate_trainer_model_parallel(trainer)\n\n    trainable_params = sum'''
+          if source.count(old_trainer) != 1:
+              raise SystemExit(f"unexpected Trainer block count: {source.count(old_trainer)}")
+          source = source.replace(old_trainer, new_trainer, 1)
+
+          old_report = '        "visible_gpus": torch.cuda.device_count(),\n'
+          new_report = '        "visible_gpus": torch.cuda.device_count(),\n        "device_map_summary": device_map_summary,\n'
+          if source.count(old_report) != 1:
+              raise SystemExit(f"unexpected report field count: {source.count(old_report)}")
+          source = source.replace(old_report, new_report, 1)
+
+          path.write_text(source, encoding="utf-8")
+          PY
+          python -m py_compile kaggle/train_verifier_lora.py
+          python -m unittest tests.test_verifier_lora_multi_gpu -v
+          git diff --check
+
+      - name: Commit two-GPU placement fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add kaggle/train_verifier_lora.py
+          git commit -m "fix: balance verifier LoRA across two T4 GPUs"
+          git push origin HEAD:exp/verifier-lora-v0
