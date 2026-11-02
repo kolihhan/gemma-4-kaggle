@@ -116,8 +116,8 @@ def build_two_gpu_load_kwargs(torch_module, *, dtype) -> dict[str, Any]:
         'model.audio_tower': 1,
         'model.embed_vision': 1,
         'model.embed_audio': 1,
-        'model.language_model.per_layer_projection_norm': 1,
-        'model.language_model.per_layer_model_projection': 1,
+        'model.language_model.per_layer_projection_norm': 0,
+        'model.language_model.per_layer_model_projection': 0,
     }
     for layer_index in range(42):
         device_map[f'model.language_model.layers.{layer_index}'] = 0 if layer_index <= 3 else 1
