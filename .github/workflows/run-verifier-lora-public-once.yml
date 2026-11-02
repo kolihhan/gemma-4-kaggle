@@ -1,0 +1,19 @@
+name: Public one-shot verifier LoRA v0 training
+
+on:
+  push:
+    branches:
+      - exp/public-train-once
+    paths:
+      - .github/workflows/run-verifier-lora-public-once.yml
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  train:
+    uses: ./.github/workflows/run-verifier-lora-train.yml
+    with:
+      confirm: TRAIN
+    secrets: inherit
