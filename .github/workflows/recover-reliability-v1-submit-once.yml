@@ -1,0 +1,92 @@
+name: Recover Reliability v1 submission once
+
+on:
+  push:
+    branches: [submit/reliability-v1]
+    paths:
+      - ".github/workflows/recover-reliability-v1-submit-once.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  recover-submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      COMPETITION: gemma-4-developer-agent
+      KERNEL_REF: kolihhan/reliability-v1-submission-generator-41471015064
+      OUTPUT_DIR: /tmp/gemma4-reliability-v1-recovery
+      EXPECTED_SHA256: b99fcacf9602e9ff8b457bc378e5f550c52c02384e74a689f5737e4fb5818651
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned Kaggle CLI
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+
+      - name: Poll existing generator notebook
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 120); do
+            out="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            printf '[%03d] %s\n' "$attempt" "$out"
+            lower="$(printf '%s' "$out" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal=complete; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal=error; break; fi
+            sleep 10
+          done
+          test "$terminal" = complete
+
+      - name: Collect and verify exact submission.zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$OUTPUT_DIR"
+          mkdir -p "$OUTPUT_DIR"
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o
+          test -s "$OUTPUT_DIR/submission.zip"
+          actual="$(sha256sum "$OUTPUT_DIR/submission.zip" | awk '{print $1}')"
+          echo "RECOVERED_SHA256=$actual"
+          test "$actual" = "$EXPECTED_SHA256"
+          python - <<'PY'
+          import os, zipfile
+          from pathlib import Path
+          p=Path(os.environ['OUTPUT_DIR'])/'submission.zip'
+          with zipfile.ZipFile(p) as z:
+              names=sorted(z.namelist())
+          expected=sorted([
+              'agent.yaml',
+              'configs/sampling.yaml',
+              'eval_config.yaml',
+              'prompts/coder.md',
+              'prompts/system.md',
+          ])
+          assert names == expected, (names, expected)
+          print('VERIFIED_SUBMISSION_FILES', names)
+          PY
+
+      - name: Submit Reliability v1
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle competitions submit "$COMPETITION" \
+            -k "$KERNEL_REF" \
+            -f submission.zip \
+            -v 1 \
+            -m "Reliability v1: E4B single-root; frozen 4096 thinking, 16k output, 5m/32-call budget; general reliability policy only" \
+            | tee "$OUTPUT_DIR/submit.txt"
+
+      - name: Confirm Kaggle accepted submission record
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle competitions submissions "$COMPETITION" -v -q \
+            | head -n 8 \
+            | tee "$OUTPUT_DIR/latest-submissions.csv"
