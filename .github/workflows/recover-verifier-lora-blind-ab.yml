@@ -1,4 +1,4 @@
-name: Probe frozen blind BASE status
+name: Discover frozen blind BASE kernel
 
 on:
   push:
@@ -20,11 +20,12 @@ jobs:
           python-version: '3.12'
       - name: Install Kaggle CLI
         run: python -m pip install --disable-pip-version-check -q 'kaggle==2.2.5' 'six==1.17.0'
-      - name: Query BASE kernel
+      - name: List recent kernels for owner
         env:
           KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
-          KERNEL_REF: kolihhan/gemma4-verifier-blind-base-41434071381
         shell: bash
         run: |
           set -euo pipefail
-          kaggle kernels status "$KERNEL_REF"
+          kaggle kernels list --user kolihhan --page-size 100 | tee /tmp/kernels.txt
+          echo '--- matching blind / run-id ---'
+          grep -Ei '41434071381|blind|verifier' /tmp/kernels.txt || true
