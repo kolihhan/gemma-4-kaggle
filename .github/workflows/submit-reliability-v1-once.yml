@@ -1,0 +1,164 @@
+name: Submit Reliability v1 once
+
+on:
+  push:
+    branches: [submit/reliability-v1]
+    paths:
+      - ".github/workflows/submit-reliability-v1-once.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      COMPETITION: gemma-4-developer-agent
+      KERNEL_REF: kolihhan/gemma4-reliability-v1-${{ github.run_id }}
+      KERNEL_DIR: /tmp/gemma4-reliability-v1-kernel
+      OUTPUT_DIR: /tmp/gemma4-reliability-v1-output
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned Kaggle CLI
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+
+      - name: Build and validate exact submission.zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$KERNEL_DIR" "$OUTPUT_DIR"
+          mkdir -p "$KERNEL_DIR" "$OUTPUT_DIR"
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, zipfile, os
+
+          root = Path('submission')
+          names = [
+              'agent.yaml',
+              'configs/sampling.yaml',
+              'eval_config.yaml',
+              'prompts/coder.md',
+              'prompts/system.md',
+          ]
+          agent=(root/'agent.yaml').read_text()
+          coder=(root/'prompts/coder.md').read_text()
+          sampling=(root/'configs/sampling.yaml').read_text()
+          evalc=(root/'eval_config.yaml').read_text()
+          assert 'gemma-4-e4b-it-qat-w4a16-ct' in agent
+          assert 'submit_patch' in agent and 'agent_tool:' not in agent
+          assert 'Never run bare `pytest`' in coder
+          assert 'Before a fourth exploratory `read_file`' in coder
+          assert 'thinking_budget: 4096' in sampling
+          assert 'max_output_tokens: 16384' in sampling
+          assert 'max_tool_calls: 32' in evalc and 'max_time_minutes: 5' in evalc
+
+          out=Path('/tmp/submission.zip')
+          with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as z:
+              for name in names:
+                  data=(root/name).read_bytes()
+                  zi=zipfile.ZipInfo(name, date_time=(2026,11,2,0,0,0))
+                  zi.compress_type=zipfile.ZIP_DEFLATED
+                  z.writestr(zi,data)
+          sha=hashlib.sha256(out.read_bytes()).hexdigest()
+          print('SUBMISSION_SHA256',sha)
+          print('SUBMISSION_FILES',names)
+          with open(os.environ['GITHUB_ENV'],'a') as f:
+              f.write(f'SOURCE_ZIP_SHA256={sha}\n')
+          PY
+
+      - name: Build private Kaggle generator notebook
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload="$(base64 -w0 /tmp/submission.zip)"
+          cat > "$KERNEL_DIR/generate_submission.py" <<PY
+          import base64, hashlib
+          from pathlib import Path
+          raw = base64.b64decode("$payload")
+          actual = hashlib.sha256(raw).hexdigest()
+          expected = "$SOURCE_ZIP_SHA256"
+          assert actual == expected, (actual, expected)
+          out = Path('/kaggle/working/submission.zip')
+          out.write_bytes(raw)
+          print('SUBMISSION_ZIP_SHA256', actual)
+          print('SUBMISSION_ZIP_BYTES', len(raw))
+          PY
+          cat > "$KERNEL_DIR/kernel-metadata.json" <<JSON
+          {
+            "id": "$KERNEL_REF",
+            "title": "Reliability v1 submission generator $GITHUB_RUN_ID",
+            "code_file": "generate_submission.py",
+            "language": "python",
+            "kernel_type": "script",
+            "is_private": true,
+            "enable_gpu": false,
+            "enable_tpu": false,
+            "enable_internet": false,
+            "competition_sources": ["gemma-4-developer-agent"],
+            "dataset_sources": [],
+            "kernel_sources": [],
+            "model_sources": []
+          }
+          JSON
+          python -m json.tool "$KERNEL_DIR/kernel-metadata.json" >/dev/null
+          kaggle kernels push -p "$KERNEL_DIR"
+
+      - name: Wait for generator notebook
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 90); do
+            out="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            printf '[%02d] %s\n' "$attempt" "$out"
+            lower="$(printf '%s' "$out" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal=complete; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal=error; break; fi
+            sleep 10
+          done
+          test "$terminal" = complete
+
+      - name: Verify notebook output
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o
+          test -s "$OUTPUT_DIR/submission.zip"
+          actual="$(sha256sum "$OUTPUT_DIR/submission.zip" | awk '{print $1}')"
+          echo "OUTPUT_SHA256=$actual"
+          test "$actual" = "$SOURCE_ZIP_SHA256"
+          python - <<'PY'
+          import os, zipfile
+          from pathlib import Path
+          p=Path(os.environ['OUTPUT_DIR'])/'submission.zip'
+          with zipfile.ZipFile(p) as z:
+              names=sorted(z.namelist())
+          expected=sorted(['agent.yaml','configs/sampling.yaml','eval_config.yaml','prompts/coder.md','prompts/system.md'])
+          assert names==expected,(names,expected)
+          print('VERIFIED_SUBMISSION_FILES',names)
+          PY
+
+      - name: Submit code notebook output
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle competitions submit "$COMPETITION" \
+            -k "$KERNEL_REF" \
+            -f submission.zip \
+            -v 1 \
+            -m "Reliability v1: E4B single-root; frozen 4096 thinking, 16k output, 5m/32-call budget; general reliability policy only" \
+            | tee "$OUTPUT_DIR/submit.txt"
+
+      - name: Show accepted submission state
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle competitions submissions "$COMPETITION" -v -q | head -n 6 | tee "$OUTPUT_DIR/latest-submissions.csv"
