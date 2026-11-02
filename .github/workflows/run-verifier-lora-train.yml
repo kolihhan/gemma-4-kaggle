@@ -26,7 +26,7 @@ env:
   KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
   TEACHER_RUN_ID: "41373086676"
   TEACHER_ARTIFACT_NAME: "gemma4-verifier-sft-teacher-v0-evidence"
-  EXPECTED_DATASET_SHA256: "188e22d59351ff08e1c3ced0365addaf19ffb9c68ce64df4cafd3e1cce7ecb8c"
+  EXPECTED_DATASET_SHA256: "188e22d5d2b7d884cfb99bb54a1e78ae2defbabd739067ba6e6be31ee18ecb8c"
   MODEL_SOURCE: "google/gemma-4/transformers/gemma-4-e4b-it-qat-q4_0-unquantized/2"
   TEACHER_DIR: /tmp/verifier-sft-teacher
   KERNEL_DIR: /tmp/verifier-lora-kernel
