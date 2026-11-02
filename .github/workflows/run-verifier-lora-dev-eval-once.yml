@@ -12,8 +12,6 @@ permissions:
 
 env:
   KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
-  ADAPTER_DATASET: kolihhan/gemma4-verifier-lora-v0-fullseq-41429301498
-  MODEL_SOURCE: google/gemma-4/Other/gemma-4-e4b-it-qat-w4a16-ct/2
 
 jobs:
   dev-lora:
@@ -24,176 +22,31 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Install pinned Kaggle CLI
         run: |
           set -euo pipefail
-          python -m pip install --disable-pip-version-check -q 'kaggle==2.2.5' 'six==1.17.0'
+          python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
           kaggle --version
 
-      - name: Render verifier-only LoRA development kernel
-        env:
-          KERNEL_DIR: /tmp/verifier-lora-dev-kernel
-          KERNEL_REF: kolihhan/gemma4-verifier-lora-dev-${{ github.run_id }}
-        shell: bash
+      - name: Validate renderer
         run: |
           set -euo pipefail
-          rm -rf "$KERNEL_DIR"
-          mkdir -p "$KERNEL_DIR"
-          python - <<'PY'
-          import base64
-          import json
-          import os
-          from pathlib import Path
+          python -m py_compile scripts/render_verifier_lora_dev_kernel.py
 
-          repo = Path.cwd()
-          submission = repo / 'submission'
-          template_path = repo / 'kaggle' / 'verifier_baseline_runtime.py'
-          contract_path = repo / 'docs' / 'evaluation' / 'verifier-lora-eval-contract-v1.json'
-          kernel_dir = Path(os.environ['KERNEL_DIR'])
-          model_name = 'gemma-4-e4b-it-qat-w4a16-ct'
-
-          contract = json.loads(contract_path.read_text(encoding='utf-8'))
-          ids = contract['development_validation']['instance_ids']
-          expected = [
-              'rich_3061', 'rich_3067', 'rich_3934', 'rich_3942',
-              'fastapi_13920', 'fastapi_14077', 'fastapi_14463',
-              'fastapi_14851', 'fastapi_14986',
-          ]
-          if ids != expected:
-              raise SystemExit(f'development IDs drifted: {ids!r}')
-          if len(ids) != 9 or len(set(ids)) != 9:
-              raise SystemExit('development manifest must contain exactly 9 unique tasks')
-
-          payload = {}
-          for path in sorted(submission.rglob('*')):
-              if not path.is_file():
-                  continue
-              rel = path.relative_to(submission).as_posix()
-              if rel.startswith('adapters/'):
-                  continue
-              payload[rel] = path.read_text(encoding='utf-8')
-          if 'agent.yaml' not in payload or 'sub_agents/verifier.yaml' not in payload:
-              raise SystemExit('canonical two-stage submission is incomplete')
-
-          verifier = payload['sub_agents/verifier.yaml']
-          needle = f'model: {model_name}\n'
-          if verifier.count(needle) != 1 or 'adapter:' in verifier:
-              raise SystemExit('unexpected verifier YAML before adapter injection')
-          payload['sub_agents/verifier.yaml'] = verifier.replace(
-              needle, needle + 'adapter: verifier_lora\n', 1
-          )
-
-          manifest = {
-              'version': 'verifier-lora-v0',
-              'holdout': [{'instance_id': task_id} for task_id in ids],
-          }
-          encoded = base64.b64encode(
-              json.dumps(payload, sort_keys=True, separators=(',', ':')).encode('utf-8')
-          ).decode('ascii')
-
-          text = template_path.read_text(encoding='utf-8')
-          submission_marker = '__SUBMISSION_PAYLOAD_B64__'
-          manifest_marker = 'HOLDOUT_MANIFEST_JSON = "__VERIFIER_LORA_HOLDOUT_MANIFEST_JSON__"'
-          if text.count(submission_marker) != 1 or text.count(manifest_marker) != 1:
-              raise SystemExit('runtime placeholders drifted')
-          text = text.replace(submission_marker, encoded, 1)
-          text = text.replace(
-              manifest_marker,
-              f'HOLDOUT_MANIFEST_JSON = {json.dumps(manifest, sort_keys=True)!r}',
-              1,
-          )
-
-          insert_before = '\ndef load_holdout_ids() -> list[str]:\n'
-          adapter_fn = '''
-def materialize_frozen_adapter() -> None:
-    slug = "gemma4-verifier-lora-v0-fullseq-41429301498"
-    candidates = [
-        Path(f"/kaggle/input/datasets/kolihhan/{slug}/adapter"),
-        Path(f"/kaggle/input/{slug}/adapter"),
-    ]
-    for config_path in Path("/kaggle/input").glob(f"**/{slug}/**/adapter_config.json"):
-        candidates.append(config_path.parent)
-    source = next(
-        (
-            candidate for candidate in candidates
-            if (candidate / "adapter_config.json").is_file()
-            and (candidate / "adapter_model.safetensors").is_file()
-        ),
-        None,
-    )
-    if source is None:
-        raise FileNotFoundError(f"frozen adapter dataset not mounted for slug={slug}")
-    target = AGENT_DIR / "adapters" / "verifier_lora"
-    target.mkdir(parents=True, exist_ok=True)
-    for name in ("adapter_config.json", "adapter_model.safetensors"):
-        shutil.copyfile(source / name, target / name)
-'''
-          if text.count(insert_before) != 1:
-              raise SystemExit('adapter function insertion point missing')
-          text = text.replace(insert_before, '\n' + adapter_fn + insert_before, 1)
-
-          call_site = '    materialize_submission()\n    holdout_ids = load_holdout_ids()\n'
-          replacement = (
-              '    materialize_submission()\n'
-              '    materialize_frozen_adapter()\n'
-              '    holdout_ids = load_holdout_ids()\n'
-          )
-          if text.count(call_site) != 1:
-              raise SystemExit('adapter materialization call site missing')
-          text = text.replace(call_site, replacement, 1)
-
-          old_guard = (
-              '    adapter_map = getattr(adapters, "adapters", None) or {}\n'
-              '    if adapter_map:\n'
-              '        raise RuntimeError(f"baseline v0 must not contain adapters: {sorted(adapter_map)}")\n'
-          )
-          new_guard = (
-              '    adapter_map = getattr(adapters, "adapters", None) or {}\n'
-              '    if set(adapter_map) != {"verifier_lora"}:\n'
-              '        raise RuntimeError(f"LoRA v0 expected only verifier_lora adapter, got: {sorted(adapter_map)}")\n'
-          )
-          if text.count(old_guard) != 1:
-              raise SystemExit('baseline adapter guard missing')
-          text = text.replace(old_guard, new_guard, 1)
-          if text.count('enable_lora=False') != 1:
-              raise SystemExit('unexpected enable_lora occurrence count')
-          text = text.replace('enable_lora=False', 'enable_lora=True', 1)
-
-          compile(text, 'dev_lora_runtime.py', 'exec')
-          (kernel_dir / 'dev_lora_runtime.py').write_text(text, encoding='utf-8')
-
-          ref = os.environ['KERNEL_REF']
-          metadata = {
-              'id': ref,
-              'title': ref.split('/', 1)[1],
-              'code_file': 'dev_lora_runtime.py',
-              'language': 'python',
-              'kernel_type': 'script',
-              'is_private': True,
-              'enable_gpu': True,
-              'enable_tpu': False,
-              'enable_internet': False,
-              'machine_shape': 'NvidiaL4',
-              'docker_image': 'gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461',
-              'dataset_sources': [
-                  'metric/gemma-4-developer-agent-wheelhouse',
-                  os.environ['ADAPTER_DATASET'],
-              ],
-              'competition_sources': ['gemma-4-developer-agent'],
-              'kernel_sources': [],
-              'model_sources': [os.environ['MODEL_SOURCE']],
-          }
-          (kernel_dir / 'kernel-metadata.json').write_text(
-              json.dumps(metadata, indent=2) + '\n', encoding='utf-8'
-          )
-          print('development_ids=', ids)
-          print('verifier_adapter_injected=', 'adapter: verifier_lora' in payload['sub_agents/verifier.yaml'])
-          print('submission_files=', sorted(payload))
-          PY
-          python -m json.tool "$KERNEL_DIR/kernel-metadata.json" >/dev/null
-          kaggle kernels push -p "$KERNEL_DIR" --accelerator NvidiaL4 -t 7200
+      - name: Render and push verifier-only LoRA development kernel
+        env:
+          KERNEL_REF: kolihhan/gemma4-verifier-lora-dev-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/verifier-lora-dev-kernel
+          python scripts/render_verifier_lora_dev_kernel.py \
+            --repo . \
+            --kernel-dir /tmp/verifier-lora-dev-kernel \
+            --kernel-ref "$KERNEL_REF"
+          python -m json.tool /tmp/verifier-lora-dev-kernel/kernel-metadata.json >/dev/null
+          kaggle kernels push -p /tmp/verifier-lora-dev-kernel --accelerator NvidiaL4 -t 7200
 
       - name: Poll verifier-only LoRA development kernel
         id: poll
@@ -226,15 +79,7 @@ def materialize_frozen_adapter() -> None:
           kaggle kernels logs "$KERNEL_REF" > "$OUTPUT_DIR/kernel.log" 2>&1 || true
           kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o > "$OUTPUT_DIR/output-download.log" 2>&1
           test -s "$OUTPUT_DIR/verifier_baseline_results.json"
-          python - <<'PY'
-          import json, os
-          from pathlib import Path
-          result = json.loads((Path(os.environ['OUTPUT_DIR']) / 'verifier_baseline_results.json').read_text())
-          assert result.get('status') == 'completed', result
-          assert result.get('requested') == 9, result
-          assert len(result.get('results', [])) == 9, result
-          print('DEV_LORA_SUMMARY', json.dumps({k:v for k,v in result.items() if k!='results'}, sort_keys=True))
-          PY
+          python -c "import json,os,pathlib; r=json.loads((pathlib.Path(os.environ['OUTPUT_DIR'])/'verifier_baseline_results.json').read_text()); assert r.get('status')=='completed' and r.get('requested')==9 and len(r.get('results',[]))==9; print('DEV_LORA_SUMMARY',json.dumps({k:v for k,v in r.items() if k!='results'},sort_keys=True))"
 
       - name: Upload development LoRA evidence
         if: always()
