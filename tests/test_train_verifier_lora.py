@@ -3,12 +3,12 @@ import unittest
 
 
 EXPECTED_TASK_IDS = [
-    "requests_2",
-    "rich_3041",
-    "rich_3049",
     "fastapi_14479",
-    "fastapi_15661",
-    "fastapi_16052",
+    "requests_6644",
+    "rich_3718",
+    "rich_3882",
+    "rich_3953",
+    "rich_4006",
 ]
 
 
@@ -59,7 +59,7 @@ class VerifierLoraTrainingContractTests(unittest.TestCase):
 
         good = []
         for task_id in EXPECTED_TASK_IDS:
-            if task_id in {"requests_2", "fastapi_16052"}:
+            if task_id in {"requests_6644", "rich_3953"}:
                 good.append(sft_row(task_id, "safe_stop"))
             good.append(sft_row(task_id, "verified_submit"))
         payload = "\n".join(json.dumps(row) for row in good) + "\n"
@@ -75,7 +75,7 @@ class VerifierLoraTrainingContractTests(unittest.TestCase):
         from kaggle.train_verifier_lora import load_sft_rows
 
         good = [sft_row(task_id, "verified_submit") for task_id in EXPECTED_TASK_IDS]
-        good.insert(1, sft_row("requests_2", "safe_stop"))
+        good.insert(1, sft_row("requests_6644", "safe_stop"))
 
         bad_cases = []
         duplicate = good + [dict(good[0])]
@@ -89,7 +89,7 @@ class VerifierLoraTrainingContractTests(unittest.TestCase):
         leaked[0] = dict(leaked[0], reference_patch="secret")
         bad_cases.append("\n".join(json.dumps(row) for row in leaked))
 
-        missing_gold = [row for row in good if row["example_id"] != "fastapi_16052:gold-pass"]
+        missing_gold = [row for row in good if row["example_id"] != "rich_4006:gold-pass"]
         bad_cases.append("\n".join(json.dumps(row) for row in missing_gold))
 
         no_negative = [sft_row(task_id, "verified_submit") for task_id in EXPECTED_TASK_IDS]
@@ -100,7 +100,7 @@ class VerifierLoraTrainingContractTests(unittest.TestCase):
         bad_cases.append("\n".join(json.dumps(row) for row in wrong_label))
 
         wrong_example_id = [dict(row) for row in good]
-        wrong_example_id[0]["example_id"] = "requests_2:base-fail"
+        wrong_example_id[0]["example_id"] = "fastapi_14479:base-fail"
         bad_cases.append("\n".join(json.dumps(row) for row in wrong_example_id))
 
         for payload in bad_cases:

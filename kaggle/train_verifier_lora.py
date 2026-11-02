@@ -27,12 +27,12 @@ ADAPTER_DIR = OUTPUT_ROOT / "adapter"
 REPORT_PATH = OUTPUT_ROOT / "training_report.json"
 
 EXPECTED_TASK_IDS = [
-    "requests_2",
-    "rich_3041",
-    "rich_3049",
     "fastapi_14479",
-    "fastapi_15661",
-    "fastapi_16052",
+    "requests_6644",
+    "rich_3718",
+    "rich_3882",
+    "rich_3953",
+    "rich_4006",
 ]
 FORBIDDEN_KEYS = {
     "reference_patch",
