@@ -1,0 +1,103 @@
+name: Run topology A/B no-op screen once
+
+on:
+  push:
+    branches: [exp/topology-ab]
+    paths:
+      - ".github/workflows/run-topology-noop-screen-once.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  screen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-topology-noop-${{ github.run_id }}
+      KERNEL_DIR: /tmp/gemma4-topology-noop
+      OUTPUT_DIR: /tmp/gemma4-topology-noop-output
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned Kaggle CLI
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+      - name: Render private CPU no-op kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$KERNEL_DIR" "$OUTPUT_DIR"
+          mkdir -p "$KERNEL_DIR" "$OUTPUT_DIR"
+          cp kaggle/topology_noop_screen.py "$KERNEL_DIR/topology_noop_screen.py"
+          python -m py_compile "$KERNEL_DIR/topology_noop_screen.py"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          kernel_dir = Path(os.environ['KERNEL_DIR'])
+          ref = os.environ['KERNEL_REF']
+          metadata = {
+              'id': ref,
+              'title': ref.split('/',1)[1],
+              'code_file': 'topology_noop_screen.py',
+              'language': 'python',
+              'kernel_type': 'script',
+              'is_private': True,
+              'enable_gpu': False,
+              'enable_tpu': False,
+              'enable_internet': False,
+              'docker_image': 'gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461',
+              'dataset_sources': ['metric/gemma-4-developer-agent-wheelhouse'],
+              'competition_sources': ['gemma-4-developer-agent'],
+              'kernel_sources': [],
+              'model_sources': [],
+          }
+          (kernel_dir/'kernel-metadata.json').write_text(json.dumps(metadata,indent=2)+'\n')
+          PY
+          kaggle kernels push -p "$KERNEL_DIR" -t 3600
+      - name: Poll no-op kernel
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 240); do
+            out="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            printf '[%03d] %s\n' "$attempt" "$out"
+            lower="$(printf '%s' "$out" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal=complete; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal=error; break; fi
+            sleep 15
+          done
+          test -n "$terminal" || terminal=timeout
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          test "$terminal" = complete
+      - name: Collect and assert no-op result
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUTPUT_DIR"
+          kaggle kernels logs "$KERNEL_REF" > "$OUTPUT_DIR/kernel.log" 2>&1 || true
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o
+          test -s "$OUTPUT_DIR/topology_noop_screen.json"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          r=json.loads((Path(os.environ['OUTPUT_DIR'])/'topology_noop_screen.json').read_text())
+          assert r.get('version')=='topology-ab-noop-screen-v1', r
+          assert r.get('status')=='completed', r
+          assert r.get('requested')==19, r
+          assert len(r.get('results',[]))==19, r
+          print('TOPOLOGY_NOOP_SUMMARY',json.dumps({k:v for k,v in r.items() if k!='results'},sort_keys=True))
+          PY
+      - name: Upload no-op evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: topology-ab-noop-screen-${{ github.run_id }}
+          path: /tmp/gemma4-topology-noop-output
+          if-no-files-found: error
+          retention-days: 14
