@@ -1,0 +1,99 @@
+name: Run topology single-root candidate once
+
+on:
+  push:
+    branches: [exp/topology-ab]
+    paths:
+      - "docs/evaluation/topology-ab-manifest-v1.json"
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-topology-single-${{ github.run_id }}
+      KERNEL_DIR: /tmp/gemma4-topology-single
+      OUTPUT_DIR: /tmp/gemma4-topology-single-output
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned Kaggle CLI
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+      - name: Validate and render topology-only candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$KERNEL_DIR" "$OUTPUT_DIR"
+          mkdir -p "$KERNEL_DIR" "$OUTPUT_DIR"
+          python -m py_compile scripts/render_topology_single_root_kernel.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('docs/evaluation/topology-ab-manifest-v1.json')
+          m=json.loads(p.read_text())
+          assert m.get('version')=='verifier-lora-v0', m
+          ids=[x.get('instance_id') for x in m.get('holdout',[])]
+          assert ids and len(ids)==len(set(ids)), ids
+          assert m.get('selection_rule')=='gold-pass AND no-op-fail', m
+          assert m.get('sampling_frozen') is True and m.get('budget_frozen') is True, m
+          print('TOPOLOGY_MANIFEST', json.dumps({k:v for k,v in m.items() if k!='holdout'},sort_keys=True))
+          print('TOPOLOGY_IDS', ids)
+          PY
+          python scripts/render_topology_single_root_kernel.py \
+            --repo . \
+            --kernel-dir "$KERNEL_DIR" \
+            --kernel-ref "$KERNEL_REF" \
+            --manifest docs/evaluation/topology-ab-manifest-v1.json
+          python -m json.tool "$KERNEL_DIR/kernel-metadata.json" >/dev/null
+          kaggle kernels push -p "$KERNEL_DIR" --accelerator NvidiaL4 -t 7200
+      - name: Poll candidate kernel
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 450); do
+            out="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            printf '[%03d] %s\n' "$attempt" "$out"
+            lower="$(printf '%s' "$out" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal=complete; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal=error; break; fi
+            sleep 20
+          done
+          test -n "$terminal" || terminal=timeout
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          test "$terminal" = complete
+      - name: Collect and assert candidate results
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUTPUT_DIR"
+          kaggle kernels logs "$KERNEL_REF" > "$OUTPUT_DIR/kernel.log" 2>&1 || true
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o
+          test -s "$OUTPUT_DIR/verifier_baseline_results.json"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          out=Path(os.environ['OUTPUT_DIR'])
+          r=json.loads((out/'verifier_baseline_results.json').read_text())
+          m=json.loads(Path('docs/evaluation/topology-ab-manifest-v1.json').read_text())
+          n=len(m['holdout'])
+          assert r.get('status')=='completed', r
+          assert r.get('requested')==n and len(r.get('results',[]))==n, (r,n)
+          print('TOPOLOGY_SINGLE_SUMMARY',json.dumps({k:v for k,v in r.items() if k!='results'},sort_keys=True))
+          PY
+      - name: Upload candidate evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: topology-single-root-${{ github.run_id }}
+          path: /tmp/gemma4-topology-single-output
+          if-no-files-found: error
+          retention-days: 30
