@@ -7,10 +7,11 @@ This repository is the source of truth for Ko Lih Han's **Google – The Gemma 4
 For substantive work in this repository:
 
 1. Read `NOW.md` first.
-2. Read the relevant current artifact under `docs/`.
-3. Inspect `submission/` before proposing or implementing agent changes.
-4. Use the personal workflow router from `kolihhan/kolihhan` when available: Claude-like outer loop, then the smallest relevant inner mode (`Repo Understanding`, `Development`, `Research Mode Heavy`, or `Grill Mode`).
-5. Execute and verify; update `NOW.md` after durable progress.
+2. Read `PUBLIC_VISIBILITY.md` before any task involving repository visibility, Actions billing, Releases, data mirroring, or public sharing.
+3. Read the relevant current artifact under `docs/`.
+4. Inspect `submission/` before proposing or implementing agent changes.
+5. Use the personal workflow router from `kolihhan/kolihhan` when available: Claude-like outer loop, then the smallest relevant inner mode (`Repo Understanding`, `Development`, `Research Mode Heavy`, or `Grill Mode`).
+6. Execute and verify; update `NOW.md` after durable progress.
 
 Do not restart from old chat assumptions when repo state is available.
 
@@ -28,6 +29,7 @@ Mutable competition facts can change during the event. Use this precedence:
 ## Canonical project state
 
 - `NOW.md` — current status, decisions, blockers, and next experiment.
+- `PUBLIC_VISIBILITY.md` — hard gate for any public-repository/public-sharing change.
 - `docs/research/` — dated competition reconnaissance and fact checks.
 - `docs/design/` — approved experiment / agent designs.
 - `docs/evaluation/` — corpus analysis, run logs, and failure taxonomy.
@@ -47,7 +49,17 @@ GitHub Release data mirrors are infrastructure, not experiment state.
 
 ## Data handling
 
-Competition data must remain private. Do not commit the full dataset as ordinary Git blobs and do not publish it in a public Release. The private Release mirror and `scripts/restore_full_dataset.py` are the supported storage path.
+Competition data must remain private. Do not commit the full dataset as ordinary Git blobs and do not publish it in a public Release. The private Release mirror and `scripts/restore_full_dataset.py` are the supported storage path **only while this repository remains private**.
+
+## Public visibility gate
+
+`PUBLIC_VISIBILITY.md` currently has status **BLOCKED**. Treat that as a hard repository-wide gate.
+
+- Do not make this repository public while the full Competition Data Release or any other redistribution blocker remains.
+- Do not weaken the private-repository guard in `.github/workflows/mirror-full-kaggle-data.yml`.
+- Do not assume public GitHub code alone satisfies Kaggle's public Competition Code sharing requirements.
+- Destructive cleanup such as deleting Release assets or rewriting history requires explicit user authorization unless the user has already authorized that exact action.
+- Public-safety infrastructure changes must not alter the scientific experiment, evaluation contract, blind set, LoRA configuration, prompts, or submission candidate.
 
 ## Completion standard
 
