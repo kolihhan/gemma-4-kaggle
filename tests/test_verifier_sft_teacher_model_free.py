@@ -1,14 +1,8 @@
-import csv
 import json
 from pathlib import Path
-import tempfile
 import unittest
 
-from kaggle.verifier_gold_teacher_supervision import (
-    build_teacher_safe_stop_record,
-    find_reference_patch_dir,
-    load_reference_patch_map,
-)
+from kaggle.verifier_gold_teacher_supervision import build_teacher_safe_stop_record
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,44 +19,18 @@ INLINE_ASSERT = (
 
 
 class VerifierSftTeacherModelFreeContractTests(unittest.TestCase):
-    def test_reference_patch_dir_discovery_ignores_hidden_only_secret_dir(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            competition = root / "competitions" / "example"
-            competition.mkdir(parents=True)
-            tasks_path = competition / "tasks.jsonl"
-            tasks_path.write_text("", encoding="utf-8")
-
-            near_secret = competition / "secret"
-            near_secret.mkdir()
-            (near_secret / "solution.csv").write_text("hidden-only\n", encoding="utf-8")
-
-            reference_secret = root / "competitions" / "secret"
-            reference_secret.mkdir(parents=True)
-            (reference_secret / "perfect_submission.csv").write_text(
-                "id,prediction\ntask_1,patch\n", encoding="utf-8"
-            )
-
-            self.assertEqual(
-                find_reference_patch_dir([tasks_path]),
-                reference_secret,
-            )
-
-    def test_reference_patch_loader_uses_only_perfect_submission(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            secret_dir = Path(temp_dir)
-            with (secret_dir / "perfect_submission.csv").open("w", encoding="utf-8", newline="") as handle:
-                writer = csv.DictWriter(handle, fieldnames=["id", "prediction"])
-                writer.writeheader()
-                writer.writerow({"id": "task_1", "prediction": "diff --git a/a.py b/a.py\n"})
-            (secret_dir / "solution.csv").write_text(
-                "this file contains hidden verifier evidence and must not be parsed\n",
-                encoding="utf-8",
-            )
-            self.assertEqual(
-                load_reference_patch_map(secret_dir),
-                {"task_1": "diff --git a/a.py b/a.py\n"},
-            )
+    def test_teacher_uses_training_task_patch_without_reference_bundle(self):
+        source = RUNTIME.read_text(encoding="utf-8")
+        self.assertIn('reference_patch = task.patch or ""', source)
+        self.assertIn("deterministic teacher reference patch is unavailable", source)
+        for forbidden in (
+            "find_reference_patch_dir",
+            "load_reference_patch_map",
+            "reference_patch_map",
+            "dataclasses.replace",
+            "perfect_submission",
+        ):
+            self.assertNotIn(forbidden, source)
 
     def test_safe_stop_rejects_infrastructure_failure(self):
         record = build_teacher_safe_stop_record(
@@ -91,8 +59,8 @@ class VerifierSftTeacherModelFreeContractTests(unittest.TestCase):
 
     def test_teacher_never_hydrates_hidden_test_patch_bundle(self):
         source = RUNTIME.read_text(encoding="utf-8")
-        self.assertIn("find_reference_patch_dir", source)
-        self.assertIn("load_reference_patch_map", source)
+        self.assertIn("_load_training_ids", source)
+        self.assertIn("load_clean_training_ids", source)
         self.assertNotIn("_hydrate_task_from_secret", source)
         self.assertNotIn("_get_secret_bundle_data", source)
         self.assertNotIn("solution.parquet", source)
