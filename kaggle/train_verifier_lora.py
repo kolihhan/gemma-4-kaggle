@@ -103,11 +103,35 @@ def build_two_gpu_load_kwargs(torch_module, *, dtype) -> dict[str, Any]:
     device_count = int(torch_module.cuda.device_count())
     if device_count != 2:
         raise RuntimeError(f'verifier LoRA v0 requires exactly 2 CUDA GPUs; found {device_count}')
+
+    # Accelerate's generic "balanced" placement leaves the frozen E4B checkpoint
+    # badly skewed on 2x L4 because the 5.25 GiB per-layer embedding block is an
+    # indivisible module. Keep the observed stable module boundaries, but place
+    # that block on GPU 0 so static weights are roughly 7.5 / 7.3 GiB instead of
+    # 2.3 / 12.5 GiB. This preserves both GPUs and forbids CPU/disk offload.
+    device_map = {
+        'model.vision_tower': 0,
+        'model.language_model.embed_tokens': 0,
+        'model.language_model.embed_tokens_per_layer': 0,
+        'model.audio_tower': 1,
+        'model.embed_vision': 1,
+        'model.embed_audio': 1,
+        'model.language_model.per_layer_projection_norm': 1,
+        'model.language_model.per_layer_model_projection': 1,
+    }
+    for layer_index in range(42):
+        device_map[f'model.language_model.layers.{layer_index}'] = 0 if layer_index <= 3 else 1
+    device_map.update(
+        {
+            'model.language_model.norm': 1,
+            'model.language_model.rotary_emb': 1,
+            'lm_head': 0,
+        }
+    )
     return {
         'dtype': dtype,
         'low_cpu_mem_usage': True,
-        'device_map': 'balanced',
-        'max_memory': {0: '13GiB', 1: '13GiB'},
+        'device_map': device_map,
     }
 
 
