@@ -1,0 +1,97 @@
+name: Direct Reliability v1 submit once
+
+on:
+  push:
+    branches: [submit/reliability-v1]
+    paths:
+      - ".github/workflows/direct-reliability-v1-submit-once.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  direct-submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      COMPETITION: gemma-4-developer-agent
+      KERNEL_REF: kolihhan/reliability-v1-submission-generator-41471015064
+      KERNEL_VERSION: "1"
+      OUTPUT_FILE: submission.zip
+      MESSAGE: Reliability v1 - E4B single-root, frozen 4096 thinking, 16k output, 5m/32-call budget, general reliability policy only
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned Kaggle CLI/client
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+
+      - name: Confirm existing notebook output before submission
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle kernels status "$KERNEL_REF"
+          rm -rf /tmp/relv1-output
+          mkdir -p /tmp/relv1-output
+          kaggle kernels output "$KERNEL_REF" -p /tmp/relv1-output -o
+          test -s /tmp/relv1-output/submission.zip
+          actual="$(sha256sum /tmp/relv1-output/submission.zip | awk '{print $1}')"
+          echo "SUBMISSION_SHA256=$actual"
+          test "$actual" = "b99fcacf9602e9ff8b457bc378e5f550c52c02384e74a689f5737e4fb5818651"
+
+      - name: Call Kaggle code-submission client directly and expose backend error
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os, sys, json, traceback
+          from kaggle.api.kaggle_api_extended import KaggleApi
+
+          api = KaggleApi()
+          api.authenticate()
+          try:
+              response = api.competition_submit_code(
+                  file_name=os.environ['OUTPUT_FILE'],
+                  message=os.environ['MESSAGE'],
+                  competition=os.environ['COMPETITION'],
+                  kernel=os.environ['KERNEL_REF'],
+                  kernel_version=int(os.environ['KERNEL_VERSION']),
+                  quiet=False,
+              )
+              print('DIRECT_SUBMIT_RESPONSE_TYPE', type(response).__name__)
+              print('DIRECT_SUBMIT_RESPONSE', response)
+              ref = getattr(response, 'ref', None) or getattr(response, 'submission_ref', None) or getattr(response, 'submission_id', None)
+              if ref is not None:
+                  print('SUBMISSION_REF', ref)
+              sys.exit(0)
+          except Exception as exc:
+              print('DIRECT_SUBMIT_EXCEPTION_TYPE', type(exc).__name__)
+              print('DIRECT_SUBMIT_EXCEPTION', repr(exc))
+              response = getattr(exc, 'response', None)
+              if response is not None:
+                  print('HTTP_STATUS', getattr(response, 'status_code', None))
+                  try:
+                      print('HTTP_RESPONSE_TEXT', response.text)
+                  except Exception as text_exc:
+                      print('HTTP_RESPONSE_TEXT_ERROR', repr(text_exc))
+                  try:
+                      print('HTTP_RESPONSE_JSON', json.dumps(response.json(), sort_keys=True))
+                  except Exception:
+                      pass
+              body = getattr(exc, 'body', None)
+              if body is not None:
+                  print('EXCEPTION_BODY', body)
+              traceback.print_exc()
+              sys.exit(1)
+          PY
+
+      - name: Confirm submission record
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle competitions submissions "$COMPETITION" -v -q | head -n 10
