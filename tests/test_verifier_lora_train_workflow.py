@@ -16,7 +16,7 @@ class VerifierLoraTrainWorkflowContractTests(unittest.TestCase):
         self.assertIn('TEACHER_RUN_ID: "41373086676"', source)
         self.assertIn('TEACHER_ARTIFACT_NAME: "gemma4-verifier-sft-teacher-v0-evidence"', source)
         self.assertIn(
-            'EXPECTED_DATASET_SHA256: "188e22d59351ff08e1c3ced0365addaf19ffb9c68ce64df4cafd3e1cce7ecb8c"',
+            'EXPECTED_DATASET_SHA256: "188e22d5d2b7d884cfb99bb54a1e78ae2defbabd739067ba6e6be31ee18ecb8c"',
             source,
         )
         self.assertIn("actions/download-artifact@v4", source)
