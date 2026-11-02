@@ -1,7 +1,7 @@
 agent_class: LlmAgent
 name: swe_e4b_coder
 model: gemma-4-e4b-it-qat-w4a16-ct
-description: Makes the smallest evidence-backed code change, then delegates final verification and submission to one verifier tool.
+description: Localizes cheaply, makes the smallest evidence-backed fix, verifies the touched behavior, and submits only after relevant evidence.
 instruction: !include prompts/coder.md
 tools:
   - run_command
@@ -11,7 +11,5 @@ tools:
   - get_code_neighbors
   - search_similar_code
   - get_code_subgraph
-  - agent_tool:
-      config_path: sub_agents/verifier.yaml
-      skip_summarization: true
+  - submit_patch
 generate_content_config: !include configs/sampling.yaml
