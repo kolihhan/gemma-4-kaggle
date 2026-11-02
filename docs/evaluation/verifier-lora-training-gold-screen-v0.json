@@ -1,0 +1,36 @@
+{
+  "clean_instance_ids": [
+    "fastapi_14258",
+    "fastapi_14306",
+    "fastapi_14479",
+    "fastapi_14616",
+    "fastapi_15661",
+    "requests_6644",
+    "rich_3180",
+    "rich_3718",
+    "rich_3772",
+    "rich_3882",
+    "rich_3953",
+    "rich_4006"
+  ],
+  "confounded_instance_ids": [
+    "fastapi_13713",
+    "fastapi_14962",
+    "fastapi_15763",
+    "requests_7205",
+    "rich_3486",
+    "rich_3782"
+  ],
+  "counts": {
+    "clean": 12,
+    "confounded": 6,
+    "requested": 18
+  },
+  "selection_rule": "gold-control resolved=true and test_exit_code=0",
+  "source_artifact_digest": "sha256:457ef5d4a39af115b31ca65dd12a2efc15be8d613b390e2b15049baf659b2bdb",
+  "source_artifact_id": 13076844849,
+  "source_run_id": 41292031475,
+  "source_training_manifest": "verifier-lora-v0-train-harvest",
+  "status": "frozen",
+  "version": "verifier-lora-v0-training-gold-screen"
+}

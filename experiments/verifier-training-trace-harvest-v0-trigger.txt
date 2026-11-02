@@ -1,0 +1,4 @@
+run verifier LoRA training trace harvest v0
+subset_version=verifier-lora-v0-train-harvest
+tasks=18
+implementation_head=a6fcb3e1c47e4d4af1b7048410625f1a4531ea93

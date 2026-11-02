@@ -1,0 +1,60 @@
+name: Probe Gemma 4 training model variation
+
+on:
+  push:
+    branches: [exp/verifier-lora-v0]
+    paths:
+      - ".github/workflows/probe-gemma4-training-model.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Kaggle CLI
+        run: |
+          python -m pip install --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python -c "import kaggle, six"
+
+      - name: Inspect raw Gemma 4 model instances
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from kaggle.api.kaggle_api_extended import KaggleApi
+
+          api = KaggleApi()
+          api.authenticate()
+          response = api.model_instances_list("google/gemma-4", page_size=200)
+          instances = list(response.instances or [])
+          print("instance_count=", len(instances))
+          for index, instance in enumerate(instances, 1):
+              attrs = {}
+              for name in dir(instance):
+                  if name.startswith("_"):
+                      continue
+                  try:
+                      value = getattr(instance, name)
+                  except Exception:
+                      continue
+                  if callable(value) or value is None:
+                      continue
+                  if isinstance(value, (str, int, float, bool)):
+                      attrs[name] = value
+              text = " ".join(str(v).lower() for v in attrs.values())
+              if "e4b" in text or "unquant" in text or "w4a16" in text:
+                  print(f"MATCH[{index}]", attrs)
+          PY

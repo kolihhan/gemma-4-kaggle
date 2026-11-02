@@ -1,0 +1,37 @@
+{
+  "version": "verifier-lora-v0",
+  "screen_version": "gold-screen-v0",
+  "source_head_sha": "3abeb1eee85c9995ec8642178fc160b729e291ed",
+  "gold_sweep_run_id": 41266798069,
+  "artifact_id": 13067976582,
+  "artifact_name": "gemma4-verifier-gold-sweep-v0-evidence",
+  "artifact_digest": "sha256:c50d25b7a569f831949ccfa844d8067e4e23d88dbe1f252a2933a220b17dee5b",
+  "requested": 12,
+  "clean": 9,
+  "confounded_count": 3,
+  "clean_instance_ids": [
+    "rich_3061",
+    "rich_3067",
+    "rich_3934",
+    "rich_3942",
+    "fastapi_13920",
+    "fastapi_14077",
+    "fastapi_14463",
+    "fastapi_14851",
+    "fastapi_14986"
+  ],
+  "confounded": [
+    {
+      "instance_id": "fastapi_14485",
+      "reason": "gold_control_collection_error_missing_inline_snapshot"
+    },
+    {
+      "instance_id": "requests_7315",
+      "reason": "gold_control_unresolved_under_current_verifier"
+    },
+    {
+      "instance_id": "requests_7328",
+      "reason": "gold_control_unresolved_with_large_verification_error_count"
+    }
+  ]
+}

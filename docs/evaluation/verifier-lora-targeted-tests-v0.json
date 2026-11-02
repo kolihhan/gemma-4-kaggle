@@ -1,0 +1,37 @@
+{
+  "version": "verifier-lora-v0-targeted-tests",
+  "status": "frozen",
+  "selection_policy": "training-only gold-clean tasks with a small reference patch and one bounded public upstream regression check; inline assertions are used when the upstream regression test file/function does not exist in the pre-fix snapshot or when the pre-fix test already passes without checking the fixed behavior",
+  "targets": [
+    {
+      "instance_id": "fastapi_14479",
+      "command": "python -c \"from fastapi import FastAPI, Query; from pydantic import BaseModel; ns={'FastAPI': FastAPI, 'Query': Query, 'BaseModel': BaseModel}; exec(\\\"class Item(BaseModel):\\n    name: str\\n\\ndef read_items(q: list[Item] = Query(default=None)):\\n    return {'q': q}\\n\\napp = FastAPI()\\ntry:\\n    app.get('/') (read_items)\\nexcept AssertionError as exc:\\n    message = str(exc)\\nelse:\\n    message = ''\\\", ns); assert ns['message'] == \\\"Query parameter 'q' must be one of the supported types\\\"\"",
+      "upstream_pr": "fastapi/fastapi#14479"
+    },
+    {
+      "instance_id": "requests_6644",
+      "command": "python -c \"import requests, requests.adapters; a=requests.adapters.HTTPAdapter(); p=requests.Request(method='GET', url='http://127.0.0.1:10000//v:h').prepare(); assert a.request_url(p, {}) == '/v:h'\"",
+      "upstream_pr": "psf/requests#6644"
+    },
+    {
+      "instance_id": "rich_3718",
+      "command": "python -c \"import io; from rich.panel import Panel; from rich.console import Console; from rich.text import Text; c=Console(file=io.StringIO(), width=50, height=20, legacy_windows=False, force_terminal=True, color_system='truecolor'); c.print(Panel('Hello, World', style='on blue', title=Text('title', style='red'), subtitle=Text('subtitle', style='magenta bold'))); out=c.file.getvalue(); assert '\\x1b[31;44m title \\x1b[0m' in out\"",
+      "upstream_pr": "Textualize/rich#3718"
+    },
+    {
+      "instance_id": "rich_3882",
+      "command": "python -c \"import io; from rich.console import Console; from rich.prompt import Confirm; c=Console(file=io.StringIO(), markup=False); answer=Confirm.ask('continue', console=c, stream=io.StringIO('foo\\nNO\\ny'), default=True); assert answer is True; assert c.file.getvalue() == 'continue [y/n] (y): Please enter Y or N\\ncontinue [y/n] (y): Please enter Y or N\\ncontinue [y/n] (y): '\"",
+      "upstream_pr": "Textualize/rich#3882"
+    },
+    {
+      "instance_id": "rich_3953",
+      "command": "python -c \"from rich.cells import cell_len; assert cell_len('\\u200d') == 0; assert cell_len('1\\u200d') == 1; assert all(cell_len(chr(i)) == 0 for i in range(31))\"",
+      "upstream_pr": "Textualize/rich#3953"
+    },
+    {
+      "instance_id": "rich_4006",
+      "command": "python -c \"from rich.cells import split_graphemes; spans, cell_length=split_graphemes('\\x1b'); assert cell_length == 0\"",
+      "upstream_pr": "Textualize/rich#4006"
+    }
+  ]
+}

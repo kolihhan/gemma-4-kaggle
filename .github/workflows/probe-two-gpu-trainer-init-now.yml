@@ -1,0 +1,173 @@
+name: Probe two-GPU verifier Trainer init once
+
+on:
+  push:
+    branches: [exp/verifier-lora-v0]
+    paths:
+      - .github/workflows/probe-two-gpu-trainer-init-now.yml
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+  KERNEL_DIR: /tmp/two-gpu-trainer-init-probe
+  OUTPUT_DIR: /tmp/two-gpu-trainer-init-probe-output
+  KERNEL_REF: kolihhan/gemma4-two-gpu-trainer-init-${{ github.run_id }}
+  MODEL_SOURCE: google/gemma-4/transformers/gemma-4-e4b-it-qat-q4_0-unquantized/2
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Render exact full-model placement probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$KERNEL_DIR" "$OUTPUT_DIR"
+          mkdir -p "$KERNEL_DIR" "$OUTPUT_DIR"
+          python - <<'PY'
+          import base64
+          from pathlib import Path
+
+          source_b64 = base64.b64encode(Path("kaggle/train_verifier_lora.py").read_bytes()).decode("ascii")
+          lines = [
+              "import base64",
+              "import json",
+              "import tempfile",
+              "import types",
+              "from collections import defaultdict",
+              "from pathlib import Path",
+              f"SOURCE_B64 = {source_b64!r}",
+              "trainer_mod = types.ModuleType('train_verifier_lora')",
+              "trainer_mod.__dict__['__name__'] = 'train_verifier_lora'",
+              "exec(compile(base64.b64decode(SOURCE_B64), 'train_verifier_lora.py', 'exec'), trainer_mod.__dict__)",
+              "compat = trainer_mod.ensure_peft_torchao_compat()",
+              "import torch",
+              "from datasets import Dataset",
+              "from peft import LoraConfig, get_peft_model",
+              "from transformers import AutoModelForCausalLM, AutoProcessor, Trainer, TrainingArguments",
+              "model_path = Path('/kaggle/input/models/google/gemma-4/transformers/gemma-4-e4b-it-qat-q4_0-unquantized/2')",
+              "assert model_path.is_dir(), model_path",
+              "assert torch.cuda.device_count() == 2, torch.cuda.device_count()",
+              "dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16",
+              "load_kwargs = trainer_mod.build_two_gpu_load_kwargs(torch, dtype=dtype)",
+              "model = AutoModelForCausalLM.from_pretrained(str(model_path), local_files_only=True, **load_kwargs)",
+              "trainer_mod.validate_model_class(model)",
+              "pre_map = trainer_mod.validate_two_gpu_device_map(model)",
+              "raw_map = dict(model.hf_device_map)",
+              "keys = sorted(raw_map, key=len, reverse=True)",
+              "bytes_by_key = defaultdict(int)",
+              "params_by_key = defaultdict(int)",
+              "for pname, p in model.named_parameters():",
+              "    owner = next((k for k in keys if k == '' or pname == k or pname.startswith(k + '.')), None)",
+              "    if owner is None: raise RuntimeError(f'parameter has no device-map owner: {pname}')",
+              "    bytes_by_key[owner] += p.numel() * p.element_size()",
+              "    params_by_key[owner] += p.numel()",
+              "detail = []",
+              "device_weight_bytes = defaultdict(int)",
+              "for key, destination in raw_map.items():",
+              "    normalized = destination.index if getattr(destination, 'type', None) == 'cuda' else destination",
+              "    if isinstance(normalized, str) and normalized.startswith('cuda:'): normalized = int(normalized.split(':', 1)[1])",
+              "    if isinstance(normalized, str) and normalized.isdigit(): normalized = int(normalized)",
+              "    b = int(bytes_by_key.get(key, 0))",
+              "    if isinstance(normalized, int): device_weight_bytes[normalized] += b",
+              "    detail.append({'module': key, 'device': normalized, 'param_count': int(params_by_key.get(key, 0)), 'weight_gib': round(b/(1024**3), 4)})",
+              "detail.sort(key=lambda row: (-row['weight_gib'], row['module']))",
+              "memory_after_load = []",
+              "for i in range(torch.cuda.device_count()): memory_after_load.append({'device': i, 'allocated_gib': round(torch.cuda.memory_allocated(i)/(1024**3), 3), 'reserved_gib': round(torch.cuda.memory_reserved(i)/(1024**3), 3), 'weight_gib': round(device_weight_bytes[i]/(1024**3), 3), 'total_gib': round(torch.cuda.get_device_properties(i).total_memory/(1024**3), 3)})",
+              "print('HF_DEVICE_MAP_DETAIL', json.dumps({'raw_map': raw_map, 'entries': detail, 'memory_after_load': memory_after_load}, sort_keys=True), flush=True)",
+              "model.config.use_cache = False",
+              "model.gradient_checkpointing_enable()",
+              "matched = trainer_mod.validate_lora_target_modules(model, trainer_mod.TRAINING_CONFIG['target_modules'])",
+              "peft_config = LoraConfig(r=8, lora_alpha=16, lora_dropout=0.05, bias='none', task_type='CAUSAL_LM', target_modules=matched)",
+              "model = get_peft_model(model, peft_config)",
+              "post_map = trainer_mod.validate_two_gpu_device_map(model)",
+              "if hasattr(model, 'enable_input_require_grads'): model.enable_input_require_grads()",
+              "processor = AutoProcessor.from_pretrained(str(model_path), local_files_only=True)",
+              "tokenizer = processor.tokenizer",
+              "if tokenizer.pad_token_id is None: tokenizer.pad_token = tokenizer.eos_token",
+              "tokenizer.padding_side = 'right'",
+              "examples = trainer_mod.tokenize_training_texts(tokenizer, ['hello world'])",
+              "dataset = Dataset.from_list(examples)",
+              "args = TrainingArguments(output_dir=str(Path(tempfile.mkdtemp())), learning_rate=1e-4, num_train_epochs=3, per_device_train_batch_size=1, gradient_accumulation_steps=1, gradient_checkpointing=True, bf16=dtype == torch.bfloat16, fp16=dtype == torch.float16, logging_steps=1, save_strategy='no', report_to='none', seed=42, data_seed=42, remove_unused_columns=False)",
+              "trainer = Trainer(model=model, args=args, train_dataset=dataset, data_collator=trainer_mod.CausalLmCollator(tokenizer))",
+              "trainer_mod.validate_trainer_model_parallel(trainer)",
+              "trainable = sum(p.numel() for p in trainer.model.parameters() if p.requires_grad)",
+              "memory = []",
+              "for i in range(torch.cuda.device_count()): memory.append({'device': i, 'allocated_gib': round(torch.cuda.memory_allocated(i)/(1024**3), 3), 'reserved_gib': round(torch.cuda.memory_reserved(i)/(1024**3), 3), 'total_gib': round(torch.cuda.get_device_properties(i).total_memory/(1024**3), 3)})",
+              "result = {'compat': compat, 'dtype': str(dtype), 'pre_map': pre_map, 'post_map': post_map, 'is_model_parallel': bool(trainer.is_model_parallel), 'place_model_on_device': bool(trainer.place_model_on_device), 'trainable_params': trainable, 'memory': memory}",
+              "assert result['is_model_parallel'] is True, result",
+              "assert result['place_model_on_device'] is False, result",
+              "assert trainable > 0, result",
+              "print('TWO_GPU_TRAINER_INIT_OK', json.dumps(result, sort_keys=True))",
+          ]
+          Path('/tmp/two-gpu-trainer-init-probe/probe.py').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          PY
+          cat > "$KERNEL_DIR/kernel-metadata.json" <<EOF
+          {
+            "id": "${KERNEL_REF}",
+            "title": "gemma4-two-gpu-trainer-init-${GITHUB_RUN_ID}",
+            "code_file": "probe.py",
+            "language": "python",
+            "kernel_type": "script",
+            "is_private": true,
+            "enable_gpu": true,
+            "enable_tpu": false,
+            "enable_internet": false,
+            "machine_shape": "NvidiaL4",
+            "dataset_sources": [],
+            "competition_sources": [],
+            "kernel_sources": [],
+            "model_sources": ["${MODEL_SOURCE}"]
+          }
+          EOF
+
+      - name: Install Kaggle CLI
+        run: python -m pip install --disable-pip-version-check 'kaggle==2.2.5' 'six==1.17.0'
+
+      - name: Push private full-model placement probe
+        run: kaggle kernels push -p "$KERNEL_DIR" -t 1800
+
+      - name: Poll placement probe
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 100); do
+            status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            echo "[$attempt] $status"
+            lower="$(printf '%s' "$status" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal="complete"; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal="error"; break; fi
+            sleep 15
+          done
+          [[ -n "$terminal" ]] || terminal="timeout"
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          test "$terminal" = "complete"
+
+      - name: Collect placement logs
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          kaggle kernels logs "$KERNEL_REF" > "$OUTPUT_DIR/kernel.log" 2>&1
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o > "$OUTPUT_DIR/output-download.log" 2>&1
+          cat "$OUTPUT_DIR/kernel.log" || true
+          find "$OUTPUT_DIR" -maxdepth 3 -type f -printf '%P %s bytes\n' | sort
+
+      - name: Upload placement evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: two-gpu-trainer-init-${{ github.run_id }}
+          path: ${{ env.OUTPUT_DIR }}
+          if-no-files-found: warn
+          retention-days: 7

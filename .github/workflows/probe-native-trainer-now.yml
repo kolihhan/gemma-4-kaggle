@@ -1,0 +1,82 @@
+name: Smoke Kaggle native Trainer path once
+
+on:
+  push:
+    branches: [exp/verifier-lora-v0]
+    paths:
+      - .github/workflows/probe-native-trainer-now.yml
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+  KERNEL_REF: kolihhan/gemma4-native-trainer-smoke-${{ github.run_id }}
+  KERNEL_DIR: /tmp/gemma4-native-trainer-smoke
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Kaggle CLI
+        run: python -m pip install --disable-pip-version-check 'kaggle==2.2.5' 'six==1.17.0'
+
+      - name: Render CPU-only native trainer smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$KERNEL_DIR"
+          mkdir -p "$KERNEL_DIR"
+          python - <<'PY'
+          import base64
+          from pathlib import Path
+          source_b64 = base64.b64encode(Path("kaggle/train_verifier_lora.py").read_bytes()).decode("ascii")
+          suffix_b64 = "aW1wb3J0IGJhc2U2NAppbXBvcnQganNvbgppbXBvcnQgdGVtcGZpbGUKaW1wb3J0IHR5cGVzCmZyb20gcGF0aGxpYiBpbXBvcnQgUGF0aAoKaW1wb3J0IHRvcmNoCmZyb20gZGF0YXNldHMgaW1wb3J0IERhdGFzZXQKZnJvbSBwZWZ0IGltcG9ydCBMb3JhQ29uZmlnLCBnZXRfcGVmdF9tb2RlbApmcm9tIHRyYW5zZm9ybWVycyBpbXBvcnQgVHJhaW5lciwgVHJhaW5pbmdBcmd1bWVudHMKCnRyYWluZXJfbW9kID0gdHlwZXMuTW9kdWxlVHlwZSgidHJhaW5fdmVyaWZpZXJfbG9yYSIpCnRyYWluZXJfbW9kLl9fZGljdF9fWyJfX25hbWVfXyJdID0gInRyYWluX3ZlcmlmaWVyX2xvcmEiCmV4ZWMoY29tcGlsZShiYXNlNjQuYjY0ZGVjb2RlKFNPVVJDRV9CNjQpLCAidHJhaW5fdmVyaWZpZXJfbG9yYS5weSIsICJleGVjIiksIHRyYWluZXJfbW9kLl9fZGljdF9fKQoKY2xhc3MgRmFrZVRva2VuaXplcjoKICAgIHBhZF90b2tlbl9pZCA9IDAKCmNvbGxhdG9yID0gdHJhaW5lcl9tb2QuQ2F1c2FsTG1Db2xsYXRvcihGYWtlVG9rZW5pemVyKCkpCmJhdGNoID0gY29sbGF0b3IoWwogICAgeyJpbnB1dF9pZHMiOiBbMSwgMiwgM10sICJhdHRlbnRpb25fbWFzayI6IFsxLCAxLCAxXSwgImxhYmVscyI6IFsxLCAyLCAzXX0sCiAgICB7ImlucHV0X2lkcyI6IFs0XSwgImF0dGVudGlvbl9tYXNrIjogWzFdLCAibGFiZWxzIjogWzRdfSwKXSkKYXNzZXJ0IHR1cGxlKGJhdGNoWyJpbnB1dF9pZHMiXS5zaGFwZSkgPT0gKDIsIDMpCmFzc2VydCBiYXRjaFsiaW5wdXRfaWRzIl0udG9saXN0KCkgPT0gW1sxLCAyLCAzXSwgWzQsIDAsIDBdXQphc3NlcnQgYmF0Y2hbImxhYmVscyJdLnRvbGlzdCgpID09IFtbMSwgMiwgM10sIFs0LCAtMTAwLCAtMTAwXV0KCmRzID0gRGF0YXNldC5mcm9tX2xpc3QoWwogICAgeyJpbnB1dF9pZHMiOiBbMSwgMl0sICJhdHRlbnRpb25fbWFzayI6IFsxLCAxXSwgImxhYmVscyI6IFsxLCAyXX0KXSkKYXNzZXJ0IGxlbihkcykgPT0gMQoKb3V0ID0gUGF0aCh0ZW1wZmlsZS5ta2R0ZW1wKCkpCmFyZ3MgPSBUcmFpbmluZ0FyZ3VtZW50cygKICAgIG91dHB1dF9kaXI9c3RyKG91dCksCiAgICBsZWFybmluZ19yYXRlPTFlLTQsCiAgICBudW1fdHJhaW5fZXBvY2hzPTMsCiAgICBwZXJfZGV2aWNlX3RyYWluX2JhdGNoX3NpemU9MSwKICAgIGdyYWRpZW50X2FjY3VtdWxhdGlvbl9zdGVwcz0xLAogICAgZ3JhZGllbnRfY2hlY2twb2ludGluZz1UcnVlLAogICAgYmYxNj1GYWxzZSwKICAgIGZwMTY9RmFsc2UsCiAgICBsb2dnaW5nX3N0ZXBzPTEsCiAgICBzYXZlX3N0cmF0ZWd5PSJubyIsCiAgICByZXBvcnRfdG89Im5vbmUiLAogICAgc2VlZD00MiwKICAgIGRhdGFfc2VlZD00MiwKICAgIHJlbW92ZV91bnVzZWRfY29sdW1ucz1GYWxzZSwKKQphc3NlcnQgYXJncy5sZWFybmluZ19yYXRlID09IDFlLTQKYXNzZXJ0IGFyZ3MubnVtX3RyYWluX2Vwb2NocyA9PSAzCmFzc2VydCBhcmdzLmdyYWRpZW50X2NoZWNrcG9pbnRpbmcgaXMgVHJ1ZQphc3NlcnQgVHJhaW5lciBpcyBub3QgTm9uZQphc3NlcnQgTG9yYUNvbmZpZyBpcyBub3QgTm9uZQphc3NlcnQgZ2V0X3BlZnRfbW9kZWwgaXMgbm90IE5vbmUKYXNzZXJ0ICJ0cmwiIG5vdCBpbiB0cmFpbmVyX21vZC5fcGFja2FnZV92ZXJzaW9ucygpCnByaW50KCJOQVRJVkVfVFJBSU5FUl9TTU9LRSIsIGpzb24uZHVtcHMoewogICAgInRvcmNoIjogdG9yY2guX192ZXJzaW9uX18sCiAgICAiYmF0Y2hfc2hhcGUiOiBsaXN0KGJhdGNoWyJpbnB1dF9pZHMiXS5zaGFwZSksCiAgICAidHJhaW5pbmdfYXJnc19vayI6IFRydWUsCiAgICAidHJhaW5lcl9pbXBvcnRfb2siOiBUcnVlLAogICAgInBlZnRfaW1wb3J0X29rIjogVHJ1ZSwKICAgICJ0cmFpbmVyX3NvdXJjZV9lbWJlZGRlZCI6IFRydWUsCn0sIHNvcnRfa2V5cz1UcnVlKSkK"
+          suffix = base64.b64decode(suffix_b64).decode("utf-8")
+          smoke = f'SOURCE_B64 = {source_b64!r}\n' + suffix
+          Path("/tmp/gemma4-native-trainer-smoke/smoke.py").write_text(smoke, encoding="utf-8")
+          PY
+          cat > "$KERNEL_DIR/kernel-metadata.json" <<EOF
+          {
+            "id": "${KERNEL_REF}",
+            "title": "gemma4-native-trainer-smoke-${GITHUB_RUN_ID}",
+            "code_file": "smoke.py",
+            "language": "python",
+            "kernel_type": "script",
+            "is_private": true,
+            "enable_gpu": false,
+            "enable_tpu": false,
+            "enable_internet": false,
+            "dataset_sources": [],
+            "competition_sources": [],
+            "kernel_sources": [],
+            "model_sources": []
+          }
+          EOF
+
+      - name: Push CPU-only smoke
+        run: kaggle kernels push -p "$KERNEL_DIR" -t 600
+
+      - name: Poll smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            echo "[$attempt] $status"
+            lower="$(printf '%s' "$status" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then exit 0; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then exit 1; fi
+            sleep 10
+          done
+          exit 1
+
+      - name: Show smoke logs
+        if: always()
+        run: kaggle kernels logs "$KERNEL_REF" || true

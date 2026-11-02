@@ -1,0 +1,120 @@
+{
+  "counts": {
+    "by_repo": {
+      "Textualize/rich": 8,
+      "fastapi/fastapi": 8,
+      "psf/requests": 2
+    },
+    "tasks": 18
+  },
+  "selection": {
+    "hash_namespace": "verifier-lora-v0-train-harvest:<instance_id>",
+    "method": "bucket-round-robin-sha256",
+    "patch_bucket_order": [
+      "1-10",
+      "11-30",
+      "31-80",
+      "81+",
+      "0"
+    ],
+    "quota_by_repo": {
+      "Textualize/rich": 8,
+      "fastapi/fastapi": 8,
+      "psf/requests": 2
+    }
+  },
+  "source_split_version": "verifier-lora-v0",
+  "tasks": [
+    {
+      "instance_id": "rich_3882",
+      "patch_bucket": "1-10",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3782",
+      "patch_bucket": "11-30",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3772",
+      "patch_bucket": "31-80",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3486",
+      "patch_bucket": "81+",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3718",
+      "patch_bucket": "1-10",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3953",
+      "patch_bucket": "11-30",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_4006",
+      "patch_bucket": "31-80",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3180",
+      "patch_bucket": "81+",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "fastapi_14258",
+      "patch_bucket": "1-10",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_15763",
+      "patch_bucket": "11-30",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_13713",
+      "patch_bucket": "31-80",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_15661",
+      "patch_bucket": "81+",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14479",
+      "patch_bucket": "1-10",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14616",
+      "patch_bucket": "11-30",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14962",
+      "patch_bucket": "31-80",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14306",
+      "patch_bucket": "81+",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "requests_6644",
+      "patch_bucket": "1-10",
+      "repo": "psf/requests"
+    },
+    {
+      "instance_id": "requests_7205",
+      "patch_bucket": "1-10",
+      "repo": "psf/requests"
+    }
+  ],
+  "version": "verifier-lora-v0-train-harvest"
+}

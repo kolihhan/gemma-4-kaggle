@@ -1,0 +1,4 @@
+run clean held-out E4B verifier baseline
+head_before_trigger=60929e4fa0e4bc2408c0500cd8ab6fb710b8f391
+clean_denominator=9
+rerun_reason=align Kaggle kernel slug used by push, poll, logs, and output

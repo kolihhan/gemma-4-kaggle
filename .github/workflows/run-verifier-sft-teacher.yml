@@ -1,0 +1,301 @@
+name: Run verifier LoRA deterministic SFT teacher
+
+on:
+  push:
+    branches: [exp/verifier-lora-v0]
+    paths:
+      - "docs/evaluation/verifier-lora-train-subset-v0.json"
+      - "docs/evaluation/verifier-lora-training-gold-screen-v0.json"
+      - "docs/evaluation/verifier-lora-targeted-tests-v0.json"
+      - "kaggle/verifier_gold_teacher_runtime.py"
+      - "kaggle/verifier_gold_teacher_supervision.py"
+      - "kaggle/verifier_sft_teacher_runtime.py"
+      - "scripts/render_verifier_sft_teacher.py"
+      - "scripts/build_verifier_sft.py"
+      - ".github/workflows/run-verifier-sft-teacher.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gemma4-verifier-sft-teacher-v0
+  cancel-in-progress: true
+
+jobs:
+  teacher:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      TEACHER_BUILD_ID: ${{ github.sha }}
+      KERNEL_REF: kolihhan/gemma-4-verifier-sft-teacher-v0-${{ github.run_id }}
+      KERNEL_TITLE: Gemma 4 Verifier SFT Teacher v0 ${{ github.run_id }}
+      KERNEL_DIR: /tmp/gemma4-verifier-sft-teacher-v0
+      OUTPUT_DIR: /tmp/gemma4-verifier-sft-teacher-v0-output
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Kaggle CLI
+        run: |
+          python -m pip install --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python -c "import kaggle, six"
+
+      - name: Render private model-free deterministic SFT teacher kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$KERNEL_DIR" "$OUTPUT_DIR"
+          mkdir -p "$KERNEL_DIR" "$OUTPUT_DIR"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          from scripts.render_verifier_sft_teacher import bundle_runtime
+
+          repo = Path.cwd()
+          runtime_template = repo / "kaggle" / "verifier_sft_teacher_runtime.py"
+          helper = repo / "kaggle" / "verifier_gold_teacher_supervision.py"
+          gold_runtime = repo / "kaggle" / "verifier_gold_teacher_runtime.py"
+          training_path = repo / "docs" / "evaluation" / "verifier-lora-train-subset-v0.json"
+          screen_path = repo / "docs" / "evaluation" / "verifier-lora-training-gold-screen-v0.json"
+          plan_path = repo / "docs" / "evaluation" / "verifier-lora-targeted-tests-v0.json"
+          kernel_dir = Path(os.environ["KERNEL_DIR"])
+          teacher_build_id = os.environ["TEACHER_BUILD_ID"]
+          kernel_ref = os.environ["KERNEL_REF"]
+          kernel_title = os.environ["KERNEL_TITLE"]
+
+          training = json.loads(training_path.read_text(encoding="utf-8"))
+          if training.get("version") != "verifier-lora-v0-train-harvest":
+              raise SystemExit(f"unexpected training manifest version: {training.get('version')!r}")
+          training_ids = [str(item.get("instance_id") or "") for item in training.get("tasks") or []]
+          if len(training_ids) != 18 or len(training_ids) != len(set(training_ids)) or any(not x for x in training_ids):
+              raise SystemExit("frozen training subset must contain exactly 18 unique task IDs")
+
+          screen = json.loads(screen_path.read_text(encoding="utf-8"))
+          if screen.get("version") != "verifier-lora-v0-training-gold-screen" or screen.get("status") != "frozen":
+              raise SystemExit("training gold screen is not frozen v0")
+          clean_ids = screen.get("clean_instance_ids") or []
+          if len(clean_ids) != 12 or len(clean_ids) != len(set(clean_ids)):
+              raise SystemExit("training gold screen must contain exactly 12 unique clean IDs")
+          if not set(clean_ids) <= set(training_ids):
+              raise SystemExit("training gold screen contains non-training IDs")
+
+          plan = json.loads(plan_path.read_text(encoding="utf-8"))
+          if plan.get("version") != "verifier-lora-v0-targeted-tests" or plan.get("status") != "frozen":
+              raise SystemExit("targeted-test plan is not frozen v0")
+          target_ids = [str(item.get("instance_id") or "") for item in plan.get("targets") or []]
+          if len(target_ids) != 6 or len(target_ids) != len(set(target_ids)) or any(not x for x in target_ids):
+              raise SystemExit(f"expected exactly 6 unique deterministic targets, got {target_ids}")
+          if not set(target_ids) <= set(clean_ids):
+              raise SystemExit("deterministic targets are not a subset of gold-clean training IDs")
+
+          replacements = {
+              'TRAINING_MANIFEST_JSON = "__VERIFIER_LORA_TRAINING_MANIFEST_JSON__"':
+                  f"TRAINING_MANIFEST_JSON = {json.dumps(training, sort_keys=True)!r}",
+              'TRAINING_GOLD_SCREEN_JSON = "__VERIFIER_LORA_TRAINING_GOLD_SCREEN_JSON__"':
+                  f"TRAINING_GOLD_SCREEN_JSON = {json.dumps(screen, sort_keys=True)!r}",
+              'TARGETED_TEST_PLAN_JSON = "__VERIFIER_LORA_TARGETED_TEST_PLAN_JSON__"':
+                  f"TARGETED_TEST_PLAN_JSON = {json.dumps(plan, sort_keys=True)!r}",
+              'TEACHER_BUILD_ID = "__VERIFIER_SFT_TEACHER_BUILD_ID__"':
+                  f"TEACHER_BUILD_ID = {teacher_build_id!r}",
+          }
+          rendered = bundle_runtime(
+              runtime_template.read_text(encoding="utf-8"),
+              gold_runtime.read_text(encoding="utf-8"),
+              helper.read_text(encoding="utf-8"),
+          )
+          for old, new in replacements.items():
+              if rendered.count(old) != 1:
+                  raise SystemExit(f"unexpected runtime placeholder count for {old!r}: {rendered.count(old)}")
+              rendered = rendered.replace(old, new, 1)
+          compile(rendered, "verifier_sft_teacher_runtime.py", "exec")
+          (kernel_dir / "verifier_sft_teacher_runtime.py").write_text(rendered, encoding="utf-8")
+
+          metadata = {
+              "id": kernel_ref,
+              "title": kernel_title,
+              "code_file": "verifier_sft_teacher_runtime.py",
+              "language": "python",
+              "kernel_type": "script",
+              "is_private": True,
+              "enable_gpu": False,
+              "enable_tpu": False,
+              "enable_internet": False,
+              "docker_image": "gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461",
+              "dataset_sources": ["metric/gemma-4-developer-agent-wheelhouse"],
+              "competition_sources": ["gemma-4-developer-agent"],
+              "kernel_sources": [],
+              "model_sources": [],
+          }
+          (kernel_dir / "kernel-metadata.json").write_text(
+              json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
+          )
+          print("rendered_teacher_build_id=", teacher_build_id)
+          print("rendered_kernel_ref=", kernel_ref)
+          print("rendered_kernel_title=", kernel_title)
+          print("rendered_sft_teacher_ids=", target_ids)
+          print("rendered_code_files=", [p.name for p in kernel_dir.iterdir() if p.is_file()])
+          PY
+
+      - name: Push private Kaggle CPU deterministic-teacher kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          push_status=0
+          push_output="$(kaggle kernels push -p "$KERNEL_DIR" -t 3600 2>&1)" || push_status=$?
+          printf '%s\n' "$push_output"
+          if [[ "$push_status" -ne 0 ]]; then
+            echo "Kernel push error (status=$push_status)" >&2
+            exit "$push_status"
+          fi
+
+      - name: Poll Kaggle kernel to terminal state
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 180); do
+            status_output="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            printf '[%03d] %s\n' "$attempt" "$status_output"
+            lower="$(printf '%s' "$status_output" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then
+              terminal="complete"
+              break
+            fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then
+              terminal="error"
+              break
+            fi
+            sleep 20
+          done
+          if [[ -z "$terminal" ]]; then
+            terminal="timeout"
+          fi
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          echo "Kaggle terminal state: $terminal"
+
+      - name: Collect deterministic-teacher logs and outputs
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          mkdir -p "$OUTPUT_DIR"
+          kaggle kernels logs "$KERNEL_REF" > "$OUTPUT_DIR/kernel.log" 2>&1
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o > "$OUTPUT_DIR/output-download.log" 2>&1
+          find "$OUTPUT_DIR" -maxdepth 6 -type f -printf '%P %s bytes\n' | sort
+          if [[ -f "$OUTPUT_DIR/verifier_gold_teacher_supervision.json" ]]; then
+            python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          path = Path(os.environ["OUTPUT_DIR"]) / "verifier_gold_teacher_supervision.json"
+          result = json.loads(path.read_text(encoding="utf-8"))
+          print(json.dumps({k: v for k, v in result.items() if k != "records"}, indent=2, sort_keys=True))
+          PY
+          fi
+          tail -n 240 "$OUTPUT_DIR/kernel.log" || true
+
+      - name: Assert deterministic supervision and select approved records
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.poll.outputs.terminal }}" != "complete" ]]; then
+            echo "Kaggle deterministic-teacher kernel did not complete successfully: ${{ steps.poll.outputs.terminal }}" >&2
+            exit 1
+          fi
+          test -f "$OUTPUT_DIR/verifier_gold_teacher_supervision.json"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          output_dir = Path(os.environ["OUTPUT_DIR"])
+          result = json.loads((output_dir / "verifier_gold_teacher_supervision.json").read_text(encoding="utf-8"))
+          plan = json.loads(Path("docs/evaluation/verifier-lora-targeted-tests-v0.json").read_text(encoding="utf-8"))
+          expected_ids = [item["instance_id"] for item in plan["targets"]]
+          expected_example_ids = [
+              example_id
+              for instance_id in expected_ids
+              for example_id in (f"{instance_id}:base-fail", f"{instance_id}:gold-pass")
+          ]
+          assert result.get("version") == "verifier-lora-v0-deterministic-teacher", result
+          assert result.get("status") == "completed", result
+          assert result.get("teacher_build_id") == os.environ["TEACHER_BUILD_ID"], result
+          assert result.get("execution_mode") == "deterministic_model_free", result
+          assert result.get("model") == "gemma-4-e4b-it-qat-w4a16-ct", result
+          assert result.get("requested") == len(expected_ids) == 6, result
+          records = result.get("records") or []
+          assert len(records) == 12, result
+          assert [item.get("example_id") for item in records] == expected_example_ids, result
+          assert [item.get("instance_id") for item in records] == [x for x in expected_ids for _ in range(2)], result
+
+          gold_records = [item for item in records if str(item.get("example_id", "")).endswith(":gold-pass")]
+          assert len(gold_records) == 6, gold_records
+          if not all(item.get("approved") is True and item.get("label") == "verified_submit" for item in gold_records):
+              raise SystemExit(f"all six gold-pass records must be approved: {gold_records}")
+
+          safe_stop_records = [
+              item for item in records
+              if item.get("approved") is True and item.get("label") == "safe_stop"
+          ]
+          if not safe_stop_records:
+              raise SystemExit("paired supervision requires at least one genuine safe_stop record")
+
+          approved = [item for item in records if item.get("approved") is True]
+          forbidden_keys = {"reference_patch", "reference_solution", "gold_patch", "solution_patch", "test_patch"}
+          def walk(value):
+              if isinstance(value, dict):
+                  for key, child in value.items():
+                      if str(key) in forbidden_keys:
+                          raise AssertionError(f"forbidden solution field in supervision: {key}")
+                      walk(child)
+              elif isinstance(value, list):
+                  for child in value:
+                      walk(child)
+          walk(approved)
+          (output_dir / "approved_supervision.json").write_text(
+              json.dumps({"records": approved}, indent=2, sort_keys=True), encoding="utf-8"
+          )
+          print("approved_example_ids=", [item["example_id"] for item in approved])
+          print("approved_labels=", [item["label"] for item in approved])
+          PY
+
+      - name: Build contract-checked verifier SFT JSONL
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/build_verifier_sft.py \
+            "$OUTPUT_DIR/approved_supervision.json" \
+            --output "$OUTPUT_DIR/verifier-sft-v0.jsonl"
+          test -s "$OUTPUT_DIR/verifier-sft-v0.jsonl"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          output = Path(os.environ["OUTPUT_DIR"]) / "verifier-sft-v0.jsonl"
+          rows = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines() if line.strip()]
+          assert rows, "SFT output is empty"
+          assert len(rows) == len({row["example_id"] for row in rows}), rows
+          labels = {row["label"] for row in rows}
+          assert {"safe_stop", "verified_submit"} <= labels, labels
+          print("sft_examples=", len(rows))
+          print("sft_example_ids=", [row["example_id"] for row in rows])
+          print("sft_labels=", [row["label"] for row in rows])
+          PY
+
+      - name: Upload deterministic SFT teacher evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemma4-verifier-sft-teacher-v0-evidence
+          path: /tmp/gemma4-verifier-sft-teacher-v0-output
+          if-no-files-found: warn
+          retention-days: 14
