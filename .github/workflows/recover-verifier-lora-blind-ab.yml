@@ -1,0 +1,248 @@
+name: Recover frozen blind base-vs-LoRA v0
+
+on:
+  push:
+    branches: [exp/public-train-once]
+    paths:
+      - ".github/workflows/recover-verifier-lora-blind-ab.yml"
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+  BASE_KERNEL_REF: "kolihhan/gemma4-frozen-blind-base-41434071381"
+  ADAPTER_DATASET: "kolihhan/gemma4-verifier-lora-v0-fullseq-41429301498"
+  MODEL_SOURCE: "google/gemma-4/Other/gemma-4-e4b-it-qat-w4a16-ct/2"
+
+jobs:
+  recover-ab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned Kaggle CLI
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          kaggle --version
+
+      - name: Poll existing frozen blind BASE
+        id: base_poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 300); do
+            out="$(kaggle kernels status "$BASE_KERNEL_REF" 2>&1 || true)"
+            printf '[BASE %03d] %s\n' "$attempt" "$out"
+            lower="$(printf '%s' "$out" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal=complete; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal=error; break; fi
+            sleep 20
+          done
+          test -n "$terminal" || terminal=timeout
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          test "$terminal" = complete
+
+      - name: Collect and assert existing frozen blind BASE
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=/tmp/blind-base-output
+          mkdir -p "$OUT"
+          kaggle kernels logs "$BASE_KERNEL_REF" > "$OUT/kernel.log" 2>&1 || true
+          kaggle kernels output "$BASE_KERNEL_REF" -p "$OUT" -o > "$OUT/output-download.log" 2>&1
+          test -s "$OUT/verifier_baseline_results.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('/tmp/blind-base-output/verifier_baseline_results.json').read_text())
+          assert r.get('status')=='completed', r
+          assert r.get('requested')==10, r
+          assert len(r.get('results',[]))==10, r
+          print('BASE_BLIND_SUMMARY', json.dumps({k:v for k,v in r.items() if k!='results'}, sort_keys=True))
+          PY
+
+      - name: Render and push frozen blind LoRA
+        shell: bash
+        env:
+          KERNEL_DIR: /tmp/blind-lora-kernel
+          LORA_KERNEL_REF: kolihhan/gemma4-frozen-blind-lora-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          rm -rf "$KERNEL_DIR"
+          mkdir -p "$KERNEL_DIR"
+          python - <<'PY'
+          import base64, json, os
+          from pathlib import Path
+
+          repo=Path.cwd()
+          submission=repo/'submission'
+          template_path=repo/'kaggle'/'verifier_baseline_runtime.py'
+          reservation_path=repo/'docs'/'evaluation'/'verifier-lora-blind-reservation-v0.json'
+          kernel_dir=Path(os.environ['KERNEL_DIR'])
+
+          payload={}
+          for path in sorted(submission.rglob('*')):
+              if path.is_file():
+                  rel=path.relative_to(submission).as_posix()
+                  if rel.startswith('adapters/'):
+                      continue
+                  payload[rel]=path.read_text(encoding='utf-8')
+          verifier=payload.get('sub_agents/verifier.yaml','')
+          needle='model: gemma-4-e4b-it-qat-w4a16-ct\n'
+          if verifier.count(needle)!=1 or 'adapter:' in verifier:
+              raise SystemExit('unexpected verifier yaml before adapter injection')
+          payload['sub_agents/verifier.yaml']=verifier.replace(needle, needle+'adapter: verifier_lora\n',1)
+
+          reservation=json.loads(reservation_path.read_text(encoding='utf-8'))
+          tasks=reservation.get('tasks') or []
+          if reservation.get('version')!='verifier-lora-v0-blind-reservation' or len(tasks)!=10:
+              raise SystemExit('unexpected frozen blind reservation')
+          manifest={'version':'verifier-lora-v0','holdout':tasks}
+
+          encoded=base64.b64encode(json.dumps(payload,sort_keys=True,separators=(',',':')).encode()).decode('ascii')
+          text=template_path.read_text(encoding='utf-8')
+          if text.count('__SUBMISSION_PAYLOAD_B64__')!=1:
+              raise SystemExit('unexpected submission marker count')
+          text=text.replace('__SUBMISSION_PAYLOAD_B64__',encoded,1)
+          marker='HOLDOUT_MANIFEST_JSON = "__VERIFIER_LORA_HOLDOUT_MANIFEST_JSON__"'
+          if text.count(marker)!=1:
+              raise SystemExit('unexpected manifest marker count')
+          text=text.replace(marker,f"HOLDOUT_MANIFEST_JSON = {json.dumps(manifest,sort_keys=True)!r}",1)
+
+          insert_before='\ndef load_holdout_ids() -> list[str]:\n'
+          adapter_fn='''
+def materialize_frozen_adapter() -> None:
+    source = Path("/kaggle/input/datasets/kolihhan/gemma4-verifier-lora-v0-fullseq-41429301498/adapter")
+    target = AGENT_DIR / "adapters" / "verifier_lora"
+    target.mkdir(parents=True, exist_ok=True)
+    for name in ("adapter_config.json", "adapter_model.safetensors"):
+        src = source / name
+        if not src.is_file():
+            raise FileNotFoundError(f"missing frozen adapter file: {src}")
+        shutil.copyfile(src, target / name)
+'''
+          if text.count(insert_before)!=1:
+              raise SystemExit('adapter function insertion point missing')
+          text=text.replace(insert_before,'\n'+adapter_fn+insert_before,1)
+
+          call='    materialize_submission()\n    holdout_ids = load_holdout_ids()\n'
+          repl='    materialize_submission()\n    materialize_frozen_adapter()\n    holdout_ids = load_holdout_ids()\n'
+          if text.count(call)!=1:
+              raise SystemExit('adapter call insertion point missing')
+          text=text.replace(call,repl,1)
+
+          old='    adapter_map = getattr(adapters, "adapters", None) or {}\n    if adapter_map:\n        raise RuntimeError(f"baseline v0 must not contain adapters: {sorted(adapter_map)}")\n'
+          new='    adapter_map = getattr(adapters, "adapters", None) or {}\n    if set(adapter_map) != {"verifier_lora"}:\n        raise RuntimeError(f"LoRA v0 expected only verifier_lora adapter, got: {sorted(adapter_map)}")\n'
+          if text.count(old)!=1:
+              raise SystemExit('baseline adapter guard missing')
+          text=text.replace(old,new,1)
+          if text.count('enable_lora=False')!=1:
+              raise SystemExit('unexpected enable_lora count')
+          text=text.replace('enable_lora=False','enable_lora=True',1)
+          compile(text,'blind_lora_runtime.py','exec')
+          (kernel_dir/'blind_lora_runtime.py').write_text(text,encoding='utf-8')
+
+          ref=os.environ['LORA_KERNEL_REF']
+          slug=ref.split('/',1)[1]
+          meta={
+              'id':ref,
+              'title':slug,
+              'code_file':'blind_lora_runtime.py',
+              'language':'python','kernel_type':'script','is_private':True,
+              'enable_gpu':True,'enable_tpu':False,'enable_internet':False,
+              'machine_shape':'NvidiaL4',
+              'docker_image':'gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461',
+              'dataset_sources':['metric/gemma-4-developer-agent-wheelhouse',os.environ['ADAPTER_DATASET']],
+              'competition_sources':['gemma-4-developer-agent'],
+              'kernel_sources':[],
+              'model_sources':[os.environ['MODEL_SOURCE']],
+          }
+          (kernel_dir/'kernel-metadata.json').write_text(json.dumps(meta,indent=2)+'\n',encoding='utf-8')
+          print('lora_kernel_ref=',ref)
+          print('blind_ids=',[x['instance_id'] for x in tasks])
+          print('verifier_adapter_injected=', 'adapter: verifier_lora' in payload['sub_agents/verifier.yaml'])
+          PY
+          kaggle kernels push -p "$KERNEL_DIR" --accelerator NvidiaL4 -t 7200
+
+      - name: Poll frozen blind LoRA
+        id: lora_poll
+        shell: bash
+        env:
+          LORA_KERNEL_REF: kolihhan/gemma4-frozen-blind-lora-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 300); do
+            out="$(kaggle kernels status "$LORA_KERNEL_REF" 2>&1 || true)"
+            printf '[LORA %03d] %s\n' "$attempt" "$out"
+            lower="$(printf '%s' "$out" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal=complete; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal=error; break; fi
+            sleep 20
+          done
+          test -n "$terminal" || terminal=timeout
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          test "$terminal" = complete
+
+      - name: Collect, assert, compare
+        shell: bash
+        env:
+          LORA_KERNEL_REF: kolihhan/gemma4-frozen-blind-lora-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          OUT=/tmp/blind-lora-output
+          mkdir -p "$OUT"
+          kaggle kernels logs "$LORA_KERNEL_REF" > "$OUT/kernel.log" 2>&1 || true
+          kaggle kernels output "$LORA_KERNEL_REF" -p "$OUT" -o > "$OUT/output-download.log" 2>&1
+          test -s "$OUT/verifier_baseline_results.json"
+          python - <<'PY'
+          import json, statistics
+          from pathlib import Path
+          base=json.loads(Path('/tmp/blind-base-output/verifier_baseline_results.json').read_text())
+          lora=json.loads(Path('/tmp/blind-lora-output/verifier_baseline_results.json').read_text())
+          assert base.get('requested')==lora.get('requested')==10
+          ids0=[x['instance_id'] for x in base['results']]
+          ids1=[x['instance_id'] for x in lora['results']]
+          assert ids0==ids1
+          b=set(base.get('resolved_instance_ids') or [])
+          l=set(lora.get('resolved_instance_ids') or [])
+          def metrics(obj):
+              rs=obj['results']
+              tools=[x.get('tool_calls') for x in rs if isinstance(x.get('tool_calls'),(int,float))]
+              dur=[x.get('duration_seconds') for x in rs if isinstance(x.get('duration_seconds'),(int,float))]
+              return {
+                  'completed':obj.get('completed'),
+                  'resolved':obj.get('resolved'),
+                  'errors':sum(x.get('status')!='completed' for x in rs),
+                  'patches':sum(bool(x.get('has_patch')) for x in rs),
+                  'mean_tool_calls': (sum(tools)/len(tools) if tools else None),
+                  'mean_duration_seconds': (sum(dur)/len(dur) if dur else None),
+              }
+          comparison={
+              'version':'verifier-lora-v0-frozen-blind-ab',
+              'base':metrics(base),'lora':metrics(lora),
+              'delta_resolved':len(l)-len(b),
+              'base_only':sorted(b-l),'lora_only':sorted(l-b),'both':sorted(b&l),
+              'neither':sorted(set(ids0)-b-l),
+          }
+          Path('/tmp/blind-ab-comparison.json').write_text(json.dumps(comparison,indent=2,sort_keys=True)+'\n')
+          print('FROZEN_BLIND_AB',json.dumps(comparison,sort_keys=True))
+          PY
+
+      - name: Upload recovered frozen blind A/B evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemma4-verifier-lora-v0-frozen-blind-ab-recovered-${{ github.run_id }}
+          path: |
+            /tmp/blind-base-output
+            /tmp/blind-lora-output
+            /tmp/blind-ab-comparison.json
+          if-no-files-found: warn
+          retention-days: 30
