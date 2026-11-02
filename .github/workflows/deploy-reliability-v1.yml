@@ -1,0 +1,239 @@
+name: Deploy Reliability v1 and collect feedback
+
+on:
+  push:
+    branches: [exp/reliability-v1]
+    paths:
+      - "submission/**"
+      - "scripts/render_reliability_v1_kernel.py"
+      - "tests/test_reliability_v1_deploy.py"
+      - "kaggle/verifier_baseline_runtime.py"
+      - "docs/evaluation/topology-ab-manifest-v1.json"
+      - "docs/evaluation/reliability-v1-preregistered-prediction.json"
+      - ".github/workflows/deploy-reliability-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reliability-v1-deploy
+  cancel-in-progress: false
+
+env:
+  KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+  COMPETITION: gemma-4-developer-agent
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Unit and compile checks
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_reliability_v1_deploy
+          python -m py_compile scripts/render_reliability_v1_kernel.py kaggle/verifier_baseline_runtime.py
+      - name: Install Kaggle CLI and fetch current official scorer wheelhouse
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+          rm -rf /tmp/scorer-wheelhouse /tmp/wheelhouse-fixed
+          mkdir -p /tmp/scorer-wheelhouse /tmp/wheelhouse-fixed
+          kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -p /tmp/scorer-wheelhouse --unzip
+          python - <<'PY'
+          import shutil
+          from pathlib import Path
+          src=Path('/tmp/scorer-wheelhouse'); dst=Path('/tmp/wheelhouse-fixed')
+          for wheel in src.glob('*.whl'):
+              if 'cutlass' in wheel.name.lower():
+                  continue
+              name=wheel.name.replace('cu128','+cu128') if ('cu128' in wheel.name and '+' not in wheel.name) else wheel.name
+              shutil.copyfile(wheel, dst/name)
+          wheels=sorted(dst.glob('*.whl'))
+          assert wheels, 'no official scorer wheels downloaded'
+          print('official_wheel_count', len(wheels))
+          PY
+      - name: Validate candidate with current scorer packages
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --find-links /tmp/wheelhouse-fixed \
+            /tmp/wheelhouse-fixed/adk_submission-*.whl /tmp/wheelhouse-fixed/swegemma-*.whl
+          python -m pip install -q --no-deps --force-reinstall /tmp/wheelhouse-fixed/*.whl
+          python - <<'PY'
+          from pathlib import Path
+          from adk_submission import validate_directory
+          from adk_submission.discovery import discover_declared_models
+          from swegemma.config import build_submission_limits
+          limits,_=build_submission_limits()
+          validate_directory(Path('submission'), limits=limits)
+          models=discover_declared_models(Path('submission'))
+          assert models == {'gemma-4-e4b-it-qat-w4a16-ct'}, models
+          print('RELIABILITY_V1_STATIC_VALID=1')
+          PY
+
+  diagnostic:
+    needs: static
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      KERNEL_REF: kolihhan/gemma4-reliability-v1-diag-${{ github.run_id }}
+      KERNEL_DIR: /tmp/gemma4-reliability-v1-diag
+      RAW_OUTPUT: /tmp/gemma4-reliability-v1-diag-raw
+      SAFE_OUTPUT: /tmp/gemma4-reliability-v1-diag-safe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Render and push frozen diagnostic kernel
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+          rm -rf "$KERNEL_DIR" "$RAW_OUTPUT" "$SAFE_OUTPUT"
+          mkdir -p "$KERNEL_DIR" "$RAW_OUTPUT" "$SAFE_OUTPUT"
+          python scripts/render_reliability_v1_kernel.py \
+            --repo . --mode diagnostic \
+            --kernel-dir "$KERNEL_DIR" --kernel-ref "$KERNEL_REF" \
+            --manifest docs/evaluation/topology-ab-manifest-v1.json
+          kaggle kernels push -p "$KERNEL_DIR" --accelerator NvidiaL4 -t 7200
+      - name: Poll diagnostic kernel
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 450); do
+            out="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            printf '[%03d] %s\n' "$attempt" "$out"
+            lower="$(printf '%s' "$out" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal=complete; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal=error; break; fi
+            sleep 20
+          done
+          test "$terminal" = complete
+      - name: Collect compact diagnostic feedback only
+        run: |
+          set -euo pipefail
+          kaggle kernels logs "$KERNEL_REF" > "$RAW_OUTPUT/kernel.log" 2>&1 || true
+          kaggle kernels output "$KERNEL_REF" -p "$RAW_OUTPUT" -o
+          test -s "$RAW_OUTPUT/verifier_baseline_results.json"
+          cp "$RAW_OUTPUT/verifier_baseline_results.json" "$SAFE_OUTPUT/"
+          grep -E '^BASELINE_RESULT|^BASELINE_SUMMARY|vLLM ready|Installing [0-9]+ official scorer wheels' "$RAW_OUTPUT/kernel.log" \
+            > "$SAFE_OUTPUT/kernel-summary.log" || true
+          cp docs/evaluation/reliability-v1-preregistered-prediction.json "$SAFE_OUTPUT/"
+          python - <<'PY'
+          import json, os, statistics
+          from pathlib import Path
+          p=Path(os.environ['SAFE_OUTPUT'])/'verifier_baseline_results.json'
+          r=json.loads(p.read_text())
+          rec=[x for x in r.get('results',[]) if x.get('status')=='completed']
+          calls=[x['tool_calls'] for x in rec if isinstance(x.get('tool_calls'),(int,float))]
+          secs=[x['duration_seconds'] for x in rec if isinstance(x.get('duration_seconds'),(int,float))]
+          summary={
+            'requested':r.get('requested'), 'completed':len(rec), 'resolved':r.get('resolved'),
+            'resolved_instance_ids':r.get('resolved_instance_ids',[]),
+            'mean_tool_calls': statistics.mean(calls) if calls else None,
+            'mean_duration_seconds': statistics.mean(secs) if secs else None,
+            'call_cap_exhaustions': sum(x.get('tool_calls')==32 for x in rec),
+            'empty_patches': sum(not x.get('has_patch') for x in rec),
+          }
+          (Path(os.environ['SAFE_OUTPUT'])/'diagnostic-summary.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
+          print('RELIABILITY_V1_DIAGNOSTIC', json.dumps(summary,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reliability-v1-diagnostic-${{ github.run_id }}
+          path: /tmp/gemma4-reliability-v1-diag-safe
+          if-no-files-found: error
+          retention-days: 30
+
+  submit:
+    needs: static
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      KERNEL_REF: kolihhan/gemma4-reliability-v1-submit-${{ github.run_id }}
+      KERNEL_DIR: /tmp/gemma4-reliability-v1-submit
+      OUTPUT_DIR: /tmp/gemma4-reliability-v1-submit-output
+      FEEDBACK_DIR: /tmp/gemma4-reliability-v1-feedback
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Render and push exact submission.zip builder
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+          rm -rf "$KERNEL_DIR" "$OUTPUT_DIR" "$FEEDBACK_DIR"
+          mkdir -p "$KERNEL_DIR" "$OUTPUT_DIR" "$FEEDBACK_DIR"
+          python scripts/render_reliability_v1_kernel.py \
+            --repo . --mode submit \
+            --kernel-dir "$KERNEL_DIR" --kernel-ref "$KERNEL_REF"
+          kaggle kernels push -p "$KERNEL_DIR"
+      - name: Wait for builder output and verify zip
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 90); do
+            out="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            printf '[%03d] %s\n' "$attempt" "$out"
+            lower="$(printf '%s' "$out" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal=complete; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal=error; break; fi
+            sleep 10
+          done
+          test "$terminal" = complete
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o
+          test -s "$OUTPUT_DIR/submission.zip"
+          python - <<'PY'
+          import hashlib, zipfile, os
+          from pathlib import Path
+          p=Path(os.environ['OUTPUT_DIR'])/'submission.zip'
+          with zipfile.ZipFile(p) as z:
+              names=sorted(n for n in z.namelist() if not n.endswith('/'))
+          expected=sorted(['agent.yaml','eval_config.yaml','configs/sampling.yaml','prompts/system.md','prompts/coder.md'])
+          assert names==expected,(names,expected)
+          print('submission_zip_sha256',hashlib.sha256(p.read_bytes()).hexdigest())
+          print('submission_files',names)
+          PY
+      - name: Submit code-competition notebook output
+        id: submit_competition
+        shell: bash
+        run: |
+          set -euo pipefail
+          msg="reliability-v1:${GITHUB_SHA}:pred=0.08:[0.05,0.12]"
+          kaggle competitions submit "$COMPETITION" \
+            -k "$KERNEL_REF" -f submission.zip -m "$msg" \
+            2>&1 | tee "$FEEDBACK_DIR/submit-command.log"
+          ref="$(grep -Eo 'Submission ref: *[0-9]+' "$FEEDBACK_DIR/submit-command.log" | tail -n1 | grep -Eo '[0-9]+' || true)"
+          printf '%s\n' "$ref" > "$FEEDBACK_DIR/submission-ref.txt"
+          printf '%s\n' "$KERNEL_REF" > "$FEEDBACK_DIR/kernel-ref.txt"
+          printf '%s\n' "$msg" > "$FEEDBACK_DIR/message.txt"
+          cp docs/evaluation/reliability-v1-preregistered-prediction.json "$FEEDBACK_DIR/"
+          echo "submission_ref=$ref" >> "$GITHUB_OUTPUT"
+      - name: Poll early scoring feedback without failing pending submissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref="${{ steps.submit_competition.outputs.submission_ref }}"
+          : > "$FEEDBACK_DIR/submission-status.log"
+          for attempt in $(seq 1 12); do
+            echo "===== poll $attempt =====" | tee -a "$FEEDBACK_DIR/submission-status.log"
+            if [[ -n "$ref" ]]; then
+              kaggle competitions submission "$ref" 2>&1 | tee -a "$FEEDBACK_DIR/submission-status.log" || true
+            else
+              kaggle competitions submissions "$COMPETITION" -v 2>&1 | head -n 20 | tee -a "$FEEDBACK_DIR/submission-status.log" || true
+            fi
+            sleep 60
+          done
+          kaggle competitions submissions "$COMPETITION" -v > "$FEEDBACK_DIR/submissions.csv" 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reliability-v1-submission-feedback-${{ github.run_id }}
+          path: /tmp/gemma4-reliability-v1-feedback
+          if-no-files-found: error
+          retention-days: 30
