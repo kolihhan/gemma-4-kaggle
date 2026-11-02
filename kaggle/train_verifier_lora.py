@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -219,8 +220,8 @@ def tokenize_training_texts(tokenizer: Any, texts: list[str]) -> list[dict[str, 
     examples: list[dict[str, list[int]]] = []
     for index, text in enumerate(texts):
         encoded = tokenizer(text, add_special_tokens=False, truncation=False)
-        input_ids = encoded.get("input_ids") if isinstance(encoded, dict) else None
-        attention_mask = encoded.get("attention_mask") if isinstance(encoded, dict) else None
+        input_ids = encoded.get("input_ids") if isinstance(encoded, Mapping) else None
+        attention_mask = encoded.get("attention_mask") if isinstance(encoded, Mapping) else None
         if not isinstance(input_ids, list) or not input_ids:
             raise ValueError(f"training example {index}: tokenizer returned invalid input_ids")
         if attention_mask is None:
