@@ -1,4 +1,5 @@
 import json
+from collections import UserDict
 from pathlib import Path
 import unittest
 
@@ -67,6 +68,30 @@ class VerifierLoraTrainingContractTests(unittest.TestCase):
         self.assertIn("TrainingArguments", source)
         self.assertIn("get_peft_model", source)
         self.assertIn("CausalLmCollator", source)
+
+    def test_tokenize_training_texts_accepts_mapping_batch_encoding(self):
+        from kaggle.train_verifier_lora import tokenize_training_texts
+
+        class FakeTokenizer:
+            def __call__(self, text, add_special_tokens=False, truncation=False):
+                return UserDict(
+                    {
+                        "input_ids": [11, 12, 13],
+                        "attention_mask": [1, 1, 1],
+                    }
+                )
+
+        examples = tokenize_training_texts(FakeTokenizer(), ["hello"])
+        self.assertEqual(
+            examples,
+            [
+                {
+                    "input_ids": [11, 12, 13],
+                    "attention_mask": [1, 1, 1],
+                    "labels": [11, 12, 13],
+                }
+            ],
+        )
 
     def test_dataset_loader_accepts_gold_coverage_plus_safe_stop_subset(self):
         from kaggle.train_verifier_lora import load_sft_rows
