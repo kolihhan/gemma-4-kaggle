@@ -1,5 +1,5 @@
 name: Probe one-step verifier LoRA training once
-# Re-run after Gemma 4 PLE projection colocation fix; same frozen 3134-token worst case.
+# Re-run with full 3134-token context but a bounded 256-token final loss window.
 
 on:
   push:
