@@ -1,4 +1,5 @@
 name: Probe one-step verifier LoRA training once
+# Re-run after measured E4B placement rebalance; same frozen 3134-token worst case.
 
 on:
   push:
