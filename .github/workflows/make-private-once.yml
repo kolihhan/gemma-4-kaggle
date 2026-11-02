@@ -1,0 +1,34 @@
+name: Make repository private once
+
+on:
+  push:
+    branches:
+      - exp/public-train-once
+    paths:
+      - .github/workflows/make-private-once.yml
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  private:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request private visibility
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          code="$(curl -sS -o /tmp/response.json -w '%{http_code}' \
+            -X PATCH \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${REPO}" \
+            -d '{"private":true}')"
+          cat /tmp/response.json
+          echo "http_code=$code"
+          test "$code" = "200"
