@@ -13,7 +13,6 @@ Only frozen training IDs are accepted. Blind evaluation data is never read.
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import json
 import tempfile
 import traceback
@@ -25,8 +24,6 @@ from verifier_gold_teacher_supervision import (
     DIFF_COMMAND,
     build_teacher_safe_stop_record,
     build_teacher_supervision_record,
-    find_reference_patch_dir,
-    load_reference_patch_map,
     load_targeted_test_plan,
 )
 
@@ -263,17 +260,20 @@ async def run_teacher() -> dict[str, Any]:
     tasks_path = gold.DATA_DIR / "tasks.jsonl"
     snapshots_dir = gold.DATA_DIR / "snapshots"
     public_tasks = load_tasks(tasks_path)
-    reference_patch_dir = find_reference_patch_dir([tasks_path, snapshots_dir])
-    reference_patch_map = load_reference_patch_map(reference_patch_dir)
     selected = set(target_ids)
     tasks_by_id = {task.instance_id: task for task in public_tasks if task.instance_id in selected}
     missing = [task_id for task_id in target_ids if task_id not in tasks_by_id]
     if missing:
         raise RuntimeError(f"deterministic-teacher task(s) missing from public corpus: {missing}")
-    missing_reference_patches = [task_id for task_id in target_ids if task_id not in reference_patch_map]
+    missing_reference_patches = [
+        task_id
+        for task_id in target_ids
+        if not (tasks_by_id[task_id].patch or "").strip()
+    ]
     if missing_reference_patches:
         raise RuntimeError(
-            f"deterministic-teacher reference patch(es) missing: {missing_reference_patches}"
+            f"deterministic-teacher reference patch(es) missing from training task corpus: "
+            f"{missing_reference_patches}"
         )
 
     config = EvalConfig(
@@ -292,11 +292,10 @@ async def run_teacher() -> dict[str, Any]:
 
     records: list[dict[str, Any]] = []
     for index, task_id in enumerate(target_ids, 1):
-        public_task = tasks_by_id[task_id]
-        problem_description = public_task.problem_statement or ""
+        task = tasks_by_id[task_id]
+        problem_description = task.problem_statement or ""
         print(f"[{index:02d}/{len(target_ids):02d}] deterministic-teacher {task_id}", flush=True)
         try:
-            task = dataclasses.replace(public_task, patch=reference_patch_map[task_id])
             task_records = await _collect_task_records(
                 evaluator=evaluator,
                 task=task,
