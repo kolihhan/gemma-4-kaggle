@@ -1,0 +1,31 @@
+name: Probe Reliability v1 Kaggle submissions once
+
+on:
+  push:
+    branches: [exp/reliability-v1]
+    paths:
+      - ".github/workflows/probe-reliability-v1-submissions-once.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+  COMPETITION: gemma-4-developer-agent
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: List current submissions read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+          echo '=== current submissions ==='
+          kaggle competitions submissions "$COMPETITION" -v
