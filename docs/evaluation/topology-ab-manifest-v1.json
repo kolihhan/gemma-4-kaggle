@@ -1,0 +1,56 @@
+{
+  "version": "verifier-lora-v0",
+  "experiment": "topology-single-root-vs-two-stage-v1",
+  "selection_rule": "gold-pass AND no-op-fail",
+  "sampling_frozen": true,
+  "budget_frozen": true,
+  "base_model": "gemma-4-e4b-it-qat-w4a16-ct",
+  "frozen_sampling": {
+    "temperature": 0.2,
+    "top_p": 0.95,
+    "max_output_tokens": 16384,
+    "thinking_budget": 4096
+  },
+  "frozen_budget": {
+    "timeout_seconds": 300,
+    "max_tool_calls": 32,
+    "max_time_minutes": 5,
+    "max_turns": 64
+  },
+  "noop_screen": {
+    "run_id": 41457795849,
+    "artifact_id": 13148321466,
+    "artifact_sha256": "95be0cab980d3d90795855f4a13cb1f6427f2579f3b2b7781b48cb18904956c0",
+    "requested": 19,
+    "eligible": 17,
+    "excluded_noop_pass": ["fastapi_14077", "fastapi_14851"]
+  },
+  "historical_two_stage_base": {
+    "resolved": 1,
+    "requested": 17,
+    "resolved_instance_ids": ["rich_3067"],
+    "mean_duration_seconds": 180.87017524952944,
+    "mean_tool_calls": 18.41176470588235,
+    "max_tool_calls": 32,
+    "budget_exhaustions": 3
+  },
+  "holdout": [
+    {"instance_id": "rich_3061", "repo": "Textualize/rich", "source_role": "development"},
+    {"instance_id": "rich_3067", "repo": "Textualize/rich", "source_role": "development"},
+    {"instance_id": "rich_3934", "repo": "Textualize/rich", "source_role": "development"},
+    {"instance_id": "rich_3942", "repo": "Textualize/rich", "source_role": "development"},
+    {"instance_id": "fastapi_13920", "repo": "fastapi/fastapi", "source_role": "development"},
+    {"instance_id": "fastapi_14463", "repo": "fastapi/fastapi", "source_role": "development"},
+    {"instance_id": "fastapi_14986", "repo": "fastapi/fastapi", "source_role": "development"},
+    {"instance_id": "rich_3105", "repo": "Textualize/rich", "source_role": "blind"},
+    {"instance_id": "rich_4079", "repo": "Textualize/rich", "source_role": "blind"},
+    {"instance_id": "rich_3777", "repo": "Textualize/rich", "source_role": "blind"},
+    {"instance_id": "rich_3052", "repo": "Textualize/rich", "source_role": "blind"},
+    {"instance_id": "fastapi_5077", "repo": "fastapi/fastapi", "source_role": "blind"},
+    {"instance_id": "fastapi_9425", "repo": "fastapi/fastapi", "source_role": "blind"},
+    {"instance_id": "fastapi_14873", "repo": "fastapi/fastapi", "source_role": "blind"},
+    {"instance_id": "fastapi_9555", "repo": "fastapi/fastapi", "source_role": "blind"},
+    {"instance_id": "fastapi_15280", "repo": "fastapi/fastapi", "source_role": "blind"},
+    {"instance_id": "fastapi_14448", "repo": "fastapi/fastapi", "source_role": "blind"}
+  ]
+}
