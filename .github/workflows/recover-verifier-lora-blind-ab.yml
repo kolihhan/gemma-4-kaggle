@@ -11,7 +11,7 @@ permissions:
 
 env:
   KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
-  BASE_KERNEL_REF: "kolihhan/gemma4-frozen-blind-base-41434071381"
+  BASE_KERNEL_REF: "kolihhan/gemma4-verifier-blind-base-41434071381"
   ADAPTER_DATASET: "kolihhan/gemma4-verifier-lora-v0-fullseq-41429301498"
   MODEL_SOURCE: "google/gemma-4/Other/gemma-4-e4b-it-qat-w4a16-ct/2"
 
@@ -202,7 +202,7 @@ def materialize_frozen_adapter() -> None:
           kaggle kernels output "$LORA_KERNEL_REF" -p "$OUT" -o > "$OUT/output-download.log" 2>&1
           test -s "$OUT/verifier_baseline_results.json"
           python - <<'PY'
-          import json, statistics
+          import json
           from pathlib import Path
           base=json.loads(Path('/tmp/blind-base-output/verifier_baseline_results.json').read_text())
           lora=json.loads(Path('/tmp/blind-lora-output/verifier_baseline_results.json').read_text())
