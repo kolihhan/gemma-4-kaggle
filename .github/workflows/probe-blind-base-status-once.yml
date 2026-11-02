@@ -1,4 +1,4 @@
-name: Probe blind BASE status once
+name: Probe verifier LoRA development progress once
 
 on:
   push:
@@ -15,14 +15,18 @@ jobs:
     timeout-minutes: 5
     env:
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
-      KERNEL_REF: kolihhan/gemma4-verifier-blind-base-41434071381
+      KERNEL_REF: kolihhan/gemma4-verifier-lora-dev-41447650864
     steps:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Query private Kaggle kernel status
+      - name: Query status and structured progress only
         shell: bash
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
-          kaggle kernels status "$KERNEL_REF"
+          kaggle kernels status "$KERNEL_REF" || true
+          echo '--- structured task progress ---'
+          kaggle kernels logs "$KERNEL_REF" 2>/dev/null \
+            | grep -E 'BASELINE_RESULT|BASELINE_SUMMARY|\[[0-9]{2}/[0-9]{2}\] baseline' \
+            | tail -n 40 || true
