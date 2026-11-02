@@ -52,6 +52,7 @@ class VerifierLoraTrainingContractTests(unittest.TestCase):
         self.assertEqual(TRAINING_CONFIG["num_train_epochs"], 3)
         self.assertEqual(TRAINING_CONFIG["seed"], 42)
         self.assertEqual(TRAINING_CONFIG["max_length"], 4096)
+        self.assertEqual(TRAINING_CONFIG["loss_window_tokens"], 256)
         self.assertEqual(
             TRAINING_CONFIG["target_modules"],
             ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
@@ -97,6 +98,20 @@ class VerifierLoraTrainingContractTests(unittest.TestCase):
         self.assertIn("TrainingArguments", source)
         self.assertIn("get_peft_model", source)
         self.assertIn("CausalLmCollator", source)
+
+    def test_final_window_loss_keeps_full_context_but_bounds_vocab_logits(self):
+        from kaggle.train_verifier_lora import final_window_loss_slice
+
+        self.assertEqual(final_window_loss_slice(3134, 256), (256, 2878))
+        self.assertEqual(final_window_loss_slice(64, 256), (64, 0))
+        with self.assertRaisesRegex(ValueError, "sequence_length"):
+            final_window_loss_slice(0, 256)
+        with self.assertRaisesRegex(ValueError, "loss_window_tokens"):
+            final_window_loss_slice(64, 0)
+
+        source = TRAINER_SOURCE.read_text(encoding="utf-8")
+        self.assertIn("class FinalWindowTrainer", source)
+        self.assertIn("logits_to_keep=keep_tokens", source)
 
     def test_tokenize_training_texts_accepts_mapping_batch_encoding(self):
         from kaggle.train_verifier_lora import tokenize_training_texts
