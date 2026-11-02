@@ -1,0 +1,54 @@
+name: Collect topology blind BASE evidence once
+
+on:
+  push:
+    branches: [exp/topology-ab]
+    paths:
+      - ".github/workflows/collect-topology-blind-base-once.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-frozen-blind-base-41434071381
+      OUTPUT_DIR: /tmp/topology-blind-base
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned Kaggle CLI
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+      - name: Collect existing private Kaggle output
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$OUTPUT_DIR"
+          mkdir -p "$OUTPUT_DIR"
+          kaggle kernels status "$KERNEL_REF"
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o
+          test -s "$OUTPUT_DIR/verifier_baseline_results.json"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          p = Path(os.environ['OUTPUT_DIR']) / 'verifier_baseline_results.json'
+          r = json.loads(p.read_text())
+          assert r.get('status') == 'completed', r
+          assert r.get('requested') == 10, r
+          assert len(r.get('results', [])) == 10, r
+          assert r.get('resolved') == 0, r
+          print('BLIND_BASE_SUMMARY', json.dumps({k:v for k,v in r.items() if k!='results'}, sort_keys=True))
+          PY
+      - name: Upload structured BASE evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: topology-blind-base-existing
+          path: /tmp/topology-blind-base/verifier_baseline_results.json
+          if-no-files-found: error
+          retention-days: 14
