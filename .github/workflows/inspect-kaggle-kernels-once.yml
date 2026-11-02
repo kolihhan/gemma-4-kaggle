@@ -1,0 +1,30 @@
+name: Inspect Kaggle kernel slugs once
+
+on:
+  push:
+    branches: [exp/public-train-once]
+    paths:
+      - ".github/workflows/inspect-kaggle-kernels-once.yml"
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -q 'kaggle==2.2.5' 'six==1.17.0'
+      - name: List my recent kernels
+        shell: bash
+        run: |
+          set +e
+          kaggle kernels list --mine --sort-by dateCreated -p 1 2>&1 | head -n 100
+          echo '--- help ---'
+          kaggle kernels list -h 2>&1 | head -n 120
+          exit 0
