@@ -50,6 +50,7 @@ TRAINING_CONFIG = {
     "num_train_epochs": 3,
     "seed": 42,
     "max_length": 4096,
+    "loss_window_tokens": 256,
     "target_modules": [
         "q_proj",
         "k_proj",
@@ -354,6 +355,17 @@ def tokenize_training_texts(tokenizer: Any, texts: list[str]) -> list[dict[str, 
     return examples
 
 
+def final_window_loss_slice(sequence_length: int, loss_window_tokens: int) -> tuple[int, int]:
+    """Return kept-logit count and shifted-label start for a final-token loss window."""
+    if sequence_length <= 0:
+        raise ValueError("sequence_length must be positive")
+    if loss_window_tokens <= 0:
+        raise ValueError("loss_window_tokens must be positive")
+    keep_tokens = min(sequence_length, loss_window_tokens)
+    shift_start = sequence_length - keep_tokens
+    return keep_tokens, shift_start
+
+
 class CausalLmCollator:
     """Right-pad causal-LM examples; ignore padding tokens in the loss."""
 
@@ -441,6 +453,7 @@ def main() -> None:
     ensure_peft_torchao_compat()
 
     import torch
+    import torch.nn.functional as F
     from datasets import Dataset
     from transformers import (
         AutoModelForCausalLM,
@@ -450,6 +463,45 @@ def main() -> None:
         set_seed,
     )
     from peft import LoraConfig, get_peft_model
+
+    class FinalWindowTrainer(Trainer):
+        """Keep full context, but compute vocab logits/loss only for the final decision window."""
+
+        def compute_loss(
+            self,
+            model,
+            inputs,
+            return_outputs=False,
+            num_items_in_batch=None,
+        ):
+            model_inputs = dict(inputs)
+            labels = model_inputs.pop("labels")
+            sequence_length = int(labels.shape[-1])
+            keep_tokens, shift_start = final_window_loss_slice(
+                sequence_length,
+                TRAINING_CONFIG["loss_window_tokens"],
+            )
+            outputs = model(
+                **model_inputs,
+                logits_to_keep=keep_tokens,
+            )
+            logits = outputs.logits.float()
+            shifted_labels = F.pad(labels, (0, 1), value=-100)[..., 1:]
+            shifted_labels = shifted_labels[..., shift_start:].contiguous()
+            if logits.shape[:-1] != shifted_labels.shape:
+                raise RuntimeError(
+                    "final-window logits/label shape mismatch: "
+                    f"logits={tuple(logits.shape)} labels={tuple(shifted_labels.shape)}"
+                )
+            flat_logits = logits.reshape(-1, logits.shape[-1])
+            flat_labels = shifted_labels.reshape(-1).to(logits.device)
+            loss = F.cross_entropy(
+                flat_logits,
+                flat_labels,
+                ignore_index=-100,
+                reduction="mean",
+            )
+            return (loss, outputs) if return_outputs else loss
 
     if not MODEL_PATH.is_dir():
         raise FileNotFoundError(f"unquantized E4B model mount not found: {MODEL_PATH}")
@@ -528,7 +580,7 @@ def main() -> None:
         data_seed=TRAINING_CONFIG["seed"],
         remove_unused_columns=False,
     )
-    trainer = Trainer(
+    trainer = FinalWindowTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
