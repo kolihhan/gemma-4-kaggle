@@ -1,5 +1,5 @@
 name: Probe one-step verifier LoRA training once
-# Re-run after measured E4B placement rebalance; same frozen 3134-token worst case.
+# Re-run after Gemma 4 PLE projection colocation fix; same frozen 3134-token worst case.
 
 on:
   push:
