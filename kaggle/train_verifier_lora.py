@@ -214,6 +214,63 @@ def render_training_texts(processor: Any, rows: list[dict[str, Any]]) -> list[st
     return [_render_chat(processor, row) for row in rows]
 
 
+def tokenize_training_texts(tokenizer: Any, texts: list[str]) -> list[dict[str, list[int]]]:
+    """Tokenize full SFT transcripts without truncation and copy inputs to LM labels."""
+    examples: list[dict[str, list[int]]] = []
+    for index, text in enumerate(texts):
+        encoded = tokenizer(text, add_special_tokens=False, truncation=False)
+        input_ids = encoded.get("input_ids") if isinstance(encoded, dict) else None
+        attention_mask = encoded.get("attention_mask") if isinstance(encoded, dict) else None
+        if not isinstance(input_ids, list) or not input_ids:
+            raise ValueError(f"training example {index}: tokenizer returned invalid input_ids")
+        if attention_mask is None:
+            attention_mask = [1] * len(input_ids)
+        if not isinstance(attention_mask, list) or len(attention_mask) != len(input_ids):
+            raise ValueError(f"training example {index}: invalid attention_mask")
+        examples.append(
+            {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "labels": list(input_ids),
+            }
+        )
+    return examples
+
+
+class CausalLmCollator:
+    """Right-pad causal-LM examples; ignore padding tokens in the loss."""
+
+    def __init__(self, tokenizer: Any):
+        if tokenizer.pad_token_id is None:
+            raise ValueError("tokenizer pad_token_id is required")
+        self.pad_token_id = int(tokenizer.pad_token_id)
+
+    def __call__(self, features: list[dict[str, list[int]]]) -> dict[str, Any]:
+        import torch
+
+        if not features:
+            raise ValueError("cannot collate an empty batch")
+        max_length = max(len(feature["input_ids"]) for feature in features)
+        input_ids: list[list[int]] = []
+        attention_mask: list[list[int]] = []
+        labels: list[list[int]] = []
+        for feature in features:
+            ids = list(feature["input_ids"])
+            mask = list(feature["attention_mask"])
+            target = list(feature["labels"])
+            if not (len(ids) == len(mask) == len(target)):
+                raise ValueError("causal LM feature lengths do not match")
+            padding = max_length - len(ids)
+            input_ids.append(ids + [self.pad_token_id] * padding)
+            attention_mask.append(mask + [0] * padding)
+            labels.append(target + [-100] * padding)
+        return {
+            "input_ids": torch.tensor(input_ids, dtype=torch.long),
+            "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
+            "labels": torch.tensor(labels, dtype=torch.long),
+        }
+
+
 def validate_model_class(model: Any) -> None:
     """Require the official multimodal Gemma 4 wrapper used by this checkpoint."""
     name = model.__class__.__name__
@@ -255,7 +312,7 @@ def _package_versions() -> dict[str, str]:
     import importlib.metadata
 
     result = {}
-    for package in ("torch", "transformers", "peft", "trl", "datasets", "accelerate"):
+    for package in ("torch", "transformers", "peft", "datasets", "accelerate"):
         try:
             result[package] = importlib.metadata.version(package)
         except importlib.metadata.PackageNotFoundError:
@@ -266,9 +323,14 @@ def _package_versions() -> dict[str, str]:
 def main() -> None:
     import torch
     from datasets import Dataset
-    from peft import LoraConfig
-    from transformers import AutoModelForCausalLM, AutoProcessor, set_seed
-    from trl import SFTConfig, SFTTrainer
+    from peft import LoraConfig, get_peft_model
+    from transformers import (
+        AutoModelForCausalLM,
+        AutoProcessor,
+        Trainer,
+        TrainingArguments,
+        set_seed,
+    )
 
     if not MODEL_PATH.is_dir():
         raise FileNotFoundError(f"unquantized E4B model mount not found: {MODEL_PATH}")
@@ -288,6 +350,7 @@ def main() -> None:
         if tokenizer.eos_token_id is None:
             raise RuntimeError("Gemma 4 tokenizer has neither pad nor eos token")
         tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "right"
 
     token_lengths = preflight_token_lengths(
         processor,
@@ -295,27 +358,23 @@ def main() -> None:
         max_length=TRAINING_CONFIG["max_length"],
     )
     texts = render_training_texts(processor, rows)
+    tokenized_examples = tokenize_training_texts(tokenizer, texts)
     example_ids = [str(row["example_id"]) for row in rows]
     instance_ids = [str(row["instance_id"]) for row in rows]
     labels = [str(row["label"]) for row in rows]
-    train_dataset = Dataset.from_dict(
-        {
-            "example_id": example_ids,
-            "instance_id": instance_ids,
-            "label": labels,
-            "text": texts,
-        }
-    )
+    train_dataset = Dataset.from_list(tokenized_examples)
 
-    dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
+    if not torch.cuda.is_available():
+        raise RuntimeError("verifier LoRA training requires a visible CUDA GPU")
+    dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
     model = AutoModelForCausalLM.from_pretrained(
         str(MODEL_PATH),
         local_files_only=True,
         dtype=dtype,
         low_cpu_mem_usage=True,
-        device_map="auto",
     )
     validate_model_class(model)
+    base_model_class = model.__class__.__name__
     model.config.use_cache = False
     model.gradient_checkpointing_enable()
     matched_modules = validate_lora_target_modules(model, TRAINING_CONFIG["target_modules"])
@@ -328,10 +387,12 @@ def main() -> None:
         task_type="CAUSAL_LM",
         target_modules=matched_modules,
     )
-    training_args = SFTConfig(
+    model = get_peft_model(model, peft_config)
+    if hasattr(model, "enable_input_require_grads"):
+        model.enable_input_require_grads()
+
+    training_args = TrainingArguments(
         output_dir=str(OUTPUT_ROOT / "trainer"),
-        dataset_text_field="text",
-        max_length=TRAINING_CONFIG["max_length"],
         learning_rate=TRAINING_CONFIG["learning_rate"],
         num_train_epochs=TRAINING_CONFIG["num_train_epochs"],
         per_device_train_batch_size=1,
@@ -344,14 +405,13 @@ def main() -> None:
         report_to="none",
         seed=TRAINING_CONFIG["seed"],
         data_seed=TRAINING_CONFIG["seed"],
-        packing=False,
+        remove_unused_columns=False,
     )
-    trainer = SFTTrainer(
+    trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
-        processing_class=tokenizer,
-        peft_config=peft_config,
+        data_collator=CausalLmCollator(tokenizer),
     )
 
     trainable_params = sum(p.numel() for p in trainer.model.parameters() if p.requires_grad)
@@ -385,7 +445,7 @@ def main() -> None:
         "version": "verifier-lora-v0-training",
         "status": "completed",
         "model_path": str(MODEL_PATH),
-        "model_class": model.__class__.__name__,
+        "model_class": base_model_class,
         "dataset_sha256": dataset_sha256,
         "required_gold_task_ids": EXPECTED_TASK_IDS,
         "example_ids": example_ids,
@@ -402,7 +462,7 @@ def main() -> None:
         "train_metrics": dict(result.metrics),
         "adapter_files": sorted(actual_files),
         "package_versions": _package_versions(),
-        "visible_gpus": torch.cuda.device_count() if torch.cuda.is_available() else 0,
+        "visible_gpus": torch.cuda.device_count(),
     }
     REPORT_PATH.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
     print("VERIFIER_LORA_TRAINING_REPORT", json.dumps(report, sort_keys=True), flush=True)
