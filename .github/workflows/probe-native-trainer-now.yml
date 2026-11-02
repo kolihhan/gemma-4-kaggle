@@ -33,66 +33,77 @@ jobs:
           set -euo pipefail
           rm -rf "$KERNEL_DIR"
           mkdir -p "$KERNEL_DIR"
-          cp kaggle/train_verifier_lora.py "$KERNEL_DIR/train_verifier_lora.py"
-          cat > "$KERNEL_DIR/smoke.py" <<'PY'
-          import json
-          import tempfile
+          python - <<'PY'
+          import base64
           from pathlib import Path
 
-          import torch
-          from datasets import Dataset
-          from peft import LoraConfig, get_peft_model
-          from transformers import Trainer, TrainingArguments
+          source_b64 = base64.b64encode(Path("kaggle/train_verifier_lora.py").read_bytes()).decode("ascii")
+          smoke = f'''import base64
+import json
+import tempfile
+import types
+from pathlib import Path
 
-          import train_verifier_lora as trainer_mod
+import torch
+from datasets import Dataset
+from peft import LoraConfig, get_peft_model
+from transformers import Trainer, TrainingArguments
 
-          class FakeTokenizer:
-              pad_token_id = 0
+trainer_mod = types.ModuleType("train_verifier_lora")
+trainer_mod.__dict__["__name__"] = "train_verifier_lora"
+exec(compile(base64.b64decode("{source_b64}"), "train_verifier_lora.py", "exec"), trainer_mod.__dict__)
 
-          collator = trainer_mod.CausalLmCollator(FakeTokenizer())
-          batch = collator([
-              {"input_ids": [1, 2, 3], "attention_mask": [1, 1, 1], "labels": [1, 2, 3]},
-              {"input_ids": [4], "attention_mask": [1], "labels": [4]},
-          ])
-          assert tuple(batch["input_ids"].shape) == (2, 3)
-          assert batch["input_ids"].tolist() == [[1, 2, 3], [4, 0, 0]]
-          assert batch["labels"].tolist() == [[1, 2, 3], [4, -100, -100]]
+class FakeTokenizer:
+    pad_token_id = 0
 
-          ds = Dataset.from_list([
-              {"input_ids": [1, 2], "attention_mask": [1, 1], "labels": [1, 2]}
-          ])
-          assert len(ds) == 1
+collator = trainer_mod.CausalLmCollator(FakeTokenizer())
+batch = collator([
+    {{"input_ids": [1, 2, 3], "attention_mask": [1, 1, 1], "labels": [1, 2, 3]}},
+    {{"input_ids": [4], "attention_mask": [1], "labels": [4]}},
+])
+assert tuple(batch["input_ids"].shape) == (2, 3)
+assert batch["input_ids"].tolist() == [[1, 2, 3], [4, 0, 0]]
+assert batch["labels"].tolist() == [[1, 2, 3], [4, -100, -100]]
 
-          out = Path(tempfile.mkdtemp())
-          args = TrainingArguments(
-              output_dir=str(out),
-              learning_rate=1e-4,
-              num_train_epochs=3,
-              per_device_train_batch_size=1,
-              gradient_accumulation_steps=1,
-              gradient_checkpointing=True,
-              bf16=False,
-              fp16=False,
-              logging_steps=1,
-              save_strategy="no",
-              report_to="none",
-              seed=42,
-              data_seed=42,
-              remove_unused_columns=False,
-          )
-          assert args.learning_rate == 1e-4
-          assert args.num_train_epochs == 3
-          assert args.gradient_checkpointing is True
-          assert Trainer is not None
-          assert LoraConfig is not None
-          assert get_peft_model is not None
-          print("NATIVE_TRAINER_SMOKE", json.dumps({
-              "torch": torch.__version__,
-              "batch_shape": list(batch["input_ids"].shape),
-              "training_args_ok": True,
-              "trainer_import_ok": True,
-              "peft_import_ok": True,
-          }, sort_keys=True))
+ds = Dataset.from_list([
+    {{"input_ids": [1, 2], "attention_mask": [1, 1], "labels": [1, 2]}}
+])
+assert len(ds) == 1
+
+out = Path(tempfile.mkdtemp())
+args = TrainingArguments(
+    output_dir=str(out),
+    learning_rate=1e-4,
+    num_train_epochs=3,
+    per_device_train_batch_size=1,
+    gradient_accumulation_steps=1,
+    gradient_checkpointing=True,
+    bf16=False,
+    fp16=False,
+    logging_steps=1,
+    save_strategy="no",
+    report_to="none",
+    seed=42,
+    data_seed=42,
+    remove_unused_columns=False,
+)
+assert args.learning_rate == 1e-4
+assert args.num_train_epochs == 3
+assert args.gradient_checkpointing is True
+assert Trainer is not None
+assert LoraConfig is not None
+assert get_peft_model is not None
+assert "trl" not in trainer_mod._package_versions()
+print("NATIVE_TRAINER_SMOKE", json.dumps({{
+    "torch": torch.__version__,
+    "batch_shape": list(batch["input_ids"].shape),
+    "training_args_ok": True,
+    "trainer_import_ok": True,
+    "peft_import_ok": True,
+    "trainer_source_embedded": True,
+}}, sort_keys=True))
+'''
+          Path("/tmp/gemma4-native-trainer-smoke/smoke.py").write_text(smoke, encoding="utf-8")
           PY
           cat > "$KERNEL_DIR/kernel-metadata.json" <<EOF
           {
