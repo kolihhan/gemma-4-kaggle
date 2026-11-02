@@ -27,25 +27,35 @@ The purpose is calibration of our prediction process, not target-chasing.
 
 GitHub stores only code, prompts, experiment contracts, and compact summaries. Raw Competition Data is runtime-only.
 
-`deploy-reliability-v1.yml` performs:
+`deploy-reliability-v1.yml` performs frozen-candidate checks, fresh official scorer validation, a 17-task development diagnostic, and an independent real competition submission path. The diagnostic result does not select whether the competition submission happens.
 
-1. frozen-candidate unit/compile checks;
-2. fresh official scorer-wheelhouse validation;
-3. a 17-task development diagnostic in a private Kaggle kernel;
-4. in parallel, a private Kaggle builder kernel that emits exactly `submission.zip`;
-5. Kaggle CLI code-competition submission;
-6. capture of submission ref, early status/public-score feedback when available, and compact diagnostic summaries.
+### Verified deployment state
 
-The diagnostic result does not select whether the competition submission happens.
+- Frozen-candidate unit tests and compile checks: **PASS**.
+- Fresh current official scorer-wheelhouse validation: **PASS**.
+- Reliability-v1 builder kernel produced an exact five-file `submission.zip`: **PASS**.
+- Kaggle `CreateCodeSubmission` request shape is valid. A direct API probe exposed the actual server rejection reason rather than the CLI's generic HTTP 400.
+- Reliability-v1 has **not** consumed a competition submission slot yet.
+- Existing old submission ref **57879765**, description `baseline-e4b-v0`, submitted 2026-11-01 17:59:25 UTC, is still `PENDING` with no public/private score. Kaggle rejects another code submission while this team submission is pending.
+- `wait-slot-submit-reliability-v1.yml` run **41487538624** is active. It checks ref 57879765 read-only, deduplicates against any existing Reliability-v1 submission, and submits the already-frozen builder kernel/version exactly once after the slot becomes available.
+- The original Reliability-v1 17-task diagnostic remains a single run, `deploy-reliability-v1.yml` run **41485671952**, diagnostic job **125417231948**. Do not launch a duplicate diagnostic while it is running.
 
-## Next research after feedback
+Do not interpret the pending-slot transport condition as a scientific failure of Reliability-v1.
 
-Do not immediately add prompt rules. First compare prediction vs observed result and decompose the gap. Candidate next hypotheses are:
+## Research state
 
-1. adaptive compute / value-of-information routing;
-2. reproduction-first debugging;
-3. test-aware retrieval;
-4. isolated tool-schema/parser reliability ablation;
-5. conditional bounded rescue rather than always-on verifier.
+`docs/research/post-v1-breakthrough-hypotheses-2026-11-03.md` ranks transfer-oriented follow-ups without modifying v1.
 
-Only one major hypothesis moves into the next experiment.
+Current research priority after v1 feedback:
+
+1. **Adaptive compute / value-of-information routing** — cheapest discriminating action first, escalate only under ambiguity.
+2. Reproduction-first for concrete behavioral contracts.
+3. Test-aware retrieval linking likely source locations to the smallest useful verification target.
+4. Conditional edit/tool-schema reliability path.
+5. Conditional bounded rescue instead of an always-on verifier.
+
+These are hypotheses, not queued implementation. Do not move one into the candidate until Reliability-v1 feedback is analyzed and one major variable is selected.
+
+## Next decision after feedback
+
+Do not immediately add prompt rules. First compare the pre-registered 0.08 [0.05, 0.12] prediction with actual Kaggle score and the development aggregate, then explain the prediction error. Select exactly one next hypothesis and freeze a new untouched evaluation denominator before inspecting its traces.
