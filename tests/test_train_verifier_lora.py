@@ -59,6 +59,35 @@ class VerifierLoraTrainingContractTests(unittest.TestCase):
         self.assertNotIn("sweep", TRAINING_CONFIG)
         self.assertNotIn("grid", TRAINING_CONFIG)
 
+    def test_two_gpu_load_kwargs_move_large_per_layer_embeddings_to_gpu0(self):
+        from kaggle.train_verifier_lora import build_two_gpu_load_kwargs
+
+        class FakeCuda:
+            @staticmethod
+            def device_count():
+                return 2
+
+        class FakeTorch:
+            cuda = FakeCuda()
+
+        dtype = object()
+        kwargs = build_two_gpu_load_kwargs(FakeTorch, dtype=dtype)
+        device_map = kwargs["device_map"]
+
+        self.assertIs(kwargs["dtype"], dtype)
+        self.assertTrue(kwargs["low_cpu_mem_usage"])
+        self.assertIsInstance(device_map, dict)
+        self.assertEqual(device_map["model.language_model.embed_tokens_per_layer"], 0)
+        self.assertEqual(device_map["model.language_model.embed_tokens"], 0)
+        self.assertEqual(device_map["model.language_model.layers.0"], 0)
+        self.assertEqual(device_map["model.language_model.layers.3"], 0)
+        self.assertEqual(device_map["model.language_model.layers.4"], 1)
+        self.assertEqual(device_map["model.language_model.layers.41"], 1)
+        self.assertEqual(device_map["model.audio_tower"], 1)
+        self.assertEqual(device_map["model.vision_tower"], 0)
+        self.assertEqual({value for value in device_map.values()}, {0, 1})
+        self.assertNotIn("max_memory", kwargs)
+
     def test_kaggle_runtime_uses_native_transformers_trainer_not_trl(self):
         source = TRAINER_SOURCE.read_text(encoding="utf-8")
         self.assertNotIn("from trl", source)
