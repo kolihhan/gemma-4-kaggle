@@ -1,0 +1,174 @@
+name: Probe one-step verifier LoRA training once
+
+on:
+  push:
+    branches: [exp/verifier-lora-v0]
+    paths:
+      - .github/workflows/probe-one-step-lora-now.yml
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+  TEACHER_RUN_ID: "41373086676"
+  TEACHER_ARTIFACT_NAME: "gemma4-verifier-sft-teacher-v0-evidence"
+  EXPECTED_DATASET_SHA256: "188e22d5d2b7d884cfb99bb54a1e78ae2defbabd739067ba6e6be31ee18ecb8c"
+  MODEL_SOURCE: "google/gemma-4/transformers/gemma-4-e4b-it-qat-q4_0-unquantized/2"
+  TEACHER_DIR: /tmp/verifier-sft-teacher
+  KERNEL_DIR: /tmp/verifier-lora-one-step
+  OUTPUT_DIR: /tmp/verifier-lora-one-step-output
+  KERNEL_REF: kolihhan/gemma4-verifier-lora-one-step-${{ github.run_id }}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download exact accepted teacher artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.TEACHER_ARTIFACT_NAME }}
+          path: ${{ env.TEACHER_DIR }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ env.TEACHER_RUN_ID }}
+
+      - name: Verify frozen dataset and render one-step longest-example trainer
+        shell: bash
+        run: |
+          set -euo pipefail
+          SFT_PATH="$TEACHER_DIR/verifier-sft-v0.jsonl"
+          test -s "$SFT_PATH"
+          actual_sha="$(sha256sum "$SFT_PATH" | awk '{print $1}')"
+          echo "teacher_sft_sha256=$actual_sha"
+          test "$actual_sha" = "$EXPECTED_DATASET_SHA256"
+          rm -rf "$KERNEL_DIR" "$OUTPUT_DIR"
+          mkdir -p "$KERNEL_DIR" "$OUTPUT_DIR"
+          python - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          source = Path("kaggle/train_verifier_lora.py").read_text(encoding="utf-8")
+          dataset = (Path(os.environ["TEACHER_DIR"]) / "verifier-sft-v0.jsonl").read_bytes()
+          marker = 'SFT_JSONL_B64 = "__VERIFIER_SFT_JSONL_B64__"'
+          assert source.count(marker) == 1
+          source = source.replace(marker, f"SFT_JSONL_B64 = {base64.b64encode(dataset).decode('ascii')!r}", 1)
+
+          old_root = 'OUTPUT_ROOT = Path("/kaggle/working/verifier-lora-v0")'
+          new_root = 'OUTPUT_ROOT = Path("/kaggle/working/verifier-lora-one-step")'
+          assert source.count(old_root) == 1
+          source = source.replace(old_root, new_root, 1)
+
+          token_line = '    tokenized_examples = tokenize_training_texts(tokenizer, texts)\n'
+          assert source.count(token_line) == 1
+          source = source.replace(
+              token_line,
+              token_line
+              + '    longest_index = max(range(len(tokenized_examples)), key=lambda i: len(tokenized_examples[i]["input_ids"]))\n'
+              + '    print("ONE_STEP_LONGEST_EXAMPLE", example_ids[longest_index] if "example_ids" in locals() else rows[longest_index]["example_id"], len(tokenized_examples[longest_index]["input_ids"]), flush=True)\n'
+              + '    tokenized_examples = [tokenized_examples[longest_index]]\n',
+              1,
+          )
+
+          epochs_line = '        num_train_epochs=TRAINING_CONFIG["num_train_epochs"],\n'
+          assert source.count(epochs_line) == 1
+          source = source.replace(epochs_line, '        max_steps=1,\n', 1)
+
+          out = Path(os.environ["KERNEL_DIR"]) / "train_one_step.py"
+          compile(source, str(out), "exec")
+          out.write_text(source, encoding="utf-8")
+          print("rendered_one_step_bytes=", out.stat().st_size)
+          PY
+          cat > "$KERNEL_DIR/kernel-metadata.json" <<EOF
+          {
+            "id": "${KERNEL_REF}",
+            "title": "gemma4-verifier-lora-one-step-${GITHUB_RUN_ID}",
+            "code_file": "train_one_step.py",
+            "language": "python",
+            "kernel_type": "script",
+            "is_private": true,
+            "enable_gpu": true,
+            "enable_tpu": false,
+            "enable_internet": false,
+            "machine_shape": "NvidiaL4",
+            "dataset_sources": [],
+            "competition_sources": [],
+            "kernel_sources": [],
+            "model_sources": ["${MODEL_SOURCE}"]
+          }
+          EOF
+          python -m json.tool "$KERNEL_DIR/kernel-metadata.json" >/dev/null
+
+      - name: Install Kaggle CLI
+        run: python -m pip install --disable-pip-version-check 'kaggle==2.2.5' 'six==1.17.0'
+
+      - name: Push private one-step L4 probe
+        run: kaggle kernels push -p "$KERNEL_DIR" -t 1800
+
+      - name: Poll one-step probe
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 120); do
+            status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            echo "[$attempt] $status"
+            lower="$(printf '%s' "$status" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal="complete"; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal="error"; break; fi
+            sleep 15
+          done
+          [[ -n "$terminal" ]] || terminal="timeout"
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          test "$terminal" = "complete"
+
+      - name: Collect one-step logs and output
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          kaggle kernels logs "$KERNEL_REF" > "$OUTPUT_DIR/kernel.log" 2>&1
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o > "$OUTPUT_DIR/output-download.log" 2>&1
+          tail -n 220 "$OUTPUT_DIR/kernel.log" || true
+          find "$OUTPUT_DIR" -maxdepth 8 -type f -printf '%P %s bytes\n' | sort
+
+      - name: Assert one-step adapter save path
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.poll.outputs.terminal }}" = "complete"
+          ROOT="$OUTPUT_DIR/verifier-lora-one-step"
+          test -s "$ROOT/training_report.json"
+          test -s "$ROOT/adapter/adapter_config.json"
+          test -s "$ROOT/adapter/adapter_model.safetensors"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          root = Path(os.environ["OUTPUT_DIR"]) / "verifier-lora-one-step"
+          report = json.loads((root / "training_report.json").read_text(encoding="utf-8"))
+          metrics = report.get("train_metrics") or {}
+          assert report.get("status") == "completed", report
+          assert report.get("dataset_sha256") == os.environ["EXPECTED_DATASET_SHA256"], report
+          assert int(report.get("visible_gpus", 0)) == 2, report
+          assert int(metrics.get("train_steps", metrics.get("global_step", 1))) >= 1 or float(metrics.get("train_runtime", 0)) > 0, report
+          print("ONE_STEP_TRAINING_OK", json.dumps({"max_observed_tokens": report.get("max_observed_tokens"), "train_metrics": metrics, "device_map_summary": report.get("device_map_summary")}, sort_keys=True))
+          PY
+
+      - name: Upload one-step evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verifier-lora-one-step-${{ github.run_id }}
+          path: ${{ env.OUTPUT_DIR }}
+          if-no-files-found: warn
+          retention-days: 7
