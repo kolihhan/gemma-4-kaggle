@@ -62,6 +62,43 @@ TRAINING_CONFIG = {
 }
 
 
+def ensure_peft_torchao_compat(*, version_lookup=None, runner=None) -> dict[str, str]:
+    """Remove only a known-incompatible torchao before importing PEFT."""
+    import importlib.metadata
+    import subprocess
+    import sys
+
+    if version_lookup is None:
+        version_lookup = importlib.metadata.version
+    if runner is None:
+        runner = subprocess.run
+
+    try:
+        version = str(version_lookup("torchao"))
+    except importlib.metadata.PackageNotFoundError:
+        return {"torchao_version": "missing", "action": "none"}
+
+    pieces = version.split(".")
+    if len(pieces) < 2:
+        raise RuntimeError(f"cannot parse installed torchao version: {version!r}")
+    try:
+        major = int(pieces[0])
+        minor = int(pieces[1])
+    except ValueError as exc:
+        raise RuntimeError(f"cannot parse installed torchao version: {version!r}") from exc
+
+    if (major, minor) >= (0, 16):
+        return {"torchao_version": version, "action": "none"}
+
+    runner(
+        [sys.executable, "-m", "pip", "uninstall", "-y", "torchao"],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    return {"torchao_version": version, "action": "uninstalled_incompatible"}
+
+
 def _walk_forbidden(value: Any, path: str = "$") -> None:
     if isinstance(value, dict):
         for key, child in value.items():
@@ -322,9 +359,10 @@ def _package_versions() -> dict[str, str]:
 
 
 def main() -> None:
+    ensure_peft_torchao_compat()
+
     import torch
     from datasets import Dataset
-    from peft import LoraConfig, get_peft_model
     from transformers import (
         AutoModelForCausalLM,
         AutoProcessor,
@@ -332,6 +370,7 @@ def main() -> None:
         TrainingArguments,
         set_seed,
     )
+    from peft import LoraConfig, get_peft_model
 
     if not MODEL_PATH.is_dir():
         raise FileNotFoundError(f"unquantized E4B model mount not found: {MODEL_PATH}")
