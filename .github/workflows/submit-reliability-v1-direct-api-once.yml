@@ -1,0 +1,106 @@
+name: Submit Reliability v1 direct API once
+
+on:
+  push:
+    branches: [exp/reliability-v1]
+    paths:
+      - ".github/workflows/submit-reliability-v1-direct-api-once.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+  COMPETITION: gemma-4-developer-agent
+  KERNEL_REF: kolihhan/gemma4-reliability-v1-submit2-41486486607
+  KERNEL_VERSION: "1"
+  OUTPUT_FILE: submission.zip
+  FEEDBACK_DIR: /tmp/reliability-v1-direct-api-feedback
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify frozen candidate contract
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_reliability_v1_deploy
+      - name: Submit existing builder kernel version and preserve server error body
+        id: api_submit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p "$FEEDBACK_DIR"
+          python - <<'PY'
+          import json, os, sys, traceback
+          from pathlib import Path
+          import requests
+          from kaggle.api.kaggle_api_extended import KaggleApi
+
+          out = Path(os.environ['FEEDBACK_DIR'])
+          msg = 'reliability-v1:direct-api:pred=0.08:[0.05,0.12]'
+          result = {
+              'competition': os.environ['COMPETITION'],
+              'kernel': os.environ['KERNEL_REF'],
+              'kernel_version': int(os.environ['KERNEL_VERSION']),
+              'file_name': os.environ['OUTPUT_FILE'],
+              'message': msg,
+          }
+          api = KaggleApi()
+          api.authenticate()
+          try:
+              response = api.competition_submit_code(
+                  file_name=os.environ['OUTPUT_FILE'],
+                  message=msg,
+                  competition=os.environ['COMPETITION'],
+                  kernel=os.environ['KERNEL_REF'],
+                  kernel_version=int(os.environ['KERNEL_VERSION']),
+                  quiet=False,
+              )
+              result['accepted'] = True
+              for key in ('ref','submission_ref','message'):
+                  value = getattr(response, key, None)
+                  if value is not None:
+                      result[key] = value
+              try:
+                  result['response'] = response.to_dict()
+              except Exception:
+                  result['response_repr'] = repr(response)
+              print('DIRECT_API_ACCEPTED', json.dumps(result, sort_keys=True, default=str))
+          except requests.HTTPError as exc:
+              result['accepted'] = False
+              result['status_code'] = exc.response.status_code if exc.response is not None else None
+              result['response_text'] = exc.response.text if exc.response is not None else None
+              result['response_headers'] = dict(exc.response.headers) if exc.response is not None else None
+              print('DIRECT_API_REJECTED', json.dumps(result, sort_keys=True, default=str))
+              (out/'direct-api-result.json').write_text(json.dumps(result, indent=2, sort_keys=True, default=str)+'\n')
+              sys.exit(2)
+          except Exception as exc:
+              result['accepted'] = False
+              result['exception_type'] = type(exc).__name__
+              result['exception'] = str(exc)
+              result['traceback'] = traceback.format_exc()
+              print('DIRECT_API_ERROR', json.dumps(result, sort_keys=True, default=str))
+              (out/'direct-api-result.json').write_text(json.dumps(result, indent=2, sort_keys=True, default=str)+'\n')
+              sys.exit(3)
+          (out/'direct-api-result.json').write_text(json.dumps(result, indent=2, sort_keys=True, default=str)+'\n')
+          PY
+      - name: Snapshot submission list after accepted request
+        if: success()
+        run: |
+          set -euo pipefail
+          kaggle competitions submissions "$COMPETITION" -v > "$FEEDBACK_DIR/submissions.csv" 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reliability-v1-direct-api-feedback-${{ github.run_id }}
+          path: /tmp/reliability-v1-direct-api-feedback
+          if-no-files-found: warn
+          retention-days: 30
