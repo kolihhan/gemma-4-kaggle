@@ -1,0 +1,122 @@
+name: Wait for Kaggle slot then submit Reliability v1
+
+on:
+  push:
+    branches: [exp/reliability-v1]
+    paths:
+      - ".github/workflows/wait-slot-submit-reliability-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+  COMPETITION: gemma-4-developer-agent
+  BLOCKING_REF: "57879765"
+  KERNEL_REF: kolihhan/gemma4-reliability-v1-submit2-41486486607
+  KERNEL_VERSION: "1"
+  OUTPUT_FILE: submission.zip
+  FEEDBACK_DIR: /tmp/reliability-v1-slot-submit
+
+jobs:
+  submit-when-clear:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify frozen candidate
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_reliability_v1_deploy
+      - name: Install pinned Kaggle client
+        run: python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+      - name: Wait read-only for existing submission slot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$FEEDBACK_DIR"
+          for attempt in $(seq 1 66); do
+            detail="$(kaggle competitions submission "$BLOCKING_REF" 2>&1 || true)"
+            printf '[%02d] %s\n' "$attempt" "$(printf '%s' "$detail" | tr '\n' ' ')" | tee -a "$FEEDBACK_DIR/blocking-status.log"
+            status="$(printf '%s\n' "$detail" | sed -n 's/^Status:[[:space:]]*//p' | tr -d '\r')"
+            if [[ -n "$status" && "$status" != "PENDING" ]]; then
+              echo "blocking submission is terminal: $status"
+              break
+            fi
+            if [[ "$attempt" -eq 66 ]]; then
+              echo "blocking submission still pending; no Reliability-v1 submission attempted" >&2
+              exit 4
+            fi
+            sleep 300
+          done
+      - name: Confirm v1 has not already been submitted
+        id: dedupe
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle competitions submissions "$COMPETITION" -v > "$FEEDBACK_DIR/submissions-before.csv"
+          if grep -Fq 'reliability-v1:' "$FEEDBACK_DIR/submissions-before.csv"; then
+            echo 'already_submitted=true' >> "$GITHUB_OUTPUT"
+            echo 'Reliability-v1 submission already exists; skipping duplicate.'
+          else
+            echo 'already_submitted=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Submit frozen v1 exactly once
+        if: steps.dedupe.outputs.already_submitted != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          import requests
+          from kaggle.api.kaggle_api_extended import KaggleApi
+
+          out=Path(os.environ['FEEDBACK_DIR'])
+          msg='reliability-v1:slot-clear:pred=0.08:[0.05,0.12]'
+          api=KaggleApi(); api.authenticate()
+          record={
+              'competition':os.environ['COMPETITION'],
+              'kernel':os.environ['KERNEL_REF'],
+              'kernel_version':int(os.environ['KERNEL_VERSION']),
+              'file_name':os.environ['OUTPUT_FILE'],
+              'message':msg,
+          }
+          try:
+              response=api.competition_submit_code(
+                  file_name=os.environ['OUTPUT_FILE'],
+                  message=msg,
+                  competition=os.environ['COMPETITION'],
+                  kernel=os.environ['KERNEL_REF'],
+                  kernel_version=int(os.environ['KERNEL_VERSION']),
+                  quiet=False,
+              )
+              record['accepted']=True
+              try:
+                  record['response']=response.to_dict()
+              except Exception:
+                  record['response_repr']=repr(response)
+              print('RELIABILITY_V1_ACCEPTED', json.dumps(record,sort_keys=True,default=str))
+          except requests.HTTPError as exc:
+              record['accepted']=False
+              record['status_code']=exc.response.status_code if exc.response is not None else None
+              record['response_text']=exc.response.text if exc.response is not None else None
+              print('RELIABILITY_V1_REJECTED',json.dumps(record,sort_keys=True,default=str))
+              (out/'submit-result.json').write_text(json.dumps(record,indent=2,sort_keys=True,default=str)+'\n')
+              sys.exit(5)
+          (out/'submit-result.json').write_text(json.dumps(record,indent=2,sort_keys=True,default=str)+'\n')
+          PY
+          sleep 5
+          kaggle competitions submissions "$COMPETITION" -v > "$FEEDBACK_DIR/submissions-after.csv" || true
+          cat "$FEEDBACK_DIR/submissions-after.csv"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reliability-v1-slot-submit-${{ github.run_id }}
+          path: /tmp/reliability-v1-slot-submit
+          if-no-files-found: warn
+          retention-days: 30
