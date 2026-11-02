@@ -35,41 +35,31 @@ jobs:
           python - <<'PY'
           import base64
           from pathlib import Path
-
           source_b64 = base64.b64encode(Path("kaggle/train_verifier_lora.py").read_bytes()).decode("ascii")
-          probe = f'''import base64
-import json
-import types
-from collections.abc import Mapping
-from pathlib import Path
-from transformers import AutoProcessor
-
-SOURCE_B64 = {source_b64!r}
-trainer = types.ModuleType("train_verifier_lora")
-trainer.__dict__["__name__"] = "train_verifier_lora"
-exec(compile(base64.b64decode(SOURCE_B64), "train_verifier_lora.py", "exec"), trainer.__dict__)
-
-model_path = Path("/kaggle/input/models/google/gemma-4/transformers/gemma-4-e4b-it-qat-q4_0-unquantized/2")
-assert model_path.is_dir(), model_path
-processor = AutoProcessor.from_pretrained(str(model_path), local_files_only=True)
-tokenizer = processor.tokenizer
-encoded = tokenizer("hello", add_special_tokens=False, truncation=False)
-examples = trainer.tokenize_training_texts(tokenizer, ["hello"])
-result = {{
-    "encoded_type": type(encoded).__name__,
-    "encoded_is_mapping": isinstance(encoded, Mapping),
-    "input_ids_type": type(encoded.get("input_ids")).__name__ if isinstance(encoded, Mapping) else None,
-    "input_ids_len": len(encoded.get("input_ids")) if isinstance(encoded, Mapping) else None,
-    "attention_mask_type": type(encoded.get("attention_mask")).__name__ if isinstance(encoded, Mapping) else None,
-    "trainer_example_len": len(examples[0]["input_ids"]),
-    "trainer_labels_match": examples[0]["labels"] == examples[0]["input_ids"],
-}}
-assert result["encoded_is_mapping"] is True, result
-assert result["trainer_example_len"] > 0, result
-assert result["trainer_labels_match"] is True, result
-print("E4B_TOKENIZER_MAPPING_PROBE", json.dumps(result, sort_keys=True))
-'''
-          Path("/tmp/e4b-tokenizer-probe/probe.py").write_text(probe, encoding="utf-8")
+          lines = [
+              "import base64",
+              "import json",
+              "import types",
+              "from collections.abc import Mapping",
+              "from pathlib import Path",
+              "from transformers import AutoProcessor",
+              f"SOURCE_B64 = {source_b64!r}",
+              "trainer = types.ModuleType('train_verifier_lora')",
+              "trainer.__dict__['__name__'] = 'train_verifier_lora'",
+              "exec(compile(base64.b64decode(SOURCE_B64), 'train_verifier_lora.py', 'exec'), trainer.__dict__)",
+              "model_path = Path('/kaggle/input/models/google/gemma-4/transformers/gemma-4-e4b-it-qat-q4_0-unquantized/2')",
+              "assert model_path.is_dir(), model_path",
+              "processor = AutoProcessor.from_pretrained(str(model_path), local_files_only=True)",
+              "tokenizer = processor.tokenizer",
+              "encoded = tokenizer('hello', add_special_tokens=False, truncation=False)",
+              "examples = trainer.tokenize_training_texts(tokenizer, ['hello'])",
+              "result = {'encoded_type': type(encoded).__name__, 'encoded_is_mapping': isinstance(encoded, Mapping), 'input_ids_type': type(encoded.get('input_ids')).__name__ if isinstance(encoded, Mapping) else None, 'input_ids_len': len(encoded.get('input_ids')) if isinstance(encoded, Mapping) else None, 'attention_mask_type': type(encoded.get('attention_mask')).__name__ if isinstance(encoded, Mapping) else None, 'trainer_example_len': len(examples[0]['input_ids']), 'trainer_labels_match': examples[0]['labels'] == examples[0]['input_ids']}",
+              "assert result['encoded_is_mapping'] is True, result",
+              "assert result['trainer_example_len'] > 0, result",
+              "assert result['trainer_labels_match'] is True, result",
+              "print('E4B_TOKENIZER_MAPPING_PROBE', json.dumps(result, sort_keys=True))",
+          ]
+          Path('/tmp/e4b-tokenizer-probe/probe.py').write_text('\n'.join(lines) + '\n', encoding='utf-8')
           PY
           cat > "$KERNEL_DIR/kernel-metadata.json" <<EOF
           {
