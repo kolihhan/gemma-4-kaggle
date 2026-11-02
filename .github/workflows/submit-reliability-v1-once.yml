@@ -1,0 +1,104 @@
+name: Submit Reliability v1 once
+
+on:
+  push:
+    branches: [exp/reliability-v1]
+    paths:
+      - ".github/workflows/submit-reliability-v1-once.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+  COMPETITION: gemma-4-developer-agent
+  KERNEL_REF: kolihhan/gemma4-reliability-v1-submit2-${{ github.run_id }}
+  KERNEL_DIR: /tmp/gemma4-reliability-v1-submit2
+  OUTPUT_DIR: /tmp/gemma4-reliability-v1-submit2-output
+  FEEDBACK_DIR: /tmp/gemma4-reliability-v1-submit2-feedback
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify frozen candidate contract
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_reliability_v1_deploy
+          python -m py_compile scripts/render_reliability_v1_kernel.py
+      - name: Render and run exact submission builder
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+          rm -rf "$KERNEL_DIR" "$OUTPUT_DIR" "$FEEDBACK_DIR"
+          mkdir -p "$KERNEL_DIR" "$OUTPUT_DIR" "$FEEDBACK_DIR"
+          python scripts/render_reliability_v1_kernel.py \
+            --repo . --mode submit \
+            --kernel-dir "$KERNEL_DIR" --kernel-ref "$KERNEL_REF"
+          kaggle kernels push -p "$KERNEL_DIR"
+          terminal=""
+          for attempt in $(seq 1 90); do
+            out="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            printf '[%03d] %s\n' "$attempt" "$out"
+            lower="$(printf '%s' "$out" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal=complete; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal=error; break; fi
+            sleep 10
+          done
+          test "$terminal" = complete
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o
+          test -s "$OUTPUT_DIR/submission.zip"
+          python - <<'PY'
+          import hashlib, os, zipfile
+          from pathlib import Path
+          p=Path(os.environ['OUTPUT_DIR'])/'submission.zip'
+          with zipfile.ZipFile(p) as z:
+              names=sorted(n for n in z.namelist() if not n.endswith('/'))
+          expected=sorted(['agent.yaml','eval_config.yaml','configs/sampling.yaml','prompts/system.md','prompts/coder.md'])
+          assert names == expected, (names, expected)
+          print('submission_zip_sha256', hashlib.sha256(p.read_bytes()).hexdigest())
+          PY
+      - name: Submit notebook output to competition
+        id: competition
+        shell: bash
+        run: |
+          set -euo pipefail
+          msg="reliability-v1:${GITHUB_SHA}:pred=0.08:[0.05,0.12]"
+          kaggle competitions submit "$COMPETITION" \
+            -k "$KERNEL_REF" -f submission.zip -v 1 -m "$msg" \
+            2>&1 | tee "$FEEDBACK_DIR/submit-command.log"
+          ref="$(grep -Eo 'Submission ref: *[0-9]+' "$FEEDBACK_DIR/submit-command.log" | tail -n1 | grep -Eo '[0-9]+' || true)"
+          printf '%s\n' "$ref" > "$FEEDBACK_DIR/submission-ref.txt"
+          printf '%s\n' "$KERNEL_REF" > "$FEEDBACK_DIR/kernel-ref.txt"
+          printf '%s\n' "$msg" > "$FEEDBACK_DIR/message.txt"
+          cp docs/evaluation/reliability-v1-preregistered-prediction.json "$FEEDBACK_DIR/"
+          echo "submission_ref=$ref" >> "$GITHUB_OUTPUT"
+      - name: Capture early submission feedback
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref="${{ steps.competition.outputs.submission_ref }}"
+          : > "$FEEDBACK_DIR/submission-status.log"
+          for attempt in $(seq 1 10); do
+            echo "===== poll $attempt =====" | tee -a "$FEEDBACK_DIR/submission-status.log"
+            if [[ -n "$ref" ]]; then
+              kaggle competitions submission "$ref" 2>&1 | tee -a "$FEEDBACK_DIR/submission-status.log" || true
+            else
+              kaggle competitions submissions "$COMPETITION" -v 2>&1 | head -n 20 | tee -a "$FEEDBACK_DIR/submission-status.log" || true
+            fi
+            sleep 30
+          done
+          kaggle competitions submissions "$COMPETITION" -v > "$FEEDBACK_DIR/submissions.csv" 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reliability-v1-submit2-feedback-${{ github.run_id }}
+          path: /tmp/gemma4-reliability-v1-submit2-feedback
+          if-no-files-found: warn
+          retention-days: 30
