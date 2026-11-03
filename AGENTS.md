@@ -7,11 +7,12 @@ This repository is the source of truth for Ko Lih Han's **Google – The Gemma 4
 For substantive work in this repository:
 
 1. Read `NOW.md` first.
-2. Read `PUBLIC_VISIBILITY.md` before any task involving repository visibility, Actions billing, Releases, data mirroring, or public sharing.
-3. Read the relevant current artifact under `docs/`.
-4. Inspect `submission/` before proposing or implementing agent changes.
-5. Use the personal workflow router from `kolihhan/kolihhan` when available: Claude-like outer loop, then the smallest relevant inner mode (`Repo Understanding`, `Development`, `Research Mode Heavy`, or `Grill Mode`).
-6. Execute and verify; update `NOW.md` after durable progress.
+2. Read `RESEARCH_DOCTRINE.md` before proposing a substantial new research lane, extending a sequence of local fixes, or preserving/rejecting a major method class.
+3. Read `PUBLIC_VISIBILITY.md` before any task involving repository visibility, Actions billing, Releases, data mirroring, or public sharing.
+4. Read the relevant current artifact under `docs/`.
+5. Inspect `submission/` before proposing or implementing agent changes.
+6. Use the personal workflow router from `kolihhan/kolihhan` when available: Claude-like outer loop, then the smallest relevant inner mode (`Repo Understanding`, `Development`, `Research Mode Heavy`, or `Grill Mode`).
+7. Execute and verify; update `NOW.md` after durable progress.
 
 Do not restart from old chat assumptions when repo state is available.
 
@@ -29,6 +30,7 @@ Mutable competition facts can change during the event. Use this precedence:
 ## Canonical project state
 
 - `NOW.md` — current status, decisions, blockers, and next experiment.
+- `RESEARCH_DOCTRINE.md` — durable anti-lock-in rules, restriction/pivot-trigger contract, and architecture-level checkpoint.
 - `PUBLIC_VISIBILITY.md` — hard gate for any public-repository/public-sharing change.
 - `docs/research/` — dated competition reconnaissance and fact checks.
 - `docs/design/` — approved experiment / agent designs.
@@ -46,6 +48,8 @@ GitHub Release data mirrors are infrastructure, not experiment state.
 - Do not add sub-agents, LoRA, skills, or extra orchestration without evidence from baseline failures.
 - Reference patches in `tasks.jsonl` are analysis/evaluation labels. Do not expose them to the agent during a blind benchmark run.
 - Prefer the smallest reproducible experiment that can falsify the current hypothesis.
+- Do not turn a temporary restriction into permanent doctrine. Every major exclusion of a method/model/representation/topology class must have a documented reason, supporting evidence, and pivot trigger as defined in `RESEARCH_DOCTRINE.md`.
+- Maintain both a local next-experiment hypothesis and a global bottleneck/architecture hypothesis. Revisit the global diagnosis after a few meaningful experiments or whenever local improvements stop transferring.
 
 ## Data handling
 
