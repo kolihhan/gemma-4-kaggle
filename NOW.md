@@ -6,13 +6,23 @@ Build a competitive E4B software-engineering agent by learning which local signa
 
 Research must be resource-aware and mechanism-first: reuse existing evidence, avoid tuning to inspected tasks, explain why an intervention should work, and deploy only the smallest candidate that survives a discriminating test.
 
+Read `RESEARCH_DOCTRINE.md` before preserving or rejecting a major method class. Current restrictions are provisional and require pivot triggers.
+
 ## Current decision
 
 **Keep frozen Reliability-v1 unchanged while its real Kaggle submission is pending. Do not rerun the 17-task development diagnostic and do not add more prompt rules to it.**
 
 Reliability-v1 is a single-root E4B agent. Relative to the previous topology experiment, model, sampling, runtime budget, and code-intelligence tool surface remain frozen. The intended behavioral changes are generic localization discipline, edit/tool-recovery discipline, targeted verification, and direct root-agent submission ownership.
 
-The next scientific candidate is **not selected yet**. Current development evidence now identifies a stronger next mechanism — **evidence-before-mutation** — but does not yet select its implementation or authorize deployment.
+The strongest next mechanism remains **evidence-before-mutation**. A provisional implementation is now selected for design purposes only: **bounded pre-edit evidence stage -> editing coder**. This is not authorized for implementation or expensive execution while Reliability-v1 ref `57921371` is pending.
+
+Canonical provisional design:
+- `docs/design/evidence-before-mutation-v0-2026-11-03.md`
+
+Execution plan:
+- `docs/superpowers/plans/2026-11-03-evidence-before-mutation-v0.md`
+
+The design explicitly rejects prompt-only lifecycle rules as the primary causal test because a failure would remain ambiguous between a bad mechanism and prompt non-compliance. It also does not copy the old post-edit verifier topology: the new candidate spends its extra stage **before the first mutation**, where the current evidence says discriminating information is missing.
 
 ## Anti-overfit boundary
 
@@ -39,7 +49,7 @@ The purpose is calibration of our prediction process, not target-chasing.
 ### Real Kaggle submissions
 
 - Baseline submission ref **57879765**, description `baseline-e4b-v0`, submitted 2026-11-01 17:59:25 UTC: **COMPLETE**, public score **0.03**.
-- Frozen Reliability-v1 submission ref **57921371**, description `reliability-v1:slot-clear:pred=0.08:[0.05,0.12]`, submitted 2026-11-02 20:59:37 UTC: **PENDING** at the latest read-only probe in this research pass.
+- Frozen Reliability-v1 submission ref **57921371**, description `reliability-v1:slot-clear:pred=0.08:[0.05,0.12]`, submitted 2026-11-02 20:59:37 UTC: **PENDING** at the latest read-only probe on 2026-11-03 07:06 UTC.
 - Do not submit a duplicate Reliability-v1 candidate while ref 57921371 is pending.
 
 ### Development diagnostic — complete, do not rerun
@@ -124,7 +134,25 @@ Therefore:
 - do **not** equate “ran a targeted-looking command” with high-quality evidence;
 - separate the mechanism from the implementation.
 
-The competition format is declarative and uses a closed host tool registry; there is no arbitrary custom deterministic submit wrapper. The harness may also extract a non-empty diff even if `submit_patch` is never called. If stronger lifecycle enforcement is later tested, a supported structural option is a **minimal read-only evidence stage before the editing stage**, but that extra topology/model-call cost must earn itself on untouched evidence.
+The competition format is declarative and uses a closed host tool registry; there is no arbitrary custom deterministic submit wrapper. The harness may also extract a non-empty diff even if `submit_patch` is never called.
+
+## Provisional implementation — pre-edit evidence stage
+
+Design status: **frozen for planning, not authorized for execution**.
+
+Architecture:
+
+`issue -> bounded pre-edit evidence stage -> coder/edit/verify/submit`
+
+Why it is provisionally preferred:
+
+- prompt-only evidence rules are cheaper, but a negative result would not falsify the evidence mechanism because soft lifecycle compliance is already unreliable;
+- test-aware retrieval inside the same root is a useful component but does not cleanly separate evidence formation from mutation;
+- a pre-edit stage aligns the added model work with the observed missing state transition instead of adding another post-edit verifier.
+
+Important limitation: an evidence agent without `edit_file` is not cryptographically read-only because `run_command` can mutate the workspace. The design therefore requires a zero-diff handoff invariant and trace-level pre-coder mutation detection. Do not overclaim hard isolation.
+
+No implementation is allowed to mutate the frozen Reliability-v1 `submission/**`. Future treatment scaffolding belongs on a new experiment branch and under a non-canonical experiment path until promotion.
 
 ## Historical route closure — verifier-LoRA v0
 
@@ -141,11 +169,11 @@ Do not call verifier-LoRA a failed experiment, but do not spend GPU merely to co
 
 This ranking guides research only while Reliability-v1 feedback is pending.
 
-1. **Evidence-before-mutation** — strongest mechanism; conditional behavioral witness before source mutation.
-2. **Test-aware retrieval** — likely low-cost implementation lever for #1: retrieve source candidate + smallest exercising test together.
+1. **Evidence-before-mutation** — strongest mechanism; provisional implementation is a bounded pre-edit evidence stage followed by the coder.
+2. **Test-aware retrieval** — likely low-cost component/ablation for #1: pair a source candidate with the smallest exercising test.
 3. **Adaptive compute / value-of-information routing** — secondary efficiency mechanism; choose actions by expected discrimination, not simply fewer calls.
 4. Conditional edit/tool-schema reliability — retained only if new evidence shows grammar failures remain material.
-5. Conditional bounded rescue / structural stage separation — only if a specific missing control capability justifies the added topology cost.
+5. Conditional bounded rescue / downstream verifier — only if untouched evidence shifts the bottleneck downstream.
 
 Do not bundle these into a v1.1 mixture.
 
@@ -157,6 +185,7 @@ Do not bundle these into a v1.1 mixture.
 - Do not duplicate an active submission or diagnostic.
 - Do not spend compute merely to get another sample from an already-inspected denominator.
 - Do not launch verifier-LoRA only to close historical bookkeeping.
+- For evidence-before-mutation v0, use a staged gate: static/schema -> smallest untouched compliance smoke -> paired untouched A/B only if the mechanism is actually instantiated.
 
 Competition Data remains runtime-only for new runs. Public repository status is not a scientific blocker under `PUBLIC_VISIBILITY.md`; legacy exposure cleanup remains deferred and must not alter the experiment.
 
@@ -166,9 +195,12 @@ When ref **57921371** reaches a terminal state:
 
 1. compare its actual public score with the pre-registered **0.08 [0.05, 0.12]** prediction and with the baseline **0.03**, without treating one leaderboard point as causal proof;
 2. explain the prediction error and reconcile it with the 1/17 development diagnostic and the trace-mechanics audit;
-3. choose exactly one implementation of the **evidence-before-mutation** mechanism unless the score materially falsifies that diagnosis;
-4. freeze a **new untouched evaluation denominator before inspecting its traces**;
-5. pre-register the targeted failure surface, expected observable effect, resource cost, and falsifier;
-6. only then implement and deploy the smallest candidate expressing that mechanism.
+3. confirm or retire the provisional **pre-edit evidence stage** design; if the score materially falsifies the diagnosis, reopen the architecture-level hypothesis instead of defending the design;
+4. if retained, freeze a **new untouched paired denominator before inspecting selected task content or traces**;
+5. preregister the targeted failure surface, expected observable effect, resource cost, and falsifier;
+6. implement treatment on a new experiment branch without changing the frozen control;
+7. run static/schema checks and the smallest untouched compliance smoke;
+8. only if compliance/overhead are acceptable, run paired untouched A/B;
+9. promote only if correctness improves enough to pay for added resource cost.
 
-Until then: **no new expensive experiment, no duplicate submission, no verifier-LoRA catch-up run, and no prompt tuning against the 17 known tasks.**
+Until then: **no new expensive experiment, no duplicate submission, no verifier-LoRA catch-up run, no treatment implementation, and no prompt tuning against the 17 known tasks.**
