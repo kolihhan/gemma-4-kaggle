@@ -1,206 +1,208 @@
 # NOW — 2026-11-03
 
+Updated: 2026-11-03 22:37 MYT
+
 ## North star
 
-Build a competitive E4B software-engineering agent by learning which local signals actually transfer to Kaggle, not by chasing individual development tasks or public-LB noise.
+Build a competitive Gemma 4 software-engineering agent by learning which mechanisms transfer to Kaggle hidden evaluation, not by patching inspected tasks or chasing Public LB noise.
 
-Research must be resource-aware and mechanism-first: reuse existing evidence, avoid tuning to inspected tasks, explain why an intervention should work, and deploy only the smallest candidate that survives a discriminating test.
+Research must remain anti-overfit, resource-aware, mechanism-first, and willing to reopen model/training/topology classes when evidence changes. Read `RESEARCH_DOCTRINE.md` before preserving or rejecting a major method class.
 
-Read `RESEARCH_DOCTRINE.md` before preserving or rejecting a major method class. Current restrictions are provisional and require pivot triggers.
+## Current live state
 
-## Current decision
+**Frozen Reliability-v1 remains unchanged while its real Kaggle submission is pending.**
 
-**Keep frozen Reliability-v1 unchanged while its real Kaggle submission is pending. Do not rerun the 17-task development diagnostic and do not add more prompt rules to it.**
+- baseline ref `57879765`: COMPLETE, Public LB **0.03**;
+- Reliability-v1 ref `57921371`: **PENDING** at fresh read-only probe **2026-11-03 14:37 UTC / 22:37 MYT**;
+- preregistered Reliability-v1 prediction: point **0.08**, interval **0.05–0.12**;
+- do not submit a duplicate Reliability-v1 candidate;
+- do not rerun the inspected 17-task development denominator;
+- do not tune prompts against known Rich/FastAPI failures;
+- no new expensive model/GPU experiment while the live score is unresolved.
 
-Reliability-v1 is a single-root E4B agent. Relative to the previous topology experiment, model, sampling, runtime budget, and code-intelligence tool surface remain frozen. The intended behavioral changes are generic localization discipline, edit/tool-recovery discipline, targeted verification, and direct root-agent submission ownership.
+Latest status probe:
+- workflow run `41585360688`;
+- latest job `125984312562`;
+- result: `SubmissionStatus.PENDING`.
 
-The strongest next mechanism remains **evidence-before-mutation**. A provisional implementation is now selected for design purposes only: **bounded pre-edit evidence stage -> editing coder**. This is not authorized for implementation or expensive execution while Reliability-v1 ref `57921371` is pending.
+## Frozen control / development evidence
 
-Canonical provisional design:
+Reliability-v1 is the current frozen E4B single-root control.
+
+Canonical development diagnostic:
+- run `41485671952`;
+- job `125417231948`;
+- 17 / 17 completed;
+- **1 / 17 resolved**;
+- 13 non-empty patches, 4 empty;
+- mean tool calls `10.41`;
+- mean duration `89.21 s`;
+- call-cap exhaustions `0`;
+- 12 / 12 non-empty unresolved patches had non-zero evaluator verification exit.
+
+Relative to the earlier single-root run on the same inspected denominator:
+- resolved stayed **1 -> 1**;
+- total evaluator runtime fell about **12%**;
+- mean non-empty patch size fell about **20%**.
+
+Interpretation: Reliability-v1 became more restrained/efficient, not demonstrably more capable on the inspected development set.
+
+## Trace-mechanics audit
+
+Canonical audit:
+- run `41590900152`;
+- job `125767140355`;
+- artifact `13209917848`;
+- no new model inference or Kaggle task execution;
+- analyzer tests **8/8 PASS**;
+- safe-output gate PASS.
+
+Same-classifier earlier single-root -> Reliability-v1:
+- resolved: `1 -> 1`;
+- targeted behavioral evidence before first mutation: `0 -> 0` tasks;
+- targeted-test calls: `3 -> 3`;
+- tasks with no targeted test: `15 -> 14`;
+- broad-test calls: `14 -> 10`;
+- localization-tool calls: `0 -> 4`;
+- mutations: `40 -> 39`;
+- failed targeted check followed by repair mutation: `0 -> 0`;
+- submit after latest classifier-recognized targeted failure: `1 -> 2`.
+
+The analyzer is conservative; use these values for same-classifier mechanism comparison, not as exhaustive semantic labels.
+
+## Current global hypotheses
+
+### H-lifecycle — evidence before mutation
+
+Status: **ACTIVE / provisional first candidate if live score does not trigger a broader pivot.**
+
+Current mechanism:
+
+> Obtain the cheapest discriminating behavioral witness before mutation when a concrete contract exists, then reuse that witness after editing where feasible.
+
+Why it remains plausible:
+- both inspected single-root variants show 0/17 classifier-recognized targeted pre-edit behavioral evidence;
+- soft repair/submission lifecycle instructions were not reliably followed;
+- simply reducing calls/runtime did not improve solved count.
+
+Canonical design:
 - `docs/design/evidence-before-mutation-v0-2026-11-03.md`
 
-Execution plan:
+Implementation plan:
 - `docs/superpowers/plans/2026-11-03-evidence-before-mutation-v0.md`
 
-The design explicitly rejects prompt-only lifecycle rules as the primary causal test because a failure would remain ambiguous between a bad mechanism and prompt non-compliance. It also does not copy the old post-edit verifier topology: the new candidate spends its extra stage **before the first mutation**, where the current evidence says discriminating information is missing.
+### H-capacity — E4B/model-policy ceiling
 
-## Anti-overfit boundary
+Status: **REOPENED globally, not selected for execution.**
 
-The existing 17-task topology denominator is development-only: task IDs, outcomes, and traces have been inspected. It may diagnose regressions and failure modes but cannot be called blind and cannot gate a new submission.
+External evidence includes a materially stronger public 31B-era no-LoRA system, but that comparison is confounded by model size, topology, prompts, budgets, and development history.
 
-The Reliability-v1 candidate was frozen before leaderboard feedback. Do not add FastAPI/Rich-specific rules or tune prompts against individual failures. Any next candidate must name one major variable, one causal mechanism, and one falsifier; promotion evidence requires a new untouched denominator.
+Important recovered repository evidence:
+- old E4B/12B same-lineage `rich_3278` smokes already exist;
+- E4B produced a wrong patch inside five minutes;
+- 12B default-thinking timed out with 0 patch;
+- 12B thinking-budget-1024 also timed out with 0 patch despite more tool activity.
 
-Pre-registered public-LB prediction lives in `docs/evaluation/reliability-v1-preregistered-prediction.json`:
-
-- point: **0.08**
-- interval: **0.05–0.12**
-
-The purpose is calibration of our prediction process, not target-chasing.
-
-## Verified deployment state
-
-### Static / builder
-
-- Frozen-candidate unit tests and compile checks: **PASS**.
-- Fresh current official scorer-wheelhouse validation: **PASS**.
-- Reliability-v1 builder kernel produced an exact five-file `submission.zip`: **PASS**.
-- Kaggle `CreateCodeSubmission` request shape: **PASS**.
-
-### Real Kaggle submissions
-
-- Baseline submission ref **57879765**, description `baseline-e4b-v0`, submitted 2026-11-01 17:59:25 UTC: **COMPLETE**, public score **0.03**.
-- Frozen Reliability-v1 submission ref **57921371**, description `reliability-v1:slot-clear:pred=0.08:[0.05,0.12]`, submitted 2026-11-02 20:59:37 UTC: **PENDING** at the latest read-only probe on 2026-11-03 07:06 UTC.
-- Do not submit a duplicate Reliability-v1 candidate while ref 57921371 is pending.
-
-### Development diagnostic — complete, do not rerun
-
-Canonical run: `deploy-reliability-v1.yml` run **41485671952**, diagnostic job **125417231948**.
-
-- requested/completed: **17 / 17**
-- resolved: **1 / 17**
-- non-empty patches: **13 / 17**
-- empty patches: **4 / 17**
-- mean tool calls: **10.41**
-- median tool calls: **10**
-- mean duration: **89.21 s**
-- median duration: **85.61 s**
-- call-cap exhaustions: **0**
-- non-empty unresolved patches with non-zero evaluator verification exit: **12 / 12**
-
-Against the earlier single-root topology run on the same denominator, Reliability-v1 kept resolution at **1 -> 1** while total evaluator runtime fell by about **12%** and mean non-empty patch size fell by about **20%**. The development result is diagnostic evidence only.
-
-## Post-hoc trace mechanics audit — complete
-
-Canonical audit: GitHub Actions run **41590900152**, job **125767140355**, compact artifact **13209917848**.
-
-Execution cost/profile:
-
-- reused two already-completed Kaggle kernel outputs;
-- **no new Kaggle kernel, GPU inference, task execution, or competition submission**;
-- analyzer synthetic tests: **8/8 PASS**;
-- `py_compile`: **PASS**;
-- safe-output gate: **PASS**;
-- artifact contains compact derived JSON only.
-
-Same-classifier A/B, earlier single-root -> Reliability-v1:
-
-- resolved: **1 -> 1**
-- tasks with targeted evidence before first mutation: **0 -> 0**
-- targeted-test calls: **3 -> 3**
-- tasks with no targeted test: **15 -> 14**
-- broad-test calls: **14 -> 10**
-- localization-tool calls: **0 -> 4**
-- total mutations: **40 -> 39**
-- failed targeted check followed by a repair mutation: **0 -> 0**
-- submit after latest classifier-recognized targeted failure: **1 -> 2**
-
-The analyzer is conservative, so absolute targeted-test counts may be underestimates. Use these numbers for same-classifier A/B mechanism comparison, not as exhaustive trace labels.
-
-## Current mechanism interpretation
-
-Canonical note: `docs/research/reliability-v1-diagnostic-interpretation-2026-11-03.md`.
-
-### What Reliability-v1 actually improved
-
-It became **more restrained**, not demonstrably more capable:
-
-- less broad testing;
-- fewer reads;
-- some use of code-intelligence localization;
-- smaller patches and lower runtime;
-- edit recovery shifted some mutations from direct `edit_file` to asserted script paths.
-
-These changes did not improve the 17-task resolved count.
-
-### Strongest missing capability
-
-Both single-root versions show **0/17 targeted behavioral evidence before the first mutation** under the conservative audit.
-
-The strongest next mechanism is therefore:
-
-> **evidence-before-mutation** — obtain the cheapest discriminating behavioral witness before editing when a concrete contract exists, then reuse that witness after editing.
-
-This targets information quality and root-cause correctness rather than simply adding or removing compute.
-
-### Soft-policy control gap
-
-Reliability-v1's prompt contains repair/verification/submission discipline, yet classifier-recognized post-edit targeted failures were not followed by repair mutations and were still followed by submission.
-
-This does not prove every affected patch was wrong or every classifier label is semantically perfect. It does show that **critical lifecycle transitions are not reliably enforced by prose instructions alone**.
+Canonical note:
+- `docs/research/recovered-12b-capacity-evidence-2026-11-03.md`
 
 Therefore:
+- do **not** repeat the old naive 12B-first experiment;
+- capacity does **not** mean `swap E4B -> 12B`;
+- if the capacity trigger fires, the next experiment must add new information, e.g. a preregistered 31B same-policy probe or a frozen strong-public model-policy reproduction.
 
-- do **not** respond by stacking more prompt rules;
-- do **not** equate “ran a targeted-looking command” with high-quality evidence;
-- separate the mechanism from the implementation.
+Corrected fallback design:
+- `docs/design/model-capacity-probe-v0-2026-11-03.md`
 
-The competition format is declarative and uses a closed host tool registry; there is no arbitrary custom deterministic submit wrapper. The harness may also extract a non-empty diff even if `submit_patch` is never called.
+### H-training — trajectory/policy distillation or SFT
 
-## Provisional implementation — pre-edit evidence stage
+Status: **REOPENED for feasibility, not causally prioritized yet.**
 
-Design status: **frozen for planning, not authorized for execution**.
+Do not confuse this with historical verifier-LoRA v0. Verifier-LoRA remains **NOT TESTED**, not falsified. Broader policy/trajectory training becomes higher priority only if untouched evidence shows the lifecycle is correctly instantiated but E4B still systematically reasons/edits incorrectly, or a capacity probe shows a clear model-policy ceiling.
 
-Architecture:
+## Evidence-before-mutation causal guard
 
-`issue -> bounded pre-edit evidence stage -> coder/edit/verify/submit`
+A simple comparison of:
+- A: frozen Reliability-v1 single-root;
+- C: two-role evidence -> coder;
 
-Why it is provisionally preferred:
+is not enough to prove evidence transfer caused any gain because topology, independent model invocation, context partition, and latency also change.
 
-- prompt-only evidence rules are cheaper, but a negative result would not falsify the evidence mechanism because soft lifecycle compliance is already unreliable;
-- test-aware retrieval inside the same root is a useful component but does not cleanly separate evidence formation from mutation;
-- a pre-edit stage aligns the added model work with the observed missing state transition instead of adding another post-edit verifier.
+Pre-register a conditional third arm:
+- **A** — frozen Reliability-v1 incumbent;
+- **B** — topology-matched null handoff: evidence root still runs, but coder is prevented from receiving its evidence/history;
+- **C** — same topology, coder receives evidence/history.
 
-Important limitation: an evidence agent without `edit_file` is not cryptographically read-only because `run_command` can mutate the workspace. The design therefore requires a zero-diff handoff invariant and trace-level pre-coder mutation detection. Do not overclaim hard isolation.
+Resource-aware rule:
+1. freeze A/B/C plus untouched denominator before trace inspection;
+2. run A and C first;
+3. if C does not beat A by the practical promotion rule, stop and do not pay for B;
+4. only if C > A, run already-frozen B before inspecting task-level traces;
+5. strong evidence-mechanism claim requires C to beat B meaningfully as well as A.
 
-No implementation is allowed to mutate the frozen Reliability-v1 `submission/**`. Future treatment scaffolding belongs on a new experiment branch and under a non-canonical experiment path until promotion.
+Canonical review:
+- `docs/research/evidence-before-mutation-v0-causal-identifiability-review-2026-11-03.md`.
 
-## Historical route closure — verifier-LoRA v0
+## Current ADK / scorer runtime blocker
 
-**Verdict: NOT TESTED, not falsified.**
+A cheap source probe against the current official scorer wheelhouse verified:
+- `google_adk-1.36.1`;
+- `adk_submission-0.2.13`;
+- `swegemma-0.2.11`.
 
-- The frozen training workflow exists, but its only execution entries are `workflow_dispatch` and `workflow_call`.
-- Repository-wide Actions records currently show exactly one `workflow_dispatch` run, the baseline submission workflow, and **zero `workflow_call` runs**.
-- The public one-shot verifier-LoRA wrapper had a push-triggered run but it was skipped; no successful verifier-LoRA training execution is verified.
-- Therefore there is no verified frozen adapter and no clean adapter-vs-base dev/blind A/B result.
+The historical compaction path still raises when the root agent is not an `LlmAgent` and no explicit summarizer model exists.
 
-Do not call verifier-LoRA a failed experiment, but do not spend GPU merely to complete old bookkeeping. Reopen it only if future untouched evidence again isolates downstream verifier compliance as the dominant bottleneck.
+Therefore **do not use a root `SequentialAgent`** for evidence-v0 under the current wheelhouse.
 
-## Provisional breakthrough ranking
+Current safe provisional topology:
 
-This ranking guides research only while Reliability-v1 feedback is pending.
+`root evidence LlmAgent -> coder LlmAgent`
 
-1. **Evidence-before-mutation** — strongest mechanism; provisional implementation is a bounded pre-edit evidence stage followed by the coder.
-2. **Test-aware retrieval** — likely low-cost component/ablation for #1: pair a source candidate with the smallest exercising test.
-3. **Adaptive compute / value-of-information routing** — secondary efficiency mechanism; choose actions by expected discrimination, not simply fewer calls.
-4. Conditional edit/tool-schema reliability — retained only if new evidence shows grammar failures remain material.
-5. Conditional bounded rescue / downstream verifier — only if untouched evidence shifts the bottleneck downstream.
+Properties:
+- root has no `edit_file`, `write_file`, or `submit_patch`;
+- coder is the only mutation/submission role;
+- zero-diff-before-coder remains mandatory because `run_command` can mutate;
+- transfer is model-controlled, so successful transfer/compliance must be measured rather than assumed.
 
-Do not bundle these into a v1.1 mixture.
+Canonical probe:
+- `docs/research/current-compaction-probe-2026-11-03.md`;
+- workflow run `41624178623`;
+- job `125877217844`.
+
+## Decision rule when Reliability-v1 becomes terminal
+
+### Public LB < 0.05
+
+The live candidate underperformed the preregistered interval.
+
+Do **not** automatically implement evidence-v0 first. Reopen the architecture checkpoint and choose the smallest new experiment that separates lifecycle/policy limitations from model-policy capacity. Use the recovered 12B evidence; do not repeat it.
+
+### Public LB 0.05–0.12
+
+The live result is consistent with preregistration.
+
+Evidence-before-mutation remains the first causal mechanism test. H-capacity stays explicitly open and second-line. If evidence-v0 forms high-quality pre-edit evidence but correctness does not improve, pivot rather than stacking more evidence prompts.
+
+### Public LB > 0.12
+
+Lifecycle/policy changes transferred better than expected.
+
+Proceed with the untouched evidence-v0 causal test, but do not treat one LB score as proof of mechanism. Keep the A/B/C causal guard.
 
 ## Resource policy
 
-- Existing run/artifact answers the question -> **reuse it**.
-- Cheap GitHub Actions for static checks, read-only probes, reproducibility, compact artifacts, and deployment orchestration -> **use freely** in this public repo.
-- Kaggle GPU/full diagnostic -> **only when it can falsify a named hypothesis or change a decision**.
-- Do not duplicate an active submission or diagnostic.
-- Do not spend compute merely to get another sample from an already-inspected denominator.
-- Do not launch verifier-LoRA only to close historical bookkeeping.
-- For evidence-before-mutation v0, use a staged gate: static/schema -> smallest untouched compliance smoke -> paired untouched A/B only if the mechanism is actually instantiated.
+- Existing artifact answers a question -> reuse it.
+- Cheap GitHub Actions / source probes / static validation -> use freely in this public repo.
+- Kaggle GPU/full task evaluations -> only when they can falsify a named hypothesis or change a decision.
+- No duplicate active submissions/diagnostics.
+- No compute to obtain another sample from an already-inspected denominator.
+- No verifier-LoRA catch-up run merely for bookkeeping.
+- No repeated 12B `rich_3278` smoke.
 
-Competition Data remains runtime-only for new runs. Public repository status is not a scientific blocker under `PUBLIC_VISIBILITY.md`; legacy exposure cleanup remains deferred and must not alter the experiment.
+## Next action
 
-## Next decision after Kaggle feedback
+**Wait only on the external dependency: terminal status for ref `57921371`.**
 
-When ref **57921371** reaches a terminal state:
+While it remains pending, productive work is limited to cheap non-contaminating research, static/runtime verification, and source-of-truth cleanup. Do not implement or execute the next scientific candidate prematurely.
 
-1. compare its actual public score with the pre-registered **0.08 [0.05, 0.12]** prediction and with the baseline **0.03**, without treating one leaderboard point as causal proof;
-2. explain the prediction error and reconcile it with the 1/17 development diagnostic and the trace-mechanics audit;
-3. confirm or retire the provisional **pre-edit evidence stage** design; if the score materially falsifies the diagnosis, reopen the architecture-level hypothesis instead of defending the design;
-4. if retained, freeze a **new untouched paired denominator before inspecting selected task content or traces**;
-5. preregister the targeted failure surface, expected observable effect, resource cost, and falsifier;
-6. implement treatment on a new experiment branch without changing the frozen control;
-7. run static/schema checks and the smallest untouched compliance smoke;
-8. only if compliance/overhead are acceptable, run paired untouched A/B;
-9. promote only if correctness improves enough to pay for added resource cost.
-
-Until then: **no new expensive experiment, no duplicate submission, no verifier-LoRA catch-up run, no treatment implementation, and no prompt tuning against the 17 known tasks.**
+Once the score is terminal, apply the preregistered decision rule above immediately and start exactly one discriminating experiment lane.
