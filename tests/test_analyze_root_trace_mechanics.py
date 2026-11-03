@@ -114,6 +114,26 @@ class TraceMechanicsCliTests(unittest.TestCase):
         self.assertEqual(task["targeted_test_count"], 0)
         self.assertFalse(task["pre_edit_targeted_evidence"])
 
+    def test_non_test_command_uses_safe_other_command_category(self):
+        data = self.run_analyzer(
+            {"a": trace(
+                step("run_command", arguments={"command": "git log -1 --oneline"}, exit_code=0),
+            )},
+            [{"instance_id": "a", "resolved": False}],
+        )
+        self.assertEqual(data["tasks"][0]["action_counts"].get("other_command"), 1)
+
+        def assert_no_raw_command_key(value):
+            if isinstance(value, dict):
+                self.assertNotIn("command", value)
+                for child in value.values():
+                    assert_no_raw_command_key(child)
+            elif isinstance(value, list):
+                for child in value:
+                    assert_no_raw_command_key(child)
+
+        assert_no_raw_command_key(data)
+
     def test_generated_json_write_is_not_source_mutation(self):
         command = "python3 -c \"import json; open('openapi.json','w').write('{}')\""
         data = self.run_analyzer(
