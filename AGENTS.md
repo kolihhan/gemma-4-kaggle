@@ -47,6 +47,23 @@ GitHub Release data mirrors are legacy infrastructure, not experiment state and 
 - Reference patches in `tasks.jsonl` are analysis/evaluation labels. Do not expose them to the agent during a blind benchmark run.
 - Prefer the smallest reproducible experiment that can falsify the current hypothesis.
 
+### Resource discipline
+
+- Reuse existing runs and artifacts before launching new compute. Do not rerun an already-inspected denominator merely to obtain another sample of the same evidence.
+- For this public repository, use GitHub Actions freely for cheap orchestration, static checks, read-only probes, reproducibility, artifact handling, and deployment automation when they reduce manual work.
+- Treat Kaggle GPU/kernel execution and full evaluations as expensive. Launch them only when the result can change a concrete decision or falsify a named hypothesis.
+- Prefer a staged gate: static/read-only checks first, then the smallest useful execution, then an expensive run only if the earlier evidence leaves a material uncertainty.
+- Never duplicate a diagnostic or submission while an equivalent run is already active or while an existing artifact answers the question.
+
+### Mechanism-first research
+
+- Do not optimize only for a reliable-looking combination of prompts, tools, topology, or model components. Explain **why** the intervention should work.
+- Before implementing a research candidate, name: the targeted failure class/bottleneck, proposed mechanism, assumptions, expected observable side effects, and a falsifier.
+- A leaderboard gain is outcome evidence, not proof of the proposed mechanism. Require an untouched/local check, ablation, counterfactual, or other discriminating evidence before making a strong causal claim.
+- When evidence contradicts the current priority, rerank hypotheses instead of protecting the old plan. For example, low tool use with poor resolution weakens a pure compute-efficiency explanation and should shift attention toward information quality, root-cause understanding, editing, or repair.
+- After each informative failure, ask what capability is missing, what assumption is unnecessarily restrictive, and what smallest new idea could break the bottleneck. Prefer a genuine new capability or decision rule over benchmark-specific prompt accumulation.
+- Keep research and deployment coupled: once a mechanism survives an independent check, deploy the smallest implementation that expresses it, then compare expected vs observed behavior without silently tuning to the same evidence.
+
 ## Data handling
 
 For **new** data-requiring runs, do not create new public GitHub mirrors of raw Competition Data.
