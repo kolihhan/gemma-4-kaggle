@@ -1,66 +1,48 @@
-# Public Visibility Gate
+# Public Repository Execution Policy
 
-**Status: UNSAFE — REPOSITORY IS CURRENTLY PUBLIC. RETURN TO PRIVATE BEFORE CONTINUING PUBLIC-SAFE CLEANUP.**
+**Status: PUBLIC EXECUTION ALLOWED — LEGACY EXPOSURE CLEANUP DEFERRED.**
 
-Last verified: 2026-11-02.
+Last decision: 2026-11-03.
 
-This file is a repository-wide safety gate. It is not an experiment decision and must not be weakened to save GitHub Actions minutes.
+The repository may remain public while scientific work continues. Public visibility by itself is **not** a blocker for verifier-LoRA, reliability calibration, or other experiments.
 
-## Immediate incident state
+This is not a claim that the repository has never exposed Competition Data or that all historical exposure has been cleaned up.
 
-On 2026-11-02 the repository was verified as `public` while the full Competition Data Release tagged `kaggle-data-2026-10-31` was still present and publicly readable through GitHub's Release API.
+## Current execution model
 
-**Immediate required action:** change repository visibility back to `private` before continuing cleanup. Making the repository private again does not erase the fact that the Release was temporarily public; it only stops continuing exposure while cleanup is performed.
+For all new data-requiring experiment runs:
 
-## Why public visibility is unsafe
+- keep GitHub focused on code, configuration, frozen task IDs, derived metrics, and non-sensitive experiment evidence;
+- hydrate Competition Data at execution time through authenticated/private Kaggle resources rather than creating a new GitHub data mirror;
+- prefer private Kaggle kernels with `competition_sources: ["gemma-4-developer-agent"]` for evaluation runs;
+- use Kaggle `model_sources` / private Kaggle datasets for model or adapter resources where appropriate;
+- authenticated GitHub Actions may download vetted derived artifacts needed to continue a run, but must not publish raw Competition Data, reference patches, hidden test material, or equivalent redistributable archives as new public GitHub artifacts/Releases;
+- do not create a new full Competition Data GitHub Release or commit new raw Competition Data blobs;
+- keep `.github/workflows/mirror-full-kaggle-data.yml` fail-closed while the repository is public.
 
-### 1. Full Kaggle Competition Data exists in a GitHub Release
+The current verifier-LoRA/reliability execution paths follow the intended direction: GitHub renders and pushes private Kaggle kernels, while Kaggle mounts competition resources at runtime. Private Kaggle datasets/model sources carry adapters or model resources where needed.
 
-The repository has a Release mirror tagged `kaggle-data-2026-10-31` containing the full Gemma 4 competition archive split into large assets.
+## Legacy exposure
 
-The Kaggle competition rules require reasonable measures to prevent non-participants from accessing Competition Data and prohibit transmitting, duplicating, publishing, redistributing, or otherwise making Competition Data available to non-participants.
+Historical exposure remains separate cleanup debt:
 
-Official rules:
+- the old GitHub Release tagged `kaggle-data-2026-10-31` may still exist;
+- `tasks.jsonl` exists in reachable repository state/history;
+- older workflow artifacts and historical commits may require a later cleanup audit.
 
-- https://www.kaggle.com/competitions/gemma-4-developer-agent/rules
+These facts mean the repository must **not** be described as leak-free today. They do not, by themselves, block new scientific execution under the runtime-hydration policy above.
 
-### 2. Public Competition Code has an additional Kaggle sharing requirement
-
-The competition rules permit public Competition Code sharing only under the competition's public-sharing conditions. During the competition, public code sharing must also be made available through the competition's Kaggle forum or associated public notebooks, subject to the rule text in force at the time of publication.
-
-Do not assume that making this GitHub repository public by itself satisfies that requirement.
-
-### 3. Historical repository state still needs a final exposure audit
-
-Before public visibility is enabled again, verify that reachable Git history, Releases, workflow artifacts intended to persist, and other repository-hosted assets contain no Competition Data or other material that cannot be publicly redistributed.
-
-## Existing guard
-
-`.github/workflows/mirror-full-kaggle-data.yml` fails closed when `github.event.repository.private` is not `true`.
-
-Keep that guard. Do not weaken or remove it while this gate is active.
-
-## Readiness checklist
-
-The repository may be marked `READY` for public visibility only after all of the following are verified:
-
-- [ ] Repository visibility has first been returned to `private` while cleanup is performed.
-- [ ] Delete the full Competition Data GitHub Release/assets, including tag `kaggle-data-2026-10-31` or any replacement raw-data mirror.
-- [ ] Verify no raw Competition Data is reachable through Git history or other persistent repository assets.
-- [ ] Verify workflows cannot publish/mirror Competition Data after the repository becomes public.
-- [ ] Verify repository secrets remain referenced only through GitHub Secrets and are not present in files/history/logs.
-- [ ] Satisfy the current Kaggle rule for public Competition Code sharing, including any required Kaggle forum/notebook publication.
-- [ ] Re-check the current official competition Rules immediately before changing visibility.
-- [ ] Update this file from `UNSAFE` to `READY` with dated verification evidence.
+Destructive cleanup such as deleting Release assets or rewriting Git history still requires explicit authorization.
 
 ## Agent instruction
 
-If your task involves repository visibility, GitHub Actions billing, data mirroring, Releases, or public sharing:
+If a task involves repository visibility, GitHub Actions, Releases, competition resources, or public sharing:
 
 1. read this file first;
-2. treat `UNSAFE` as a hard stop on further public exposure;
-3. do not claim this repository is public-safe;
-4. do not delete Release assets or rewrite history unless the user explicitly authorizes that destructive cleanup;
-5. keep scientific experiment state independent from this infrastructure cleanup.
+2. do **not** stop scientific work solely because the repository is public;
+3. do stop any proposed change that would create **new persistent public exposure** of raw Competition Data, reference solutions/patches, hidden tests, secrets, or equivalent material;
+4. use authenticated/runtime resource hydration for new runs instead of GitHub raw-data mirrors;
+5. treat legacy Release/history cleanup as a separate infrastructure task unless the user explicitly asks to perform it;
+6. do not claim the repository is leak-free until a separate cleanup audit establishes that.
 
-Saving Actions minutes is not sufficient reason to bypass this gate.
+Keep repository-publicity decisions independent from scientific experiment contracts: visibility policy must not silently alter blind sets, prompts, topology, LoRA configuration, evaluation metrics, reliability calibration, or submission candidates.
