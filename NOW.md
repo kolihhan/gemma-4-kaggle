@@ -1,6 +1,6 @@
 # NOW — 2026-11-03
 
-Updated: 2026-11-03 22:37 MYT
+Updated: 2026-11-03 23:43 MYT
 
 ## North star
 
@@ -13,7 +13,7 @@ Research must remain anti-overfit, resource-aware, mechanism-first, and willing 
 **Frozen Reliability-v1 remains unchanged while its real Kaggle submission is pending.**
 
 - baseline ref `57879765`: COMPLETE, Public LB **0.03**;
-- Reliability-v1 ref `57921371`: **PENDING** at fresh read-only probe **2026-11-03 14:37 UTC / 22:37 MYT**;
+- Reliability-v1 ref `57921371`: **PENDING** at fresh read-only probe **2026-11-03 15:43 UTC / 23:43 MYT**;
 - preregistered Reliability-v1 prediction: point **0.08**, interval **0.05–0.12**;
 - do not submit a duplicate Reliability-v1 candidate;
 - do not rerun the inspected 17-task development denominator;
@@ -22,7 +22,7 @@ Research must remain anti-overfit, resource-aware, mechanism-first, and willing 
 
 Latest status probe:
 - workflow run `41585360688`;
-- latest job `125984312562`;
+- latest job `126023940185`;
 - result: `SubmissionStatus.PENDING`.
 
 ## Frozen control / development evidence
