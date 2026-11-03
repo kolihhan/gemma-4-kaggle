@@ -1,0 +1,93 @@
+name: Probe current ADK compaction source once
+
+on:
+  push:
+    branches: [exp/reliability-v1]
+    paths:
+      - ".github/workflows/probe-current-compaction-source-once.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      WHEELHOUSE: metric/gemma-4-developer-agent-wheelhouse
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Kaggle client only
+        run: python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+      - name: Download current official scorer wheelhouse
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/scorer-wheelhouse
+          kaggle datasets download -d "$WHEELHOUSE" -p /tmp/scorer-wheelhouse --unzip
+          find /tmp/scorer-wheelhouse -maxdepth 1 -type f -name '*.whl' -printf '%f\n' | sort
+      - name: Inspect compaction implementation without installing scorer stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import re
+          import zipfile
+          from pathlib import Path
+
+          root = Path('/tmp/scorer-wheelhouse')
+          needles = [
+              'No LlmAgent model available for event compaction summarizer',
+              'EventsCompactionConfig',
+              'event compaction',
+              'compaction summarizer',
+              'LlmAgent model',
+          ]
+          interesting = []
+          for wheel in sorted(root.glob('*.whl')):
+              try:
+                  with zipfile.ZipFile(wheel) as zf:
+                      for name in zf.namelist():
+                          if not name.endswith('.py'):
+                              continue
+                          try:
+                              text = zf.read(name).decode('utf-8', errors='ignore')
+                          except Exception:
+                              continue
+                          if any(n.lower() in text.lower() for n in needles):
+                              lines = text.splitlines()
+                              hits = []
+                              for i, line in enumerate(lines, 1):
+                                  if any(n.lower() in line.lower() for n in needles):
+                                      lo = max(1, i - 8)
+                                      hi = min(len(lines), i + 12)
+                                      hits.append((i, lo, hi))
+                              interesting.append((wheel.name, name, lines, hits))
+              except zipfile.BadZipFile:
+                  pass
+
+          print('MATCHED_FILES=', len(interesting))
+          for wheel_name, name, lines, hits in interesting:
+              print(f'=== {wheel_name} :: {name} ===')
+              emitted = set()
+              for hit, lo, hi in hits:
+                  key = (lo, hi)
+                  if key in emitted:
+                      continue
+                  emitted.add(key)
+                  print(f'--- hit line {hit}; context {lo}-{hi} ---')
+                  for j in range(lo, hi + 1):
+                      print(f'{j}: {lines[j-1]}')
+
+          exact = 'No LlmAgent model available for event compaction summarizer'
+          exact_found = any(
+              exact.lower() in '\n'.join(lines).lower()
+              for _, _, lines, _ in interesting
+          )
+          print('EXACT_OLD_ERROR_PRESENT=', int(exact_found))
+          PY
