@@ -133,6 +133,18 @@ Do not add an always-on verifier or rescue agent merely to enforce policy. The c
 
 If structural enforcement is tested later, the more causally aligned experiment is a **read-only evidence stage before mutation**, not another post-edit verifier. That is a distinct hypothesis and must pay for its extra topology/model-call cost on a new untouched denominator.
 
+## Historical route closure — verifier-LoRA v0
+
+**Verdict: NOT TESTED, not falsified.**
+
+The frozen verifier-LoRA training workflow exists and is well specified, but it accepts execution only through `workflow_dispatch` or `workflow_call`. A repository-wide Actions query on 2026-11-03 found exactly one `workflow_dispatch` run, the baseline submission workflow, and **zero `workflow_call` runs**. The public one-shot training wrapper on `exp/public-train-once` had a push-triggered run, but that run was skipped rather than producing a successful training execution.
+
+Therefore there is no verified successful verifier-LoRA training run, no verified frozen adapter artifact, and no clean adapter-vs-base development/blind A/B to interpret.
+
+This route must not be described as a failed scientific hypothesis. It is an **unexecuted historical experiment**. It is also **not the current priority**: the newer Reliability-v1 evidence points upstream to evidence quality before mutation, whereas verifier-only LoRA targeted downstream verification/compliance behavior.
+
+Resource decision: do **not** launch verifier-LoRA now merely to close the historical experiment. Reopen it only if future untouched evidence again isolates downstream verifier compliance as the dominant bottleneck and the expected information gain justifies a GPU run.
+
 ## Anti-overfit boundary
 
 Do not tune new prompt rules to the 17 known task IDs, repository names, individual reference patches, or manually inspected failure details.
@@ -147,4 +159,4 @@ The development evidence may update the **hypothesis ranking**, but it may not p
 
 ## Resource decision
 
-No additional Kaggle GPU run is justified now. Reuse the completed trace-mechanics artifact for mechanism work; do not rerun the 17-task denominator.
+No additional Kaggle GPU run is justified now. Reuse the completed trace-mechanics artifact for mechanism work; do not rerun the 17-task denominator and do not launch verifier-LoRA only for historical completeness.
