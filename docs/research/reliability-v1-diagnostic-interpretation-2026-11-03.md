@@ -2,16 +2,16 @@
 
 ## Decision supported
 
-Use the already-completed Reliability-v1 development diagnostic to update the post-v1 research priority without rerunning the inspected 17-task denominator or changing the frozen submission candidate.
+Use already-completed development evidence to explain what Reliability-v1 changed and what it did **not** change, without rerunning the inspected 17-task denominator or mutating the frozen submission candidate.
 
 This is mechanism analysis, not promotion evidence. The 17 tasks are development-only and their traces have already shaped the project.
 
 ## Verified aggregate evidence
 
-Source run: `deploy-reliability-v1.yml` run `41485671952`, diagnostic job `125417231948`.
+Reliability-v1 source run: `deploy-reliability-v1.yml` run `41485671952`, diagnostic job `125417231948`.
 
 - requested/completed: **17 / 17**
-- resolved: **1 / 17** (`fastapi_9425`)
+- resolved: **1 / 17**
 - non-empty patches: **13 / 17**
 - empty patches: **4 / 17**
 - mean tool calls: **10.41**
@@ -19,85 +19,132 @@ Source run: `deploy-reliability-v1.yml` run `41485671952`, diagnostic job `12541
 - mean duration: **89.21 s**
 - median duration: **85.61 s**
 - call-cap exhaustions: **0**
-- non-empty unresolved patches with non-zero verification exit: **12 / 12**
-- verification exits across all tasks: `0: 1`, `1: 14`, `2: 1`, `-1: 1`
+- non-empty unresolved patches with non-zero evaluator verification exit: **12 / 12**
 
-The pre-registered development prediction expected 1–3 resolved tasks, so the observed result is at the lower bound. The real Reliability-v1 Kaggle submission remains pending at the time of this note and is not used here to select a candidate.
+Against the earlier single-root topology run on the same 17-task denominator, Reliability-v1 kept resolution at **1 -> 1**, while total evaluator runtime fell from about **1726 s -> 1517 s** and mean non-empty patch size fell from about **1147 -> 920 characters**. Evaluator-reported total tool calls were effectively flat (**176 -> 177**).
 
-## What this evidence weakens
+**Interpretation:** Reliability-v1 became more restrained and somewhat faster, but the savings did not convert into more correct repairs.
 
-### Pure compute-efficiency as the first bottleneck
+The real Reliability-v1 Kaggle submission ref `57921371` is still pending at the latest read-only probe. No leaderboard score is used to select a candidate here.
 
-The run did not hit the 32-call cap, median tool use was 10 calls, and median runtime was under 90 seconds. One task reached 30 calls, but the aggregate is not dominated by budget exhaustion.
+## Verified post-hoc trace mechanics audit
 
-**Inference:** reducing calls further may still help the global 12-hour objective, but the current diagnostic does not support treating call reduction itself as the highest-priority repair-quality intervention.
+Canonical audit: GitHub Actions run `41590900152`, job `125767140355`, compact artifact `13209917848`.
 
-This weakens the previous ranking of H1 Adaptive Compute when H1 is interpreted mainly as `use fewer calls`.
+The Action used CPU only. It downloaded two already-completed Kaggle kernel outputs, reduced traces to tool-sequence mechanics, enforced a fail-closed output boundary, and uploaded only three compact JSON summaries. It did **not** push a Kaggle kernel, consume GPU inference, rerun any task, or upload raw traces.
 
-## What this evidence strengthens
+Analyzer verification in the Action: **8/8 synthetic tests PASS** plus `py_compile` PASS.
 
-### Evidence quality before and after editing
+### Same-classifier A/B
 
-The strongest aggregate pattern is that the agent frequently produced a patch but still failed directly relevant verification: 12 non-empty unresolved patches, all with non-zero verification exits.
+The analyzer is intentionally conservative. Compound shell commands are not guessed to be targeted tests, so absolute targeted-test counts may be underestimates. The useful comparison is the A/B under the same classifier.
 
-This is consistent with several mechanisms that the compact aggregate cannot distinguish by itself:
+| Mechanic | Earlier single-root | Reliability-v1 |
+|---|---:|---:|
+| Resolved | 1 | 1 |
+| Tasks with targeted evidence before first mutation | **0** | **0** |
+| Targeted-test calls | 3 | 3 |
+| Tasks with no targeted test | 15 | 14 |
+| Broad-test calls | 14 | 10 |
+| Localization-tool calls | 0 | 4 |
+| Mutations | 40 | 39 |
+| Failed targeted check after mutation | 1 | 2 |
+| Repair after failed targeted check | **0** | **0** |
+| Submit after latest targeted failure | 1 | 2 |
+| Tasks whose final targeted check passed | 0 | 1 |
 
-1. **F2 UNDERSTAND:** the agent reaches plausible code but its root-cause hypothesis is wrong.
-2. **F3 EDIT:** the hypothesis is substantially right but the patch is incomplete or semantically wrong.
-3. **F5 REPAIR:** verification exposes a useful failure, but the bounded second attempt does not converge.
+Normalized analyzer tool-call totals are **190 -> 195** and use different counting semantics from evaluator totals; do not mix the two metrics.
 
-The aggregate does **not** prove which of F2/F3/F5 dominates. It does show that an intervention aimed only at F8 BUDGET is poorly matched to the observed surface.
+## Mechanism conclusion
+
+### 1. Pure compute-efficiency is not the immediate repair-quality bottleneck
+
+Reliability-v1 did not generally exhaust its call budget, reduced runtime and broad testing, and produced smaller patches, yet resolution stayed flat.
+
+**Inference:** budget-aware routing still matters to the competition-wide 12-hour objective, but simply making the agent shorter/cheaper is unlikely to solve the current correctness bottleneck.
+
+### 2. The missing capability is earlier high-quality behavioral evidence
+
+Under the conservative audit, **0/17 tasks in both runs obtained a targeted behavioral witness before the first source mutation**.
+
+This is stronger than saying “the agent should test more.” The key missing state transition is:
+
+`hypothesis -> discriminating evidence -> edit`
+
+rather than the observed common pattern:
+
+`plausible hypothesis -> edit -> discover failure later`
+
+**Inference:** evidence-before-mutation is the strongest next mechanism because it changes the information available to root-cause reasoning before code is touched. It can potentially reduce F2 UNDERSTAND and F3 EDIT together, and gives F5 REPAIR a better-defined post-edit comparison.
+
+### 3. Reliability-v1 soft policy did not reliably control critical lifecycle transitions
+
+The frozen coder policy says that directly relevant verification failure permits at most one narrow repair/test cycle and that a known-failing patch must not be submitted. The post-hoc audit nevertheless observed conservative targeted failures followed by **no mutation/repair**, and submission still occurred afterward.
+
+This is not proof that every such submission was semantically wrong; the targeted-test classifier is conservative and a tool-shaped test may itself be misaligned. It is, however, direct evidence that critical lifecycle invariants are **not reliably enforced by prose instructions alone**.
+
+**Implication:** adding more prompt sentences is now a lower-priority intervention. Reliability-v1 already added generic verification/recovery language and changed surface behavior, but did not reliably instantiate the intended state machine.
+
+### 4. A passing command-shaped check is not enough
+
+Reliability-v1 produced one task whose final classifier-recognized targeted check passed while the task was still unresolved.
+
+**Inference:** the next mechanism must optimize **evidence relevance**, not merely test execution frequency. A cheap but behaviorally misaligned test can create false confidence.
 
 ## Updated breakthrough ranking
 
-### Provisional H1 — evidence-first repair for concrete behavioral contracts
+### H1 — Evidence-before-mutation — strongest next mechanism
 
-This is the narrow version of the earlier reproduction-first idea.
+**Mechanism:** before a source mutation, obtain the cheapest high-information behavioral witness available when the task exposes a concrete contract. Prefer an existing directly relevant test; otherwise use a minimal executable assertion/reproduction. Reuse the same witness after the edit when possible.
 
-**Mechanism:** before editing, when the issue exposes a concrete input/output, exception, state transition, or regression condition, construct or identify the smallest executable assertion that reproduces the required behavior. Use the same evidence after editing.
+**Important:** this is a mechanism, not yet an implementation choice.
 
-This changes the information available to root-cause reasoning rather than merely adding more reasoning tokens.
+Possible implementations to compare later:
 
-**Why it could break the bottleneck:** the current agent often discovers that its patch is wrong only after editing. A pre-edit behavioral witness can constrain both localization and semantics before code mutation, potentially reducing F2/F3 and giving F5 a higher-information repair signal.
+- single-root policy with stronger evidence selection;
+- test-aware retrieval that pairs a source candidate with its smallest exercising test;
+- a minimal read-only evidence/localization stage whose tool surface mechanically excludes editing before handing evidence to the coder.
 
-**Resource guard:** conditional only. Do not generate a reproduction when the task does not expose a cheap concrete behavioral contract. The intervention must replace wandering, not become another mandatory sub-agent stage.
+The last option is structurally stronger than prose but costs an additional agent stage. It must not be assumed superior merely because it is “harder.”
 
-**Falsifier:** on a new untouched denominator, the policy does not reduce the rate of non-empty patches ending with failing directly relevant verification, or the added reproduction cost lowers resolved-per-budget without compensating accuracy.
+**Falsifier:** on a new untouched denominator, evidence-before-mutation does not reduce wrong-patch / failing-relevant-verification outcomes or its overhead reduces resolved-per-budget enough to erase the benefit.
 
-### Provisional H2 — test-aware retrieval
+### H2 — Test-aware retrieval — likely implementation lever for H1
 
-**Mechanism:** when localizing a likely source symbol, retrieve the smallest existing test/executable path that exercises the same behavior, so localization and verification are connected before editing.
+**Mechanism:** jointly retrieve likely source locations and the smallest existing executable path that exercises the same behavior.
 
-**Why it could help:** it may deliver similar evidence benefits to reproduction-first at lower generation risk when a relevant test already exists.
+This may be cheaper and less hallucination-prone than generating a reproduction when a good test already exists.
 
-**Falsifier:** retrieved tests are usually irrelevant/broad, or source localization improves without changing patch correctness.
+**Falsifier:** retrieved tests are usually broad/misaligned, or evidence selection improves without changing repair correctness.
 
-### H3 — adaptive compute / value-of-information routing
+### H3 — Adaptive compute / value-of-information routing
 
-Retain this as an efficiency mechanism, but demote it as the immediate repair-quality hypothesis unless future evidence shows budget pressure on the hidden distribution.
+Keep as an efficiency mechanism, but define it as **choose the next action by expected discrimination between hypotheses**, not “use fewer calls.”
 
-A stronger formulation is not `always use fewer calls`; it is `spend the next call on the action with the highest expected discrimination between current hypotheses`.
+It becomes complementary to H1 rather than the first repair-quality intervention.
 
-### H4 — conditional edit/tool-schema reliability
+### H4 — Conditional edit/tool-schema reliability
 
-Keep conditional. The current aggregate does not establish parser/edit-tool failure as the dominant source of the 12 failing patched tasks.
+Reliability-v1 changed edit format behavior: direct edits decreased while script-side edits increased, without changing total mutation volume or resolution. Keep this conditional; current evidence does not show edit grammar as the dominant bottleneck.
 
-### H5 — conditional bounded rescue
+### H5 — Conditional bounded rescue / topology
 
-Keep deferred. Adding a rescue stage before proving a specific missing capability would mix topology cost with uncertain repair benefit.
+Do not add an always-on verifier or rescue agent merely to enforce policy. The competition submission format is declarative and uses a closed host tool registry, so a custom deterministic submit wrapper is not available; the harness can also extract a non-empty working-tree diff even when `submit_patch` is never called.
+
+If structural enforcement is tested later, the more causally aligned experiment is a **read-only evidence stage before mutation**, not another post-edit verifier. That is a distinct hypothesis and must pay for its extra topology/model-call cost on a new untouched denominator.
 
 ## Anti-overfit boundary
 
-Do not tune new prompt rules to the 17 known task IDs, repository names, individual traces, or reference patches.
+Do not tune new prompt rules to the 17 known task IDs, repository names, individual reference patches, or manually inspected failure details.
 
-The development diagnostic may update the **hypothesis ranking**, but it may not promote a candidate. Before implementing the next major variable:
+The development evidence may update the **hypothesis ranking**, but it may not promote a candidate. Before implementing the next major variable:
 
-1. wait for the already-submitted frozen Reliability-v1 Kaggle feedback;
+1. consume the already-submitted frozen Reliability-v1 Kaggle feedback when it becomes terminal;
 2. explain prediction error rather than target the score;
-3. freeze a new untouched denominator;
-4. pre-register one mechanism, one targeted failure surface, and one falsifier;
-5. keep model/sampling/tool surface fixed unless they are the variable under test.
+3. freeze a **new untouched evaluation denominator before inspecting its traces**;
+4. pre-register one mechanism, targeted failure surface, expected observable effect, resource cost, and falsifier;
+5. keep model/sampling/tool surface fixed unless one of them is explicitly the variable under test.
 
-## Cheapest next action
+## Resource decision
 
-No additional Kaggle GPU run is justified yet. The Reliability-v1 submission ref `57921371` is already pending. Use a cheap read-only submission-status probe only when current feedback is needed. Do not rerun the 17-task diagnostic.
+No additional Kaggle GPU run is justified now. Reuse the completed trace-mechanics artifact for mechanism work; do not rerun the 17-task denominator.
