@@ -7,7 +7,7 @@ This repository is the source of truth for Ko Lih Han's **Google – The Gemma 4
 For substantive work in this repository:
 
 1. Read `NOW.md` first.
-2. Read `PUBLIC_VISIBILITY.md` before any task involving repository visibility, Actions billing, Releases, data mirroring, or public sharing.
+2. Read `PUBLIC_VISIBILITY.md` before any task involving repository visibility, Actions billing, Releases, data mirroring, competition resources, or public sharing.
 3. Read the relevant current artifact under `docs/`.
 4. Inspect `submission/` before proposing or implementing agent changes.
 5. Use the personal workflow router from `kolihhan/kolihhan` when available: Claude-like outer loop, then the smallest relevant inner mode (`Repo Understanding`, `Development`, `Research Mode Heavy`, or `Grill Mode`).
@@ -29,14 +29,14 @@ Mutable competition facts can change during the event. Use this precedence:
 ## Canonical project state
 
 - `NOW.md` — current status, decisions, blockers, and next experiment.
-- `PUBLIC_VISIBILITY.md` — hard gate for any public-repository/public-sharing change.
+- `PUBLIC_VISIBILITY.md` — repository-publicity and competition-resource execution policy.
 - `docs/research/` — dated competition reconnaissance and fact checks.
 - `docs/design/` — approved experiment / agent designs.
 - `docs/evaluation/` — corpus analysis, run logs, and failure taxonomy.
 - `docs/superpowers/plans/` — implementation plans for non-trivial changes.
 - `submission/` — the **only canonical candidate submission artifact**.
 
-GitHub Release data mirrors are infrastructure, not experiment state.
+GitHub Release data mirrors are legacy infrastructure, not experiment state and not the supported path for new runs.
 
 ## Experiment discipline
 
@@ -49,17 +49,27 @@ GitHub Release data mirrors are infrastructure, not experiment state.
 
 ## Data handling
 
-Competition data must remain private. Do not commit the full dataset as ordinary Git blobs and do not publish it in a public Release. The private Release mirror and `scripts/restore_full_dataset.py` are the supported storage path **only while this repository remains private**.
+For **new** data-requiring runs, do not create new public GitHub mirrors of raw Competition Data.
 
-## Public visibility gate
+Preferred execution path:
 
-`PUBLIC_VISIBILITY.md` currently has status **BLOCKED**. Treat that as a hard repository-wide gate.
+- hydrate Competition Data at runtime through authenticated/private Kaggle resources;
+- for evaluation, prefer private Kaggle kernels with the competition attached through `competition_sources`;
+- use Kaggle model sources or private Kaggle datasets for model/adapter resources as appropriate;
+- GitHub Actions may consume vetted derived artifacts needed for reproducibility, but must not newly publish raw Competition Data, reference patches, hidden tests, or equivalent redistributable archives;
+- keep `.github/workflows/mirror-full-kaggle-data.yml` fail-closed while this repository is public.
 
-- Do not make this repository public while the full Competition Data Release or any other redistribution blocker remains.
-- Do not weaken the private-repository guard in `.github/workflows/mirror-full-kaggle-data.yml`.
-- Do not assume public GitHub code alone satisfies Kaggle's public Competition Code sharing requirements.
+Existing Release/history/tree exposure is legacy cleanup debt. It must not be represented as leak-free, but it does **not** block scientific execution under the runtime-hydration policy.
+
+## Public repository policy
+
+`PUBLIC_VISIBILITY.md` is **not a hard scientific stop** merely because the repository is public.
+
+- Continue experiments if they use the runtime-hydration policy and do not create new persistent public exposure.
+- Do not create another full Competition Data GitHub Release or commit new raw data blobs.
+- Do not assume public GitHub code alone satisfies every mutable Kaggle public-sharing requirement; verify current rules when that matters to an external publication/submission decision.
 - Destructive cleanup such as deleting Release assets or rewriting history requires explicit user authorization unless the user has already authorized that exact action.
-- Public-safety infrastructure changes must not alter the scientific experiment, evaluation contract, blind set, LoRA configuration, prompts, or submission candidate.
+- Publicity/infrastructure changes must not alter scientific experiments, evaluation contracts, blind sets, LoRA configurations, prompts, reliability calibration, or submission candidates.
 
 ## Completion standard
 
