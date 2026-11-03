@@ -8,11 +8,11 @@ Research must be resource-aware and mechanism-first: reuse existing evidence, av
 
 ## Current decision
 
-**Keep frozen Reliability-v1 unchanged while its real Kaggle submission is pending. Do not rerun the 17-task development diagnostic.**
+**Keep frozen Reliability-v1 unchanged while its real Kaggle submission is pending. Do not rerun the 17-task development diagnostic and do not add more prompt rules to it.**
 
 Reliability-v1 is a single-root E4B agent. Relative to the previous topology experiment, model, sampling, runtime budget, and code-intelligence tool surface remain frozen. The intended behavioral changes are generic localization discipline, edit/tool-recovery discipline, targeted verification, and direct root-agent submission ownership.
 
-The next scientific candidate is **not selected yet**. Current development evidence updates the hypothesis ranking, but it cannot promote a new candidate.
+The next scientific candidate is **not selected yet**. Current development evidence now identifies a stronger next mechanism — **evidence-before-mutation** — but does not yet select its implementation or authorize deployment.
 
 ## Anti-overfit boundary
 
@@ -39,7 +39,7 @@ The purpose is calibration of our prediction process, not target-chasing.
 ### Real Kaggle submissions
 
 - Baseline submission ref **57879765**, description `baseline-e4b-v0`, submitted 2026-11-01 17:59:25 UTC: **COMPLETE**, public score **0.03**.
-- Frozen Reliability-v1 submission ref **57921371**, description `reliability-v1:slot-clear:pred=0.08:[0.05,0.12]`, submitted 2026-11-02 20:59:37 UTC: **PENDING** as of the read-only probe run **41585360688** on 2026-11-03 05:41 UTC.
+- Frozen Reliability-v1 submission ref **57921371**, description `reliability-v1:slot-clear:pred=0.08:[0.05,0.12]`, submitted 2026-11-02 20:59:37 UTC: **PENDING** at the latest read-only probe in this research pass.
 - Do not submit a duplicate Reliability-v1 candidate while ref 57921371 is pending.
 
 ### Development diagnostic — complete, do not rerun
@@ -47,7 +47,7 @@ The purpose is calibration of our prediction process, not target-chasing.
 Canonical run: `deploy-reliability-v1.yml` run **41485671952**, diagnostic job **125417231948**.
 
 - requested/completed: **17 / 17**
-- resolved: **1 / 17** (`fastapi_9425`)
+- resolved: **1 / 17**
 - non-empty patches: **13 / 17**
 - empty patches: **4 / 17**
 - mean tool calls: **10.41**
@@ -55,40 +55,93 @@ Canonical run: `deploy-reliability-v1.yml` run **41485671952**, diagnostic job *
 - mean duration: **89.21 s**
 - median duration: **85.61 s**
 - call-cap exhaustions: **0**
-- non-empty unresolved patches with non-zero verification exit: **12 / 12**
+- non-empty unresolved patches with non-zero evaluator verification exit: **12 / 12**
 
-The development result is at the lower bound of the pre-registered 1–3 resolved expectation. It is diagnostic evidence only.
+Against the earlier single-root topology run on the same denominator, Reliability-v1 kept resolution at **1 -> 1** while total evaluator runtime fell by about **12%** and mean non-empty patch size fell by about **20%**. The development result is diagnostic evidence only.
+
+## Post-hoc trace mechanics audit — complete
+
+Canonical audit: GitHub Actions run **41590900152**, job **125767140355**, compact artifact **13209917848**.
+
+Execution cost/profile:
+
+- reused two already-completed Kaggle kernel outputs;
+- **no new Kaggle kernel, GPU inference, task execution, or competition submission**;
+- analyzer synthetic tests: **8/8 PASS**;
+- `py_compile`: **PASS**;
+- safe-output gate: **PASS**;
+- artifact contains compact derived JSON only.
+
+Same-classifier A/B, earlier single-root -> Reliability-v1:
+
+- resolved: **1 -> 1**
+- tasks with targeted evidence before first mutation: **0 -> 0**
+- targeted-test calls: **3 -> 3**
+- tasks with no targeted test: **15 -> 14**
+- broad-test calls: **14 -> 10**
+- localization-tool calls: **0 -> 4**
+- total mutations: **40 -> 39**
+- failed targeted check followed by a repair mutation: **0 -> 0**
+- submit after latest classifier-recognized targeted failure: **1 -> 2**
+
+The analyzer is conservative, so absolute targeted-test counts may be underestimates. Use these numbers for same-classifier A/B mechanism comparison, not as exhaustive trace labels.
 
 ## Current mechanism interpretation
 
 Canonical note: `docs/research/reliability-v1-diagnostic-interpretation-2026-11-03.md`.
 
-The current aggregate weakens a **pure compute-efficiency** explanation as the immediate repair-quality bottleneck: the agent is not generally exhausting its call budget, yet almost every produced patch still fails relevant verification.
+### What Reliability-v1 actually improved
 
-The stronger unresolved surface is **information quality / root-cause correctness / repair convergence**:
+It became **more restrained**, not demonstrably more capable:
 
-- F2 UNDERSTAND may be wrong before editing;
-- F3 EDIT may produce incomplete or semantically wrong patches;
-- F5 REPAIR may fail to use the verification signal to converge.
+- less broad testing;
+- fewer reads;
+- some use of code-intelligence localization;
+- smaller patches and lower runtime;
+- edit recovery shifted some mutations from direct `edit_file` to asserted script paths.
 
-The aggregate cannot yet distinguish F2 vs F3 vs F5, so do not claim a single cause from these 17 tasks.
+These changes did not improve the 17-task resolved count.
+
+### Strongest missing capability
+
+Both single-root versions show **0/17 targeted behavioral evidence before the first mutation** under the conservative audit.
+
+The strongest next mechanism is therefore:
+
+> **evidence-before-mutation** — obtain the cheapest discriminating behavioral witness before editing when a concrete contract exists, then reuse that witness after editing.
+
+This targets information quality and root-cause correctness rather than simply adding or removing compute.
+
+### Soft-policy control gap
+
+Reliability-v1's prompt contains repair/verification/submission discipline, yet classifier-recognized post-edit targeted failures were not followed by repair mutations and were still followed by submission.
+
+This does not prove every affected patch was wrong or every classifier label is semantically perfect. It does show that **critical lifecycle transitions are not reliably enforced by prose instructions alone**.
+
+Therefore:
+
+- do **not** respond by stacking more prompt rules;
+- do **not** equate “ran a targeted-looking command” with high-quality evidence;
+- separate the mechanism from the implementation.
+
+The competition format is declarative and uses a closed host tool registry; there is no arbitrary custom deterministic submit wrapper. The harness may also extract a non-empty diff even if `submit_patch` is never called. If stronger lifecycle enforcement is later tested, a supported structural option is a **minimal read-only evidence stage before the editing stage**, but that extra topology/model-call cost must earn itself on untouched evidence.
 
 ## Provisional breakthrough ranking
 
-This ranking may guide research while Reliability-v1 is pending; it does **not** authorize implementation on the frozen candidate.
+This ranking guides research only while Reliability-v1 feedback is pending.
 
-1. **Evidence-first repair for concrete behavioral contracts** — conditionally reproduce/identify the smallest behavioral witness before editing, then reuse it after editing. Goal: improve the information available to F2/F3/F5 rather than add generic compute.
-2. **Test-aware retrieval** — connect likely source locations to the smallest relevant existing test/executable path before mutation.
-3. **Adaptive compute / value-of-information routing** — retain as an efficiency mechanism, but do not equate it with simply reducing calls. Escalate only when the next action can discriminate between hypotheses.
-4. Conditional edit/tool-schema reliability path.
-5. Conditional bounded rescue instead of an always-on verifier.
+1. **Evidence-before-mutation** — strongest mechanism; conditional behavioral witness before source mutation.
+2. **Test-aware retrieval** — likely low-cost implementation lever for #1: retrieve source candidate + smallest exercising test together.
+3. **Adaptive compute / value-of-information routing** — secondary efficiency mechanism; choose actions by expected discrimination, not simply fewer calls.
+4. Conditional edit/tool-schema reliability — retained only if new evidence shows grammar failures remain material.
+5. Conditional bounded rescue / structural stage separation — only if a specific missing control capability justifies the added topology cost.
 
 Do not bundle these into a v1.1 mixture.
 
 ## Resource policy
 
 - Existing run/artifact answers the question -> **reuse it**.
-- Cheap GitHub Actions for static checks, read-only probes, reproducibility, artifacts, and deployment orchestration -> **use freely** in this public repo.
+- Cheap GitHub Actions for static checks, read-only probes, reproducibility, compact artifacts, and deployment orchestration -> **use freely** in this public repo.
 - Kaggle GPU/full diagnostic -> **only when it can falsify a named hypothesis or change a decision**.
 - Do not duplicate an active submission or diagnostic.
 - Do not spend compute merely to get another sample from an already-inspected denominator.
@@ -99,11 +152,11 @@ Competition Data remains runtime-only for new runs. Public repository status is 
 
 When ref **57921371** reaches a terminal state:
 
-1. compare its actual public score with the pre-registered **0.08 [0.05, 0.12]** prediction and with the baseline **0.03** outcome, without treating one leaderboard point as causal proof;
-2. explain the prediction error and reconcile it with the 1/17 development diagnostic;
-3. choose exactly one next mechanism;
+1. compare its actual public score with the pre-registered **0.08 [0.05, 0.12]** prediction and with the baseline **0.03**, without treating one leaderboard point as causal proof;
+2. explain the prediction error and reconcile it with the 1/17 development diagnostic and the trace-mechanics audit;
+3. choose exactly one implementation of the **evidence-before-mutation** mechanism unless the score materially falsifies that diagnosis;
 4. freeze a **new untouched evaluation denominator before inspecting its traces**;
 5. pre-register the targeted failure surface, expected observable effect, resource cost, and falsifier;
-6. only then implement and deploy the smallest candidate that expresses that mechanism.
+6. only then implement and deploy the smallest candidate expressing that mechanism.
 
-Until then: **no new expensive experiment and no prompt tuning against the 17 known tasks.**
+Until then: **no new expensive experiment, no duplicate submission, and no prompt tuning against the 17 known tasks.**
