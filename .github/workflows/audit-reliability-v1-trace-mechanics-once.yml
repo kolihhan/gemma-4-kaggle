@@ -1,0 +1,136 @@
+name: Audit Reliability v1 trace mechanics once
+
+on:
+  push:
+    branches: [exp/reliability-v1]
+    paths:
+      - ".github/workflows/audit-reliability-v1-trace-mechanics-once.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+  TOPOLOGY_KERNEL: kolihhan/gemma4-topology-single-41458804862
+  RELIABILITY_KERNEL: kolihhan/gemma4-reliability-v1-diag-41485671952
+  TOPOLOGY_RAW: /tmp/topology-single-existing-output
+  RELIABILITY_RAW: /tmp/reliability-v1-existing-output
+  SAFE_OUTPUT: /tmp/reliability-v1-trace-mechanics-safe
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify analyzer contract
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_analyze_root_trace_mechanics
+          python -m py_compile scripts/analyze_root_trace_mechanics.py
+
+      - name: Download existing completed kernel outputs only
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+          rm -rf "$TOPOLOGY_RAW" "$RELIABILITY_RAW" "$SAFE_OUTPUT"
+          mkdir -p "$TOPOLOGY_RAW" "$RELIABILITY_RAW" "$SAFE_OUTPUT"
+          kaggle kernels output "$TOPOLOGY_KERNEL" -p "$TOPOLOGY_RAW" -o
+          kaggle kernels output "$RELIABILITY_KERNEL" -p "$RELIABILITY_RAW" -o
+          test -s "$TOPOLOGY_RAW/verifier_baseline_results.json"
+          test -s "$RELIABILITY_RAW/verifier_baseline_results.json"
+          test "$(find "$TOPOLOGY_RAW/verifier-baseline-results/traces" -maxdepth 1 -name 'trace_*.json' | wc -l)" -eq 17
+          test "$(find "$RELIABILITY_RAW/verifier-baseline-results/traces" -maxdepth 1 -name 'trace_*.json' | wc -l)" -eq 17
+
+      - name: Reduce raw traces to compact mechanics
+        run: |
+          set -euo pipefail
+          python scripts/analyze_root_trace_mechanics.py \
+            "$TOPOLOGY_RAW/verifier-baseline-results/traces" \
+            --results "$TOPOLOGY_RAW/verifier_baseline_results.json" \
+            --output "$SAFE_OUTPUT/topology-mechanics.json"
+          python scripts/analyze_root_trace_mechanics.py \
+            "$RELIABILITY_RAW/verifier-baseline-results/traces" \
+            --results "$RELIABILITY_RAW/verifier_baseline_results.json" \
+            --output "$SAFE_OUTPUT/reliability-v1-mechanics.json"
+
+      - name: Build safe A/B comparison
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          safe = Path(os.environ['SAFE_OUTPUT'])
+          topo = json.loads((safe / 'topology-mechanics.json').read_text())
+          rel = json.loads((safe / 'reliability-v1-mechanics.json').read_text())
+          ta, ra = topo['aggregate'], rel['aggregate']
+          assert ta['tasks'] == 17 and ra['tasks'] == 17, (ta['tasks'], ra['tasks'])
+
+          keys = [
+              'resolved',
+              'pre_edit_targeted_evidence',
+              'failed_targeted_after_edit',
+              'repair_after_failed_targeted',
+              'targeted_retest_after_repair',
+              'failed_targeted_no_repair',
+              'submit_after_failed_targeted',
+              'tasks_with_no_targeted_test',
+              'tasks_with_final_targeted_pass',
+              'total_mutation_count',
+              'total_targeted_test_count',
+              'total_broad_test_count',
+              'total_localization_tool_count',
+              'total_submit_count',
+              'total_tool_call_count',
+          ]
+          comparison = {
+              'version': 'root-trace-mechanics-ab-v1',
+              'topology_kernel': os.environ['TOPOLOGY_KERNEL'],
+              'reliability_kernel': os.environ['RELIABILITY_KERNEL'],
+              'metrics': {
+                  key: {
+                      'topology_single': ta.get(key),
+                      'reliability_v1': ra.get(key),
+                      'delta': (ra.get(key) - ta.get(key))
+                      if isinstance(ta.get(key), (int, float)) and isinstance(ra.get(key), (int, float))
+                      else None,
+                  }
+                  for key in keys
+              },
+              'action_totals': {
+                  'topology_single': ta.get('action_totals', {}),
+                  'reliability_v1': ra.get('action_totals', {}),
+              },
+          }
+          (safe / 'comparison.json').write_text(json.dumps(comparison, indent=2, sort_keys=True) + '\n')
+
+          forbidden = {
+              'message', 'arguments', 'observation', 'problem_description',
+              'patch', 'tool_calls', 'command', 'filepath', 'stdout', 'stderr',
+          }
+          def walk(value):
+              if isinstance(value, dict):
+                  for key, child in value.items():
+                      assert key not in forbidden, key
+                      walk(child)
+              elif isinstance(value, list):
+                  for child in value:
+                      walk(child)
+          for path in safe.glob('*.json'):
+              walk(json.loads(path.read_text()))
+          print('TRACE_MECHANICS_COMPARISON', json.dumps(comparison, sort_keys=True))
+          print('SAFE_DERIVED_OUTPUT_ONLY=1')
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reliability-v1-trace-mechanics-${{ github.run_id }}
+          path: /tmp/reliability-v1-trace-mechanics-safe
+          if-no-files-found: error
+          retention-days: 30
