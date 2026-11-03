@@ -199,7 +199,7 @@ def _action_kind(step: dict[str, Any]) -> str:
         return "status"
     if _looks_like_source_script_mutation(command):
         return "script_edit"
-    return "command"
+    return "other_command"
 
 
 def analyze_trace(instance_id: str, trace: dict[str, Any], resolved: bool, author: str) -> dict[str, Any]:
