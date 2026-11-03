@@ -110,6 +110,8 @@ jobs:
           }
           (safe / 'comparison.json').write_text(json.dumps(comparison, indent=2, sort_keys=True) + '\n')
 
+          # Non-test run_command calls are categorized as "other_command" so
+          # the raw-field name "command" can remain fail-closed here.
           forbidden = {
               'message', 'arguments', 'observation', 'problem_description',
               'patch', 'tool_calls', 'command', 'filepath', 'stdout', 'stderr',
