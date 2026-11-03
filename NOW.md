@@ -126,6 +126,17 @@ Therefore:
 
 The competition format is declarative and uses a closed host tool registry; there is no arbitrary custom deterministic submit wrapper. The harness may also extract a non-empty diff even if `submit_patch` is never called. If stronger lifecycle enforcement is later tested, a supported structural option is a **minimal read-only evidence stage before the editing stage**, but that extra topology/model-call cost must earn itself on untouched evidence.
 
+## Historical route closure — verifier-LoRA v0
+
+**Verdict: NOT TESTED, not falsified.**
+
+- The frozen training workflow exists, but its only execution entries are `workflow_dispatch` and `workflow_call`.
+- Repository-wide Actions records currently show exactly one `workflow_dispatch` run, the baseline submission workflow, and **zero `workflow_call` runs**.
+- The public one-shot verifier-LoRA wrapper had a push-triggered run but it was skipped; no successful verifier-LoRA training execution is verified.
+- Therefore there is no verified frozen adapter and no clean adapter-vs-base dev/blind A/B result.
+
+Do not call verifier-LoRA a failed experiment, but do not spend GPU merely to complete old bookkeeping. Reopen it only if future untouched evidence again isolates downstream verifier compliance as the dominant bottleneck.
+
 ## Provisional breakthrough ranking
 
 This ranking guides research only while Reliability-v1 feedback is pending.
@@ -145,6 +156,7 @@ Do not bundle these into a v1.1 mixture.
 - Kaggle GPU/full diagnostic -> **only when it can falsify a named hypothesis or change a decision**.
 - Do not duplicate an active submission or diagnostic.
 - Do not spend compute merely to get another sample from an already-inspected denominator.
+- Do not launch verifier-LoRA only to close historical bookkeeping.
 
 Competition Data remains runtime-only for new runs. Public repository status is not a scientific blocker under `PUBLIC_VISIBILITY.md`; legacy exposure cleanup remains deferred and must not alter the experiment.
 
@@ -159,4 +171,4 @@ When ref **57921371** reaches a terminal state:
 5. pre-register the targeted failure surface, expected observable effect, resource cost, and falsifier;
 6. only then implement and deploy the smallest candidate expressing that mechanism.
 
-Until then: **no new expensive experiment, no duplicate submission, and no prompt tuning against the 17 known tasks.**
+Until then: **no new expensive experiment, no duplicate submission, no verifier-LoRA catch-up run, and no prompt tuning against the 17 known tasks.**
