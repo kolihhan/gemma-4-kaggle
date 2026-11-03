@@ -1,80 +1,82 @@
-# Model-capacity probe v0 — fallback design
+# Model-capacity probe v0 — corrected fallback design
 
 Status: **PREFROZEN FALLBACK / DO NOT EXECUTE while Reliability-v1 ref `57921371` is pending.**
 
+This supersedes the earlier version of this document that proposed a fresh E4B -> 12B matched probe as the first capacity test.
+
+## Why the earlier 12B-first design is retired
+
+Repository history recovered after the original prefrozen design shows that a naive same-lineage 12B substitution has already been tested twice on the historical `rich_3278` diagnostic:
+
+- E4B root-coder + verifier lineage produced a wrong non-empty patch within the five-minute budget;
+- 12B default-thinking run timed out with 0 patch;
+- 12B thinking-budget-1024 run also timed out with 0 patch despite more tool activity.
+
+Canonical evidence: `docs/research/recovered-12b-capacity-evidence-2026-11-03.md`.
+
+This is only one repeatedly inspected task, so it does **not** prove 12B is globally worse than E4B. It is sufficient to make a fresh repeat of the same 12B experiment non-informative and wasteful.
+
 ## Trigger
 
-Run this lane only if one of these occurs:
+Open the capacity lane only if one of these occurs:
 
 1. Reliability-v1 Public LB is **< 0.05**, below the preregistered interval; or
-2. a correctly instantiated evidence-before-mutation candidate materially increases relevant pre-edit evidence on untouched tasks but does not improve correctness enough to justify its cost.
+2. a correctly instantiated evidence-before-mutation candidate materially increases relevant pre-edit evidence on untouched tasks but still fails to improve correctness enough to justify its cost.
 
-If neither trigger fires, this remains research-only.
+If neither trigger fires, keep this lane research-only.
 
 ## Question
 
-Is the current E4B lineage limited primarily by agent policy/lifecycle, or is Gemma E4B itself a material capacity bottleneck under an otherwise matched policy?
+Is the current E4B lineage materially capacity-limited after accounting for lifecycle/evidence quality and the competition's global runtime budget?
 
-This is a **model-class discrimination test**, not a new champion candidate and not permission to tune larger models.
+The capacity hypothesis is now:
 
-## Current competition facts
+> A materially stronger model / model-policy combination may improve hidden resolution, but naive E4B -> 12B substitution under the existing five-minute lineage has already failed to add useful evidence.
 
-As verified from current Kaggle competition material on 2026-11-03, submissions may use exactly one of:
+Do not equate `capacity` with `use 12B`.
 
-- `gemma-4-31b-it-qat-w4a16-ct`
-- `gemma-4-12b-it-qat-w4a16-ct`
-- `gemma-4-e4b-it-qat-w4a16-ct`
-- `gemma-4-e2b-it-qat-w4a16-ct`
+## Eligible next discriminating experiments
 
-All agents/subagents inside one submission must use the same base-model variant. E2B/E4B remain eligible for the small-model bonus; 12B/31B are main-track capacity alternatives.
+If the trigger fires, choose exactly one of these after a fresh preregistration.
 
-## Scientific variable
+### Option A — 31B same-policy probe
 
-Primary comparison:
+Compare:
 
-- **A — E4B control:** exact frozen Reliability-v1 policy/topology/prompt/tool configuration.
-- **B — 12B treatment:** identical configuration with only the declared base-model variant changed to 12B.
+- **control:** exact frozen E4B Reliability-v1 policy/topology/prompt/tool configuration;
+- **treatment:** same configuration with only the declared base-model variant changed to 31B, subject to runtime feasibility.
 
-Do **not** start with 31B. 12B is the smallest capacity increase and therefore the cleaner first discrimination test.
+Purpose: test whether a much stronger base model can convert an otherwise matched policy into correct repairs.
 
-Only if 12B shows a meaningful correctness gain that exceeds its resource penalty may a later 31B probe be justified.
+Risk: 31B may win by consuming substantially more latency/compute, so outcome must be judged with resolved-per-budget metrics, not raw solves alone.
 
-## Why 12B first
+### Option B — faithful strong-public architecture reproduction
 
-A direct E4B -> 31B jump changes capacity and runtime too aggressively. If 31B wins, attribution is weak and the result may be unusable under the 12-hour global budget.
+Reproduce a demonstrably stronger public 31B-era architecture under a frozen contract, while preserving provenance and avoiding post-hoc tuning.
 
-E4B -> 12B asks a narrower question:
+Purpose: test a broader model-policy-class alternative rather than pretending model size alone explains the external gap.
 
-> Does a moderate capacity increase, holding the agent policy fixed, recover repairs that the E4B policy cannot execute reliably?
+This is preferable to Option A if the public architecture cannot be meaningfully separated from its model/policy interaction.
 
-This follows the research doctrine: reopen the model class with the smallest discriminating experiment, not a wholesale architecture switch.
+## What remains fixed
 
-## What must stay fixed
+For any capacity experiment, freeze as much as technically possible:
 
-Unless technically impossible under the harness, freeze:
-
-- agent topology;
-- prompts/instructions;
-- tool surface;
-- sampling parameters and seed;
-- per-task tool-call/turn limits;
-- repair policy;
-- submission ownership;
-- scorer/evaluator;
 - task denominator;
-- no LoRA/adapters in either arm.
+- scorer/evaluator;
+- no task-specific rules;
+- no tuning after task-level inspection;
+- prompts/topology/tool surface for a same-policy comparison;
+- sampling/seed where supported;
+- no LoRA/adapters unless the experiment is explicitly a training hypothesis instead of a capacity hypothesis.
 
-Record any unavoidable runtime-only difference explicitly rather than silently compensating for it.
+Record unavoidable runtime/model differences explicitly instead of silently compensating for them.
 
 ## Untouched denominator
 
-Do not use the inspected 17-task development denominator for promotion.
+Do not use the inspected 17-task development denominator or `rich_3278` for promotion.
 
-Use a newly frozen paired denominator selected before task-content or trace inspection, excluding all previously inspected/development/teacher/blind-preparation tasks.
-
-Both E4B and 12B must run on exactly the same task IDs.
-
-Do not inspect task-level traces between arms.
+Freeze a new paired denominator before task-content or trace inspection, excluding all previously inspected/development/teacher/blind-preparation tasks. Both arms must run on the same selected IDs, and task-level traces must not be inspected between arms.
 
 ## Primary observables
 
@@ -89,60 +91,54 @@ Resource:
 - model/agent invocations;
 - tool calls;
 - timeout rate;
-- resolved-per-minute and resolved-per-budget proxy.
+- resolved-per-minute / resolved-per-budget proxy.
 
-Mechanism diagnostics after both arms complete:
-- localization quality;
-- correctness of inferred root cause;
+Mechanism diagnostics after both arms finish:
+- localization/evidence quality;
+- root-cause correctness;
 - edit synthesis quality;
 - repair after relevant failure;
-- whether 12B wins on tasks where E4B had adequate evidence but still chose/synthesized the wrong fix.
+- whether the stronger model wins specifically where E4B had adequate evidence but still reasoned/edited incorrectly.
 
 ## Interpretation
 
-### B ~= A
+### Stronger model ~= E4B
 
-Capacity is not supported as the immediate bottleneck at this scale. Do not jump automatically to 31B. Return priority to lifecycle, retrieval, search/repair, or training hypotheses according to untouched traces.
+Capacity is weakened as the immediate bottleneck. Return priority to lifecycle, retrieval, search/repair, or training hypotheses according to untouched traces.
 
-### B > A but resource-adjusted value is poor
+### Stronger model > E4B but resource-adjusted value is poor
 
-Capacity helps scientifically but may not be competition-optimal under the 12-hour global budget. Consider whether distillation/SFT into E4B or adaptive use of a stronger model class is possible within competition constraints; do not promote 12B solely on raw solves.
+Capacity matters scientifically but is not automatically competition-optimal. Distillation/SFT into E4B or a cheaper policy may become more attractive than promoting the larger model directly.
 
-### B > A with acceptable resource cost
+### Stronger model > E4B with acceptable resource cost
 
-Model capacity is a real bottleneck candidate. A 31B probe becomes eligible, but must be separately preregistered and justified by the remaining gap.
-
-### B improves tasks despite E4B having good localization/evidence
-
-This is the strongest signal for a reasoning/edit-synthesis capacity ceiling and also raises the priority of trajectory distillation/SFT.
-
-### B mostly wins because it spends more time/turns
-
-Do not call this a pure capacity effect. Separate model quality from compute allocation before promotion.
-
-## Falsifier
-
-The capacity hypothesis is weakened if 12B, under a matched frozen policy and paired untouched denominator, fails to produce a meaningful correctness gain or loses enough resolved-per-budget to be competition-useless.
+Model capacity/model-policy class becomes a serious candidate. A separate promotion contract is still required; this probe alone does not authorize a competition submission.
 
 ## Restrictions
 
-RESTRICTION: Do not run this while Reliability-v1 is pending.
-WHY IT EXISTS: The live E4B score is required to decide whether the model-class pivot trigger fired.
-PIVOT TRIGGER: Reliability-v1 < 0.05, or untouched evidence-v0 demonstrates good evidence formation without correctness gain.
+RESTRICTION: Do not run a capacity probe while Reliability-v1 is pending.
+WHY IT EXISTS: The live E4B score determines whether the architecture-level pivot trigger fires.
+PIVOT TRIGGER: Reliability-v1 < 0.05, or untouched evidence-v0 shows good evidence formation without enough correctness gain.
 STATUS: ACTIVE.
 
-RESTRICTION: Do not tune prompts/budgets separately for 12B before the matched comparison.
-WHY IT EXISTS: That would confound model capacity with policy optimization.
-PIVOT TRIGGER: Only after the matched capacity question is answered and a new experiment is preregistered.
+RESTRICTION: Do not rerun the historical 12B `rich_3278` smokes or repeat the same naive 12B-first test.
+WHY IT EXISTS: Existing historical evidence already answers that narrow question poorly enough to make repetition wasteful.
+PIVOT TRIGGER: New independent evidence identifies a materially different 12B policy/budget question that cannot be answered from existing artifacts.
 STATUS: ACTIVE.
 
-RESTRICTION: Do not jump directly to 31B.
-WHY IT EXISTS: 12B is a smaller, cheaper, cleaner capacity intervention.
-PIVOT TRIGGER: 12B materially improves correctness with acceptable resource cost, or independent evidence makes 12B technically non-diagnostic.
+RESTRICTION: Do not copy a strong public 31B system wholesale without a frozen comparison contract.
+WHY IT EXISTS: model size, topology, prompts, budgets, and development history are confounded.
+PIVOT TRIGGER: none; a reproduction is allowed only as an explicitly scoped model-policy-class experiment.
 STATUS: ACTIVE.
 
 ## Current decision
 
-This design is now prefrozen so a low Reliability-v1 score cannot cause a post-hoc, score-shaped experiment design.
+Capacity remains **REOPENED globally but not selected for execution**.
 
-No implementation, GPU run, or competition submission is authorized by this document alone.
+While Reliability-v1 is pending:
+
+- no new GPU/model run;
+- no duplicate submission;
+- do not repeat 12B historical diagnostics;
+- retain evidence-before-mutation as the current provisional lifecycle candidate;
+- if the capacity trigger fires later, use this corrected design plus `recovered-12b-capacity-evidence-2026-11-03.md` before choosing the next experiment.
