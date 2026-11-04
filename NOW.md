@@ -49,6 +49,28 @@ Canonical evidence: `docs/research/public-leaderboard-vs-open-methods-2026-11-04
 
 **Decision:** Preserve the planned capacity probe as a controlled falsification test; explicitly keep test-aware evidence/scaffold design as a competing hypothesis. Do not copy public leader configs without determining what mechanism is actually responsible.
 
+## Capacity-v0 execution checkpoint — 2026-11-04
+
+**Model-only CPU preflight: VERIFIED GREEN.** Run [41782383957](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41782383957), job 126416680873:
+- 7/7 integrity/selection/exposure-scanning tests passed;
+- old frozen E4B submission hash contract passed;
+- E4B vs 31B exact file-set check passed; only one agent model declaration differs;
+- Kaggle official model instance metadata found both E4B and 31B;
+- 41 current official scorer wheels fetched;
+- both model declarations passed the same scorer's submission schema checks;
+- 149 repo research/source files scanned for the 16 candidates, zero unexpected mentions;
+- candidate feasibility n=4 (2 Rich, 2 FastAPI); confirmation reserve n=12 (6 per repo);
+- frozen selector SHA256: 4abe73d79afcabd64795e7f2eedde5682732a85290f07a09e3f8a181594fd593.
+
+Source code/contract:
+- scripts/capacity_preflight_v0.py; tests/test_capacity_preflight_v0.py;
+- .github/workflows/capacity-preflight-v0.yml;
+- docs/evaluation/capacity-boundary-v0-preregistration-2026-11-04.md.
+
+**Model-free gold eligibility is running in private Kaggle CPU:** Action [41782992381](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41782992381). It uses the official gold-reference verification path against 16 metadata-only candidates; no LLM model or GPU, and only sanitized result metadata may become a GitHub artifact. Status/outcomes are **UNKNOWN until completed**.
+
+**Remaining gates before any expensive model run:** gold-pass + no-op-fail eligibility, prior-run/human exposure provenance limitations, and 31B runtime/startup resource feasibility on L4x4. Do not call the 16 candidates certified independent blind; the source-text audit cannot inspect private historical notebook artifacts or unrecorded human views. Do not alter frozen Reliability-v1 or publish competition data.
+
 ## Frozen control / development evidence
 
 Reliability-v1 is the current frozen E4B single-root control.
@@ -234,4 +256,4 @@ Proceed with the untouched evidence-v0 causal test, but do not treat one LB scor
 5. Execute Kaggle inference only after static/schema/model-source prerequisites are met; retire if the larger-model cost cannot be justified.
 6. Reconsider lifecycle, search, and trajectory-SFT after independent evidence—not as task-specific patches.
 
-No new capacity run or score has been produced at this update.
+No 31B/E4B paired GPU model run or new competition score has been produced. Private CPU gold eligibility is underway.
