@@ -1,0 +1,56 @@
+name: Capacity v0 preselection Git-history audit
+
+on:
+  push:
+    branches: [exp/capacity-boundary-v0]
+    paths:
+      - "scripts/audit_capacity_history_v0.py"
+      - "tests/test_audit_capacity_history_v0.py"
+      - ".github/workflows/capacity-history-audit-v0.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  historical-exposure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check historical audit unit tests
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_audit_capacity_history_v0
+          python -m py_compile scripts/audit_capacity_history_v0.py
+      - name: Audit all preselection Git source refs without task data
+        id: audit
+        run: |
+          set +e
+          python scripts/audit_capacity_history_v0.py --repo . --out /tmp/capacity-history-audit-v0.json
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" -gt 2 ]; then
+            echo "Unexpected history audit failure" >&2
+            exit "$code"
+          fi
+          if [ "$code" -eq 2 ]; then
+            echo "PREFREEZE_SOURCE_EXPOSURE_FOUND=YES"
+          fi
+      - name: Upload metadata-only historical scan summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capacity-v0-history-scan-${{ github.run_id }}
+          path: /tmp/capacity-history-audit-v0.json
+          if-no-files-found: warn
+          retention-days: 21
+      - name: Fail closed if historical exposed task IDs found
+        run: |
+          test "${{ steps.audit.outputs.exit_code }}" = 0
