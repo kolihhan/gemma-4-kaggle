@@ -22,6 +22,8 @@ def fake_noop():
     return {
         "version": "capacity-v0-replacement-noop-eligibility",
         "source_run_id": frozen.NOOP_RUN_ID,
+        "source_artifact_id": frozen.NOOP_ARTIFACT_ID,
+        "source_artifact_zip_sha256": frozen.NOOP_ARTIFACT_SHA256,
         "source_gold_run_id": noop.GOLD_RUN,
         "source_gold_artifact_id": noop.GOLD_ARTIFACT,
         "source_gold_artifact_zip_sha256": noop.GOLD_ARTIFACT_SHA256,
@@ -84,6 +86,8 @@ class FreezePairedCohortTests(unittest.TestCase):
     def test_tampering_fails_closed(self):
         operations = [
             lambda d: d.update(source_run_id=0),
+            lambda d: d.update(source_artifact_id=0),
+            lambda d: d.update(source_artifact_zip_sha256="drift"),
             lambda d: d.update(source_gold_artifact_id=0),
             lambda d: d.update(source_gold_artifact_zip_sha256="drift"),
             lambda d: d.update(contains_raw_patch_or_task_text=True),
