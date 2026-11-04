@@ -71,6 +71,19 @@ Source code/contract:
 
 **Remaining gates before any expensive model run:** gold-pass + no-op-fail eligibility, prior-run/human exposure provenance limitations, and 31B runtime/startup resource feasibility on L4x4. Do not call the 16 candidates certified independent blind; the source-text audit cannot inspect private historical notebook artifacts or unrecorded human views. Do not alter frozen Reliability-v1 or publish competition data.
 
+## Capacity eligibility update — 2026-11-04 14:28 MYT
+
+**Gold reference screen completed successfully.** Private Kaggle CPU action [41782992381](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41782992381), metadata-only artifact `13299564669` (SHA256 `12a7ff7a377258eee08dd639ebd60726bdeb260649892c451c1d47d81e9e2f`):
+- 16 preselected metadata IDs screened;
+- **10/16 gold-pass**, 6 failed the official reference-patch verification;
+- feasibility cohort 3/4 gold-pass; original confirmation reserve 7/12 gold-pass;
+- Rich: 7 gold-pass out of 8, FastAPI: 3 gold-pass out of 8;
+- source metadata preserved at `docs/evaluation/capacity-v0-gold-screen-2026-11-04.json`; contains no raw issue statements or patch bytes.
+
+**No-op control underway.** CPU-only private Kaggle action [41786342489](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41786342489), rendered from the 10 gold-pass IDs with `scripts/render_capacity_noop_v0.py` and `.github/workflows/capacity-noop-eligibility-v0.yml`. Unit tests and private kernel submission passed; actual no-op per-task results remain **UNKNOWN** until the Action finishes and the sanitized artifact is verified.
+
+**Decision:** Continue gold-pass AND no-op-fail filtering, then replenish failed candidates using preregistered within-repo SHA-ranked metadata order before inspecting any A/B model results. Do not call the 16 raw candidates clean. Do not launch E4B/31B GPU while eligibility is incomplete. Do not change the frozen Reliability-v1 submission, sampler, prompts or budgets.
+
 ## Frozen control / development evidence
 
 Reliability-v1 is the current frozen E4B single-root control.
@@ -256,4 +269,4 @@ Proceed with the untouched evidence-v0 causal test, but do not treat one LB scor
 5. Execute Kaggle inference only after static/schema/model-source prerequisites are met; retire if the larger-model cost cannot be justified.
 6. Reconsider lifecycle, search, and trajectory-SFT after independent evidence—not as task-specific patches.
 
-No 31B/E4B paired GPU model run or new competition score has been produced. Private CPU gold eligibility is underway.
+No 31B/E4B paired GPU model run or new competition score has been produced. Gold eligibility completed 10/16; no-op verification and eligibility replacement remain.
