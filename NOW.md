@@ -36,6 +36,19 @@ Research audit: `docs/research/why-reliability-v1-only-003-2026-11-04.md`.
 
 **Decision correction:** the <0.05 pivot opens capacity as a *testable alternative*, not as the proven root cause. Before an expensive comparison, run a cheap scorer/model-source feasibility gate and freeze a genuinely untouched paired denominator. Do not assume that 5 minutes/32 calls caused the local 1/17 (neither limit was reached).
 
+## Public leaderboard and open-method recon (2026-11-04)
+
+Canonical evidence: `docs/research/public-leaderboard-vs-open-methods-2026-11-04.md`.
+
+- Latest third-party CLIST Public LB snapshot: leader **0.29**, several teams **0.24**; **leader's method not publicly established**. Do not assign an unknown top agent a model or architecture.
+- Disclosed scored stronger systems: **31B no-LoRA two-role v19 0.17**, with tracing/localization and thinking off; **31B single-root Budget-Fit 0.18**, using eight-minute cap, 28 tools and 4096 thinking budget. Neither proves multi-agent or thinking mode is universally superior.
+- Factorial self-hosted study (3 model sizes × 2 scaffolds × 5 seeds × 104 public tasks): richer E4B scaffold improved local resolved rate **10.0% → 15.4%** while 12B min **25.2%** exceeded E4B max. The study used GGUF/llama.cpp and a repaired local verifier: **not official hidden LB**, not a directly controlled comparison with our E4B QAT.
+- Caveat: identical public bundles have been observed scoring differently by up to 0.05 in hosted experiments; do not read a causal mechanism from single LB points.
+- Our E4B 0.03 is lower than these 31B open systems, but the difference bundles model class, policy, budgets, harness epoch and hidden task draws. Stronger evidence for model capacity as a **candidate**, not a proven root cause.
+- Official competition provides a **$10,000 E2B/E4B small-model prize**, but current filtered small-model standings have not been independently verified.
+
+**Decision:** Preserve the planned capacity probe as a controlled falsification test; explicitly keep test-aware evidence/scaffold design as a competing hypothesis. Do not copy public leader configs without determining what mechanism is actually responsible.
+
 ## Frozen control / development evidence
 
 Reliability-v1 is the current frozen E4B single-root control.
