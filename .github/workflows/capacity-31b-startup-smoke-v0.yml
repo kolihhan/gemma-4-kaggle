@@ -7,6 +7,7 @@ on:
       - "kaggle/capacity_31b_startup_v0.py"
       - "scripts/render_capacity_31b_startup_v0.py"
       - "tests/test_capacity_31b_startup_v0.py"
+      - "tests/test_audit_capacity_history_v0.py"
       - ".github/workflows/capacity-31b-startup-smoke-v0.yml"
   workflow_dispatch:
 
@@ -36,7 +37,7 @@ jobs:
       - name: Static unit tests and frozen E4B control contract
         run: |
           set -euo pipefail
-          python -m unittest -v tests.test_capacity_31b_startup_v0 tests.test_capacity_preflight_v0
+          python -m unittest -v tests.test_capacity_31b_startup_v0 tests.test_capacity_preflight_v0 tests.test_audit_capacity_history_v0
           python -m py_compile kaggle/capacity_31b_startup_v0.py scripts/render_capacity_31b_startup_v0.py
           rm -rf /tmp/gemma4-capacity-control-check
           python scripts/capacity_preflight_v0.py --repo . --out /tmp/gemma4-capacity-control-check
