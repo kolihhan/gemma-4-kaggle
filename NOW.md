@@ -2,6 +2,16 @@
 
 Updated: 2026-11-04 (capacity v0 Git-history/31B startup gate)
 
+## Submission-first audit completed — 2026-11-04 (read-only + metadata archive)
+
+**Latest deliverable:** [submission-first research decision](docs/research/submission-first-no-training-decision-2026-11-04.md), based on scored baseline `57879765` and Reliability-v1 `57921371` (both displayed Public **0.03**), inspected development-trace mechanics, prior 12B one-task negative, and publicly scored **no-training** 31B comparators. No new model/GPU/LoRA/leaderboard run occurred.
+
+**Bottleneck priority, not causality:** (1) issue semantics/root-cause/patch correctness; (2) targeted evidence plus repair transitions; (3) E4B capacity/policy; (4) harness/scorer epoch; (5) budget alone. The inspected 17-task trace classifier is conservative and can miss compound-shell verification. A larger model is not guaranteed to improve performance, and the two public 31B systems have different prompts, topologies, budgets and host epochs.
+
+**Recovered prior CPU artifact, no new compute:** [gold-screen Actions 41803516800](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41803516800), artifact `13308702997`, ZIP SHA-256 `944b8acaac1e5f349f81bb0c941348dbc7c5694a57a48ce0ea843023a416711b`. Metadata-only [results](docs/evaluation/capacity-v0-replacement-gold-2026-11-04.json): **10/16 gold-pass**, Rich **4/4**, FastAPI **6/12**. These are **not** clean holdout replacements yet: independent no-op-fail screening is still missing. Do not confuse gold-check pass with model quality.
+
+**Active instruction remains:** pause self-training, pause Colab/31B GPU execution and speculative submissions. The existing preregistered untrained same-policy E4B-vs-31B design is only a **conditional future experiment**, pending GPU feasibility and fully screened/provenance-clean paired tasks. No new candidate has been promoted; frozen `submission/` unchanged.
+
 ## Submission-first / no-new-training decision — 2026-11-04
 
 **Current user directive:** Stop self-training/LoRA expansion and prioritize the existing scored Kaggle submissions. Put the optional Colab 31B feasibility notebook and Kaggle 31B GPU gate **on hold**, rather than treating them as required next steps. This is a priority change, not a deletion or a claim that all fine-tuning is intrinsically ineffective.
