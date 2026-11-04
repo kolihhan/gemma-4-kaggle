@@ -167,7 +167,12 @@ def audit_candidate_text_mentions(repo: Path, manifest: dict) -> dict[str, objec
     unrecorded human browsing, private Kaggle artifacts, or previous chats.
     """
     candidate_ids = set(manifest["feasibility_ids"] + manifest["confirmation_reserve_ids"])
-    input_paths = set(EXPOSURE_FILES)
+    # After the first screening, this vetted derived artifact must quote the
+    # *preselected* candidate IDs. It is not evidence of historical exposure.
+    # Keep the exception exact and documented; other files still fail closed.
+    input_paths = set(EXPOSURE_FILES) | {
+        "docs/evaluation/capacity-v0-gold-screen-2026-11-04.json",
+    }
     findings: list[dict[str, str]] = []
     scanned = 0
     for dirname in ("docs", "scripts", "tests", "kaggle", ".github/workflows"):
