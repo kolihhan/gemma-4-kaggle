@@ -95,13 +95,9 @@ def render(repo: Path, out: Path, kernel_ref: str) -> Path:
         ),
         "'requested': 19": "'requested': 10",
         "/19] noop": "/10] noop",
-        "f'[{index:02d}/19] noop": "f'[{index:02d}/10] noop",
-        "[{index:02d}/19] noop": "[{index:02d}/10] noop",
     }
     for old, new in replacements.items():
         if old not in source:
-            if old in ("f'[{index:02d}/19] noop",):
-                continue
             raise ValueError(f"upstream no-op template drift: {old}")
         source = source.replace(old, new)
     compile(source, "capacity_noop_screen.py", "exec")
