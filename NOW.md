@@ -67,7 +67,7 @@ Source code/contract:
 - .github/workflows/capacity-preflight-v0.yml;
 - docs/evaluation/capacity-boundary-v0-preregistration-2026-11-04.md.
 
-**Gold reference eligibility:** COMPLETE 10/16 under action [41782992381](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41782992381); see dated update below. **No-op eligibility:** still pending in private CPU action [41786342489](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41786342489).
+**Gold eligibility:** 10/16 passed; **No-op eligibility:** 10/10 gold-passing candidates failed no-op verification, giving **10 doubly eligible tasks**. Private CPU actions: [gold 41782992381](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41782992381), [no-op 41786342489](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41786342489).
 
 **Remaining gates before any expensive model run:** gold-pass + no-op-fail eligibility, prior-run/human exposure provenance limitations, and 31B runtime/startup resource feasibility on L4x4. Do not call the 16 candidates certified independent blind; the source-text audit cannot inspect private historical notebook artifacts or unrecorded human views. Do not alter frozen Reliability-v1 or publish competition data.
 
@@ -80,9 +80,24 @@ Source code/contract:
 - Rich: 7 gold-pass out of 8, FastAPI: 3 gold-pass out of 8;
 - source metadata preserved at `docs/evaluation/capacity-v0-gold-screen-2026-11-04.json`; contains no raw issue statements or patch bytes.
 
-**No-op control underway.** CPU-only private Kaggle action [41786342489](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41786342489), rendered from the 10 gold-pass IDs with `scripts/render_capacity_noop_v0.py` and `.github/workflows/capacity-noop-eligibility-v0.yml`. Unit tests and private kernel submission passed; actual no-op per-task results remain **UNKNOWN** until the Action finishes and the sanitized artifact is verified.
+**No-op control now COMPLETE.** Private Kaggle CPU action [41786342489](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41786342489), job `126429235397`, completed successfully. The safe output reports `CAPACITY_NOOP_SCREENED=10` and `CAPACITY_NOOP_FAIL_COUNT=10`, artifact `13300818683`. All ten gold-passing tasks require a non-empty solution under the checked official no-op verifier. No model inference or GPU was used.
 
 **Decision:** Continue gold-pass AND no-op-fail filtering, then replenish failed candidates using preregistered within-repo SHA-ranked metadata order before inspecting any A/B model results. Do not call the 16 raw candidates clean. Do not launch E4B/31B GPU while eligibility is incomplete. Do not change the frozen Reliability-v1 submission, sampler, prompts or budgets.
+
+## PIC handoff — eligibility gate closed, replacements needed (2026-11-04)
+
+**Verified:** CPU model/schema preflight GREEN (7/7); reference-patch gold pass 10/16; no-op fail 10/10 of gold pass; **10/16 total doubly eligible**. Gold and no-op remain separate controls. Private job `126429235397` and artifact `13300818683` establish the no-op gate; confirm exact per-task metadata from that artifact before finalizing a replacement manifest.
+
+**Original frozen shape:** feasibility 4 = Rich 2 + FastAPI 2, currently gold/no-op eligible Rich 2 + FastAPI 1 (**missing FastAPI 1**). Confirmation 12 = Rich 6 + FastAPI 6, currently eligible Rich 5 + FastAPI 2 (**missing Rich 1 + FastAPI 4**). Overall **six replacement tasks needed: one Rich, five FastAPI**, from *new uninspected IDs* and fixed within-repo SHA ordering.
+
+**PIC mandatory next steps:**
+1. Verify the safe no-op artifact at the per-ID level and commit a vetted derived metadata-only eligibility record (no raw traces/test material).
+2. Formally construct the next within-repo SHA-ranked replacement queue from the pre-existing 90-task source metadata; exclude the initial 16, previous training/holdout, known exposures and any ambiguous provenance. Freeze replacement order *before seeing model results*.
+3. Run just enough private Kaggle CPU gold-pass AND no-op-fail screening to fill the **1 Rich + 5 FastAPI gaps**; stop early if provenance or eligible pool fails. Keep pilot and confirmation strata separate. If no clean replacements exist, **reduce/retire the preregistered comparison explicitly rather than silently changing the denominator**.
+4. After a frozen eligible denominator, audit 31B vLLM startup on Kaggle L4×4 and command/tool/parser behavior, then run the *same-policy* four-task paired **E4B/31B feasibility** test only if justified by costs. That four-task pilot cannot promote 31B or establish a statistical win.
+5. If feasible, use the untouched independent 12-task confirmation. Record resolved, unique solves, time, tool calls, empty patch rate, verifier exits and cost; follow the pre-registered threshold and pivot on genuine evidence.
+
+**Not yet done:** clean replacement cohorts, GPU startup, paired model inference, any new competition LB score. **No submitted reliability-v1 artifacts changed.**
 
 ## Frozen control / development evidence
 
@@ -262,7 +277,7 @@ Proceed with the untouched evidence-v0 causal test, but do not treat one LB scor
 
 **Complete the remaining preregistered eligibility gate, not a leaderboard submission.**
 
-1. Read the sanitized final no-op artifact from private CPU Action [41786342489](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41786342489) and check every gold-pass candidate against no-op-fail.
+1. Reconcile the safe per-ID no-op artifact from completed CPU Action [41786342489](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41786342489): 10/10 gold-pass tasks are no-op failures; commit a safe eligibility summary.
 2. Construct a deterministic within-repo replacement queue from the original SHA-ranked 90 train metadata candidates, excluding known previously exposed IDs, the 16 screened IDs and any new evidence/provenance collisions.
 3. Screen the smallest useful tranche of replacements with the official private Kaggle gold/no-op checks (no model), fixing eligibility rather than tuning outcomes.
 4. Freeze the final pilot/confirmation denominators with provenance and eligibility evidence before any paired model result is inspected; note the Rich/FastAPI-only coverage limitation.
