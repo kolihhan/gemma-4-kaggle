@@ -159,6 +159,48 @@ def build_feasibility_manifest(repo: Path) -> dict[str, object]:
     return selection
 
 
+
+def audit_candidate_text_mentions(repo: Path, manifest: dict) -> dict[str, object]:
+    """Fail closed when a selected ID appears in research/source text outside metadata.
+
+    This detects **repository-stored** prior exposure only. It cannot certify
+    unrecorded human browsing, private Kaggle artifacts, or previous chats.
+    """
+    candidate_ids = set(manifest["feasibility_ids"] + manifest["confirmation_reserve_ids"])
+    input_paths = set(EXPOSURE_FILES)
+    findings: list[dict[str, str]] = []
+    scanned = 0
+    for dirname in ("docs", "scripts", "tests", "kaggle", ".github/workflows"):
+        base = repo / dirname
+        if not base.exists():
+            continue
+        for path in base.rglob("*"):
+            if not path.is_file() or path.suffix not in {".md", ".json", ".py", ".yml", ".yaml"}:
+                continue
+            relative = path.relative_to(repo).as_posix()
+            if relative in input_paths:
+                continue
+            if path.stat().st_size > 2_000_000:
+                raise ValueError(f"unreviewed oversized source file in exposure audit: {relative}")
+            text = path.read_text(encoding="utf-8", errors="replace")
+            scanned += 1
+            for issue_id in sorted(candidate_ids):
+                if re.search(r"(?<![A-Za-z0-9_])" + re.escape(issue_id) + r"(?![A-Za-z0-9_])", text):
+                    findings.append({"instance_id": issue_id, "path": relative})
+    if findings:
+        raise ValueError(
+            "historical source mention of selected candidate(s): "
+            + json.dumps(findings, sort_keys=True)
+        )
+    if scanned == 0:
+        raise ValueError("source exposure audit inspected no files")
+    return {
+        "scanned_files": scanned,
+        "unexpected_mentions": findings,
+        "scope": "repository-present text only; not full historical/Kaggle guarantee",
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--repo", type=Path, default=Path("."))
@@ -169,6 +211,7 @@ def main() -> int:
         raise ValueError("refuse to write into canonical submission tree")
     pairs = prepare_model_pair(repo, output / "model_pairs")
     denominator = build_feasibility_manifest(repo)
+    audit = audit_candidate_text_mentions(repo, denominator)
     manifest_path = output / "feasibility-metadata.json"
     manifest_path.write_text(
         json.dumps(denominator, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -179,6 +222,10 @@ def main() -> int:
     print("CAPACITY_FEASIBILITY_N=", len(denominator["feasibility_ids"]))
     print("CAPACITY_UNTOUCHED_RESERVE_N=", len(denominator["confirmation_reserve_ids"]))
     print("CAPACITY_SELECTOR_SHA256=", denominator["selection_digest_sha256"])
+    print("CAPACITY_EXPOSURE_TEXT_SCAN_FILES=", audit["scanned_files"])
+    print("CAPACITY_EXPOSURE_TEXT_MENTIONS=", len(audit["unexpected_mentions"]))
+    print("CAPACITY_FEASIBILITY_IDS=", ",".join(denominator["feasibility_ids"]))
+    print("CAPACITY_RESERVE_IDS=", ",".join(denominator["confirmation_reserve_ids"]))
     print("CAPACITY_PREFLIGHT_GPU_EXECUTION=NONE")
     return 0
 
