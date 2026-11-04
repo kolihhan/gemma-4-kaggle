@@ -2,6 +2,22 @@
 
 Updated: 2026-11-04 (capacity v0 Git-history/31B startup gate)
 
+## Capacity v0 replacement checkpoint — 2026-11-04 (CPU-only)
+
+**Verified original eligibility (no model):** original 16 metadata-preselected IDs yielded **10/16 gold-pass** and, for those exact ten gold-pass IDs, **10/10 no-op-fail**. The per-ID no-op record was downloaded and checked against the original private [run 41786342489](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41786342489), artifact `13300818683`, then retained as metadata-only `docs/evaluation/capacity-v0-noop-screen-2026-11-04.json`. No raw patches, issue text, or hidden tests were committed.
+
+**Frozen original gaps:** pilot Rich 0 / FastAPI 1; confirmation Rich 1 / FastAPI 4. Six replacements are needed in total (**Rich 1 + FastAPI 5**), all still subject to independent gold-pass AND no-op-fail screening.
+
+**New deterministic metadata-only replacement gate:**
+- `scripts/build_capacity_replacements_v0.py` preserves preregistered selector SHA `4abe73d79afcabd64795e7f2eedde5682732a85290f07a09e3f8a181594fd593`, excludes all original 16 and the original known-exposure corpus, and ranks additional candidates using the frozen source SHA namespace. No old holdout, training, or manually seen tasks are intentionally reassigned.
+- [CPU Actions 41803046378](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41803046378): **11/11 tests PASS**; queue **Rich 18 + FastAPI 28**; preselection tracked Git-source history scan **467 revisions**, **0 mentions** among first **16** queued prospective screening candidates. Historical Git source cleanliness **does not certify blind status** across previous private artifacts or unrecorded inspections.
+- The first screening cohort was frozen as **4 Rich + 12 FastAPI** (the exact first 16 Git-source-audited replacement-queue IDs), before seeing replacement task outcomes.
+- [Private Kaggle CPU gold-control Actions 41803516800](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41803516800) was launched using a fail-closed Kaggle push guard and a metadata-only artifact policy. **Gold outcomes were not yet available at this checkpoint.** It has no GPU, model inference, or leaderboard submission.
+
+**Next gate:** inspect the per-ID safe gold artifact on completion, run private CPU no-op verification **only on gold-pass replacement IDs**, then fill the missing Rich/FastAPI slots strictly in original ranked order. If the preregistered 16 replacement screens cannot fill six gaps, screen the next unexposed queue prefix without selecting on model results, or explicitly reduce/retire the planned comparison if clean source candidates run out. Do not pronounce blind certification from Git-source audit alone.
+
+**31B GPU remains independently BLOCKED by Kaggle weekly quota**, not failed model inference. No new 31B run, no new LB score, and the frozen Reliability-v1 candidate remains unchanged. Verifier-LoRA's adapter artifact is a separate older research branch, not promoted.
+
 ## Latest PIC decision — 31B startup BLOCKED BY GPU QUOTA
 
 **Verified external blocker:** GitHub Actions [41794811345](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41794811345), job 126456289520, attempted to push a *private synthetic-only* 31B L4x4 startup kernel. Kaggle printed **"Kernel push error: Maximum weekly GPU quota of 30.00 hours reached."** CLI exit code was nevertheless 0. The subsequent HTTP 404 was for a kernel that was never created. Read-only status probe [41795018386](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41795018386) confirmed no notebook/result. **NO model weights loaded, no GPU inference, no candidate issues tested and no new leaderboard submission.**
