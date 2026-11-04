@@ -7,6 +7,7 @@ on:
       - "scripts/freeze_capacity_paired_v0.py"
       - "tests/test_freeze_capacity_paired_v0.py"
       - ".github/workflows/capacity-freeze-paired-static-v0.yml"
+      - "docs/evaluation/capacity-v0-replacement-noop-2026-11-04.json"
   workflow_dispatch:
 
 permissions:
@@ -26,6 +27,29 @@ jobs:
           set -euo pipefail
           python -m unittest -v tests.test_freeze_capacity_paired_v0 tests.test_render_capacity_replacement_noop_v0 tests.test_build_capacity_replacements_v0
           python -m py_compile scripts/freeze_capacity_paired_v0.py
+      - name: Generate actual frozen cohort from vetted CPU artifacts
+        run: |
+          set -euo pipefail
+          python -m scripts.freeze_capacity_paired_v0 --repo . --out /tmp/capacity-v0-paired-cohort.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path("/tmp/capacity-v0-paired-cohort.json").read_text())
+          assert len(d["feasibility"])==4 and len(d["confirmation"])==12
+          assert d["totals"]["replacements_used"]==6
+          assert d["certifies_blind"] is False
+          assert d["model_evaluation_executed"] is False
+          assert d["contains_raw_patch_or_task_text"] is False
+          print("ACTUAL_CAPACITY_COHORT_FREEZE=PASS")
+          print("MODEL_QUALITY_RESULT_GENERATED=NO")
+          PY
+      - name: Upload metadata-only frozen cohort
+        uses: actions/upload-artifact@v4
+        with:
+          name: capacity-v0-paired-cohort-${{ github.run_id }}
+          path: /tmp/capacity-v0-paired-cohort.json
+          if-no-files-found: error
+          retention-days: 21
       - name: Declare no benchmark inference
         run: |
           echo "CAPACITY_FROZEN_ALLOCATION_STATIC_ONLY=TRUE"
