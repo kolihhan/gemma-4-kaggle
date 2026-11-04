@@ -98,7 +98,9 @@ def render(root: Path, out: Path, kernel_ref: str) -> Path:
         ("/19] noop", f"/{EXPECTED_GOLD_PASS}] noop"),
     )
     for before, after in changes:
-        if source.count(before) != 1:
+        # The version occurs in both success and top-level error paths.
+        expected_occurrences = 2 if before == "topology-ab-noop-screen-v1" else 1
+        if source.count(before) != expected_occurrences:
             raise ValueError(f"no-op upstream token count drift: {before!r}")
         source = source.replace(before, after)
     compile(source, SOURCE_FILENAME, "exec")
