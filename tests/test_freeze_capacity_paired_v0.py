@@ -83,6 +83,14 @@ class FreezePairedCohortTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "insufficient"):
             self.run_with(data)
 
+    def test_archived_actual_cohort_matches_allocator_exactly(self):
+        path = ROOT / "docs/evaluation/capacity-v0-paired-cohort-2026-11-04.json"
+        archived = json.loads(path.read_text(encoding="utf-8"))
+        generated = frozen.freeze(ROOT)
+        self.assertEqual(archived, generated)
+        self.assertEqual(archived["source_selector_sha256"], frozen.replacements.FROZEN_SELECTOR)
+        self.assertFalse(archived["certifies_blind"])
+
     def test_tampering_fails_closed(self):
         operations = [
             lambda d: d.update(source_run_id=0),
