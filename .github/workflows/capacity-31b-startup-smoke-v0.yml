@@ -1,14 +1,8 @@
 name: Capacity v0 31B standalone GPU startup smoke
 
+# A GPU run requires a fresh decision after the recorded quota-exhausted push.
+# Never auto-start expensive Kaggle kernels on ordinary source pushes.
 on:
-  push:
-    branches: [exp/capacity-boundary-v0]
-    paths:
-      - "kaggle/capacity_31b_startup_v0.py"
-      - "scripts/render_capacity_31b_startup_v0.py"
-      - "tests/test_capacity_31b_startup_v0.py"
-      - "tests/test_audit_capacity_history_v0.py"
-      - ".github/workflows/capacity-31b-startup-smoke-v0.yml"
   workflow_dispatch:
 
 permissions:
@@ -56,7 +50,12 @@ jobs:
       - name: Push private 31B L4x4 startup probe (NO TASKS)
         run: |
           set -euo pipefail
-          kaggle kernels push -p "$KERNEL_DIR" --accelerator NvidiaL4 -t 5400
+          # Kaggle CLI 2.2.5 can return exit 0 despite printing a push rejection.
+          set +e
+          kaggle kernels push -p "$KERNEL_DIR" --accelerator NvidiaL4 -t 5400 > /tmp/capacity31b-push.log 2>&1
+          cli_code=$?
+          set -e
+          python scripts/check_capacity_31b_push_v0.py --log /tmp/capacity31b-push.log --client-exit-code "$cli_code"
 
       - name: Poll standalone GPU probe
         id: poll
