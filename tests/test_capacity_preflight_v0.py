@@ -88,6 +88,25 @@ class CapacityPreflightV0Tests(unittest.TestCase):
         )
         self.assertFalse(set(selected + reserve) & excluded)
 
+    def test_repository_text_exposure_scan_rejects_seen_candidate(self):
+        manifest = capacity.build_feasibility_manifest(ROOT)
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            shutil.copytree(ROOT / "docs/evaluation", repo / "docs/evaluation")
+            (repo / "docs/research").mkdir()
+            issue_id = manifest["feasibility_ids"][0]
+            (repo / "docs/research/already_inspected.md").write_text(
+                f"Earlier agent manually investigated {issue_id}\n"
+            )
+            with self.assertRaisesRegex(ValueError, "historical source mention"):
+                capacity.audit_candidate_text_mentions(repo, manifest)
+
+    def test_repository_text_exposure_scan_ignores_frozen_metadata_inputs(self):
+        manifest = capacity.build_feasibility_manifest(ROOT)
+        scan = capacity.audit_candidate_text_mentions(ROOT, manifest)
+        self.assertEqual(scan["unexpected_mentions"], [])
+        self.assertGreater(scan["scanned_files"], 0)
+
     def test_missing_provenance_is_a_hard_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / "repo"
