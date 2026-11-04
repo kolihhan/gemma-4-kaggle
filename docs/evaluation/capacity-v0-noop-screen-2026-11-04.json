@@ -1,0 +1,94 @@
+{
+  "version": "capacity-v0-noop-eligibility",
+  "source_run_id": 41786342489,
+  "source_artifact_id": 13300818683,
+  "source_artifact_zip_sha256": "fe4ccdb80f63ea3eff179dc01001bbf6697f639d09fe725e145e70b1837493eb",
+  "source_gold_action": 41782992381,
+  "selector_sha256": "4abe73d79afcabd64795e7f2eedde5682732a85290f07a09e3f8a181594fd593",
+  "kernel_ref": "kolihhan/gemma4-capacity-noop-v0-41786342489",
+  "screened": 10,
+  "noop_fail_count": 10,
+  "results": [
+    {
+      "instance_id": "rich_3935",
+      "repo": "Textualize/rich",
+      "noop_fail": true,
+      "status": "completed",
+      "test_exit_code": 1,
+      "error_type": null
+    },
+    {
+      "instance_id": "rich_3472",
+      "repo": "Textualize/rich",
+      "noop_fail": true,
+      "status": "completed",
+      "test_exit_code": 1,
+      "error_type": null
+    },
+    {
+      "instance_id": "fastapi_14458",
+      "repo": "fastapi/fastapi",
+      "noop_fail": true,
+      "status": "completed",
+      "test_exit_code": 1,
+      "error_type": null
+    },
+    {
+      "instance_id": "rich_4075",
+      "repo": "Textualize/rich",
+      "noop_fail": true,
+      "status": "completed",
+      "test_exit_code": 1,
+      "error_type": null
+    },
+    {
+      "instance_id": "rich_4076",
+      "repo": "Textualize/rich",
+      "noop_fail": true,
+      "status": "completed",
+      "test_exit_code": 1,
+      "error_type": null
+    },
+    {
+      "instance_id": "rich_3894",
+      "repo": "Textualize/rich",
+      "noop_fail": true,
+      "status": "completed",
+      "test_exit_code": 1,
+      "error_type": null
+    },
+    {
+      "instance_id": "rich_3905",
+      "repo": "Textualize/rich",
+      "noop_fail": true,
+      "status": "completed",
+      "test_exit_code": 1,
+      "error_type": null
+    },
+    {
+      "instance_id": "rich_3518",
+      "repo": "Textualize/rich",
+      "noop_fail": true,
+      "status": "completed",
+      "test_exit_code": 1,
+      "error_type": null
+    },
+    {
+      "instance_id": "fastapi_14492",
+      "repo": "fastapi/fastapi",
+      "noop_fail": true,
+      "status": "completed",
+      "test_exit_code": 1,
+      "error_type": null
+    },
+    {
+      "instance_id": "fastapi_15589",
+      "repo": "fastapi/fastapi",
+      "noop_fail": true,
+      "status": "completed",
+      "test_exit_code": 1,
+      "error_type": null
+    }
+  ],
+  "provenance_note": "Vetted metrics-only GitHub Actions artifact; no benchmark task statements, patch text, or hidden test output."
+}
