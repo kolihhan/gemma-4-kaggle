@@ -2,6 +2,26 @@
 
 Updated: 2026-11-04 (capacity v0 Git-history/31B startup gate)
 
+## Submission-first / no-new-training decision — 2026-11-04
+
+**Current user directive:** Stop self-training/LoRA expansion and prioritize the existing scored Kaggle submissions. Put the optional Colab 31B feasibility notebook and Kaggle 31B GPU gate **on hold**, rather than treating them as required next steps. This is a priority change, not a deletion or a claim that all fine-tuning is intrinsically ineffective.
+
+**Latest verified official per-user result**, from the read-only Kaggle CLI in [Actions 41585360688](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41585360688), 2026-11-04 03:13 UTC:
+- Baseline E4B submission `57879765`: `COMPLETE`, displayed Public LB **0.03**.
+- Reliability-v1 E4B submission `57921371`: `COMPLETE`, displayed Public LB **0.03**; predicted **0.08 [0.05, 0.12]**; improvement **0.00 displayed**; private scores unavailable.
+- This is **no demonstrated leaderboard improvement**, not proof that the submissions solve identical hidden tasks or that a specific mechanism failed.
+
+**Process evidence, nonblind inspected development diagnostic (17 Rich/FastAPI tasks):** **1/17 resolved**, 13 nonempty patches, 0/17 classifier-recognized pre-edit targeted witnesses, 14/17 without recognized targeted test, two observed targeted-test failures with no subsequent repair mutation, zero time/tool-cap exhaustions. These observations support a *hypothesis* of weak issue understanding → testing/repair decisions; they do not prove root-cause causality or characterize the hidden benchmark. See `docs/research/why-reliability-v1-only-003-2026-11-04.md`.
+
+**Priority decision:**
+1. **No additional self-trained verifier LoRA, no Colab training, no adaptation of the 9-example adapter into the scored submission.** Prior successful LoRA optimization is engineering evidence only; the tiny training set and lack of independent improvement do not justify promotion.
+2. **No speculative new Kaggle submission** or re-submit of the 0.03 bundle. Preserve the frozen Reliability-v1 artifact and current baseline for comparison.
+3. Focus on **submission evidence and untrained pretrained-Gemma agent design**: compare publicly reproducible successful submissions, trace evidence before edits, targeted tests and repair-after-fail; favor mechanism-first changes that can be independently checked. A 31B pretrained-model baseline remains an option *only after* a separate feasibility/compute decision; no GPU run is authorized by this status entry.
+4. Do not chase 0.03 by patching inspected 17 task IDs. For any eventual new proposal, freeze a clean denominator and prediction before evaluation; do not claim generalization from one Public LB sample.
+5. The optional Colab notebook remains committed but **not an active execution task**. Kaggle 31B quota remains blocked; no change to official submission.
+
+**Next research-only step:** rank the actual submission failure hypotheses by evidence, compare public untrained 31B and E4B policies without training, and identify one low-compute, untouched evaluation whose result would change a real decision.
+
 ## Colab 31B synthetic-only feasibility alternative — 2026-11-04
 
 **User-requested alternative to Kaggle GPU-quota blockade:** Added `notebooks/capacity_31b_colab_smoke.ipynb` on `exp/capacity-boundary-v0`. **Notebook created and statically validated; NOT executed on any Colab GPU yet.**
