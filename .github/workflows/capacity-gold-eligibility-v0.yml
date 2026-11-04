@@ -1,0 +1,127 @@
+name: Capacity v0 gold eligibility screen CPU only
+
+on:
+  push:
+    branches: [exp/capacity-boundary-v0]
+    paths:
+      - "scripts/render_capacity_gold_v0.py"
+      - "tests/test_render_capacity_gold_v0.py"
+      - ".github/workflows/capacity-gold-eligibility-v0.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: capacity-v0-gold-eligibility
+  cancel-in-progress: false
+
+jobs:
+  gold:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-capacity-gold-v0-${{ github.run_id }}
+      KERNEL_DIR: /tmp/gemma4-capacity-gold-v0
+      OUTPUT_DIR: /tmp/gemma4-capacity-gold-v0-output
+      SAFE_DIR: /tmp/gemma4-capacity-gold-v0-safe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify renderer and source integrity
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_capacity_preflight_v0 tests.test_render_capacity_gold_v0
+          python -m py_compile scripts/render_capacity_gold_v0.py
+
+      - name: Render private CPU gold reference kernel
+        run: |
+          set -euo pipefail
+          rm -rf "$KERNEL_DIR" "$OUTPUT_DIR" "$SAFE_DIR"
+          mkdir -p "$KERNEL_DIR" "$OUTPUT_DIR" "$SAFE_DIR"
+          python scripts/render_capacity_gold_v0.py \
+            --repo . --out "$KERNEL_DIR" --kernel-ref "$KERNEL_REF"
+
+      - name: Install pinned Kaggle CLI
+        run: python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+
+      - name: Submit private CPU-only eligibility kernel
+        run: |
+          set -euo pipefail
+          kaggle kernels push -p "$KERNEL_DIR" -t 5400
+
+      - name: Wait for private Kaggle CPU kernel
+        id: poll
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 300); do
+            msg="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            echo "[$attempt] $msg"
+            low="$(echo "$msg" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$low"; then terminal=complete; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$low"; then terminal=error; break; fi
+            sleep 20
+          done
+          test "$terminal" = complete
+
+      - name: Collect ONLY metadata-safe gold eligibility summary
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUTPUT_DIR" "$SAFE_DIR"
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o >/dev/null
+          test -s "$OUTPUT_DIR/verifier_gold_sweep.json"
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          from scripts.capacity_preflight_v0 import build_feasibility_manifest
+
+          result = json.loads(
+              (Path(os.environ["OUTPUT_DIR"]) / "verifier_gold_sweep.json").read_text()
+          )
+          expected = build_feasibility_manifest(Path("."))
+          ids = expected["feasibility_ids"] + expected["confirmation_reserve_ids"]
+          assert result.get("status") == "completed", result.get("status")
+          assert result.get("requested") == 16, result.get("requested")
+          assert len(result.get("results", [])) == len(ids)
+          records = []
+          for record in result["results"]:
+              records.append({
+                  "instance_id": record.get("instance_id"),
+                  "repo": record.get("repo"),
+                  "status": record.get("status"),
+                  "gold_pass": record.get("resolved") is True and record.get("test_exit_code") == 0,
+                  "test_exit_code": record.get("test_exit_code"),
+                  "error_type": record.get("error_type"),
+              })
+          assert set(x["instance_id"] for x in records) == set(ids)
+          assert len(set(x["instance_id"] for x in records)) == 16
+          safe = {
+              "version": "capacity-v0-gold-eligibility",
+              "source_selector_sha256": expected["selection_digest_sha256"],
+              "run_id": os.environ["KERNEL_REF"],
+              "count": len(records),
+              "gold_pass_count": sum(x["gold_pass"] for x in records),
+              "results": records,
+          }
+          path = Path(os.environ["SAFE_DIR"]) / "capacity-gold-metadata.json"
+          path.write_text(json.dumps(safe, indent=2, sort_keys=True) + "\n")
+          print("CAPACITY_GOLD_COUNT=", safe["count"])
+          print("CAPACITY_GOLD_PASS_COUNT=", safe["gold_pass_count"])
+          print("CAPACITY_GOLD_SUMMARY_SHA256=", hashlib.sha256(path.read_bytes()).hexdigest())
+          print("CAPACITY_GOLD_RAW_TASK_OR_PATCH_PUBLISHED=NO")
+          PY
+
+      - name: Upload metadata-safe eligibility only
+        uses: actions/upload-artifact@v4
+        with:
+          name: capacity-v0-gold-metadata-${{ github.run_id }}
+          path: /tmp/gemma4-capacity-gold-v0-safe/capacity-gold-metadata.json
+          if-no-files-found: error
+          retention-days: 21
