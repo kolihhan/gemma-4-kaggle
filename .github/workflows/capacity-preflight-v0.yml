@@ -1,0 +1,109 @@
+name: Capacity v0 CPU-only preflight
+
+on:
+  push:
+    branches: [exp/capacity-boundary-v0]
+    paths:
+      - "scripts/capacity_preflight_v0.py"
+      - "tests/test_capacity_preflight_v0.py"
+      - ".github/workflows/capacity-preflight-v0.yml"
+      - "docs/evaluation/verifier-lora-split-v0.json"
+      - "docs/evaluation/verifier-lora-train-subset-v0.json"
+      - "docs/evaluation/verifier-lora-blind-reservation-v0.json"
+      - "docs/evaluation/verifier-lora-eval-contract-v1.json"
+      - "docs/evaluation/topology-ab-manifest-v1.json"
+      - "docs/evaluation/public-corpus-summary.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Test preflight invariants
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_capacity_preflight_v0
+          python -m py_compile scripts/capacity_preflight_v0.py
+
+      - name: Render immutable model-only pairs and metadata-only denominator
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/capacity-v0
+          python scripts/capacity_preflight_v0.py --repo . --out /tmp/capacity-v0
+
+      - name: Verify official Kaggle 31B / E4B model metadata (no weights)
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          api = KaggleApi()
+          api.authenticate()
+          result = api.model_instances_list("google/gemma-4", page_size=200)
+          rows = [str(instance).lower() for instance in (result.instances or [])]
+          for fragment in (
+              "gemma-4-e4b-it-qat-w4a16-ct",
+              "gemma-4-31b-it-qat-w4a16-ct",
+          ):
+              available = any(fragment in row for row in rows)
+              print(fragment, "metadata_present=", available)
+              if not available:
+                  raise RuntimeError("expected competition model source not found; fail closed")
+          print("CAPACITY_OFFICIAL_MODEL_METADATA=PASS")
+          PY
+
+      - name: Download current official scorer wheelhouse
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/capacity-wheelhouse /tmp/capacity-wheelhouse-fixed
+          kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse \
+            -p /tmp/capacity-wheelhouse --unzip
+          python - <<'PY'
+          import shutil
+          from pathlib import Path
+          src = Path("/tmp/capacity-wheelhouse")
+          dest = Path("/tmp/capacity-wheelhouse-fixed")
+          for wheel in src.glob("*.whl"):
+              if "cutlass" in wheel.name.lower():
+                  continue
+              name = wheel.name.replace("cu128", "+cu128") if "cu128" in wheel.name and "+" not in wheel.name else wheel.name
+              shutil.copyfile(wheel, dest / name)
+          assert list(dest.glob("*.whl")), "missing official scorer wheelhouse"
+          print("CAPACITY_SCORER_WHEEL_COUNT=", len(list(dest.glob("*.whl"))))
+          PY
+
+      - name: Validate BOTH configs against official scorer schema
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            --find-links /tmp/capacity-wheelhouse-fixed \
+            /tmp/capacity-wheelhouse-fixed/adk_submission-*.whl \
+            /tmp/capacity-wheelhouse-fixed/swegemma-*.whl
+          python - <<'PY'
+          from pathlib import Path
+          from adk_submission import validate_directory
+          from adk_submission.discovery import discover_declared_models
+          from swegemma.config import build_submission_limits
+          limits, _ = build_submission_limits()
+          for name, model in [
+              ("e4b", "gemma-4-e4b-it-qat-w4a16-ct"),
+              ("31b", "gemma-4-31b-it-qat-w4a16-ct"),
+          ]:
+              directory = Path("/tmp/capacity-v0/model_pairs") / name
+              validate_directory(directory, limits=limits)
+              models = discover_declared_models(directory)
+              assert models == {model}, (name, models)
+              print(f"CAPACITY_SCHEMA_{name.upper()}=PASS")
+          print("CAPACITY_GPU_RUN=NOT_STARTED")
+          PY
