@@ -1,0 +1,106 @@
+name: Capacity v0 no-op eligibility screen CPU only
+
+on:
+  push:
+    branches: [exp/capacity-boundary-v0]
+    paths:
+      - "scripts/render_capacity_noop_v0.py"
+      - "tests/test_render_capacity_noop_v0.py"
+      - ".github/workflows/capacity-noop-eligibility-v0.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gemma4-capacity-v0-noop
+  cancel-in-progress: false
+
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-capacity-noop-v0-${{ github.run_id }}
+      KERNEL_DIR: /tmp/gemma4-capacity-noop-v0
+      OUTPUT_DIR: /tmp/gemma4-capacity-noop-v0-output
+      SAFE_DIR: /tmp/gemma4-capacity-noop-v0-safe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Unit tests and source compilation
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_render_capacity_noop_v0 tests.test_capacity_preflight_v0
+          python -m py_compile scripts/render_capacity_noop_v0.py
+
+      - name: Render a private no-model Kaggle kernel
+        run: |
+          set -euo pipefail
+          rm -rf "$KERNEL_DIR" "$OUTPUT_DIR" "$SAFE_DIR"
+          mkdir -p "$KERNEL_DIR" "$OUTPUT_DIR" "$SAFE_DIR"
+          python scripts/render_capacity_noop_v0.py --repo . --out "$KERNEL_DIR" --kernel-ref "$KERNEL_REF"
+
+      - name: Install pinned Kaggle client
+        run: python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+
+      - name: Execute private CPU no-op verification
+        run: |
+          set -euo pipefail
+          kaggle kernels push -p "$KERNEL_DIR" -t 3600
+
+      - name: Poll private Kaggle CPU
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 240); do
+            status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            echo "[$attempt] $status"
+            low="$(echo "$status" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$low"; then terminal="complete"; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$low"; then terminal="error"; break; fi
+            sleep 20
+          done
+          test "$terminal" = complete
+
+      - name: Sanitize results before publishing derived metadata
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUTPUT_DIR" "$SAFE_DIR"
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o >/dev/null
+          test -s "$OUTPUT_DIR/capacity_noop_screen.json"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from scripts.render_capacity_noop_v0 import get_gold_pass_items, GOLD_SELECTOR
+          data=json.loads((Path(os.environ["OUTPUT_DIR"])/"capacity_noop_screen.json").read_text())
+          assert data.get("status")=="completed",data.get("status")
+          assert data.get("version")=="capacity-v0-noop-screen-v1",data.get("version")
+          inputs=get_gold_pass_items(Path("."))
+          expected={x["instance_id"] for x in inputs}
+          records=data.get("results",[])
+          assert data.get("requested")==10 and len(records)==10, data.get("requested")
+          assert {x.get("instance_id") for x in records}==expected
+          rows=[]
+          for x in records:
+            good=x.get("status")=="completed" and x.get("resolved") is False and isinstance(x.get("test_exit_code"),int) and x.get("test_exit_code")!=0
+            rows.append({"instance_id":x.get("instance_id"),"repo":x.get("repo"),"noop_fail":good,"status":x.get("status"),"test_exit_code":x.get("test_exit_code"),"error_type":x.get("error_type")})
+          safe={"version":"capacity-v0-noop-eligibility","source_gold_action":41782992381,"selector_sha256":GOLD_SELECTOR,"kernel_ref":os.environ["KERNEL_REF"],"screened":len(rows),"noop_fail_count":sum(r["noop_fail"] for r in rows),"results":rows}
+          path=Path(os.environ["SAFE_DIR"])/"capacity-noop-metadata.json"
+          path.write_text(json.dumps(safe,indent=2,sort_keys=True)+"\n")
+          print("CAPACITY_NOOP_SCREENED=",len(rows))
+          print("CAPACITY_NOOP_FAIL_COUNT=",safe["noop_fail_count"])
+          print("CAPACITY_NOOP_RAW_TASK_OR_PATCH_PUBLISHED=NO")
+          PY
+
+      - name: Upload safe derived metrics only
+        uses: actions/upload-artifact@v4
+        with:
+          name: capacity-v0-noop-metadata-${{ github.run_id }}
+          path: /tmp/gemma4-capacity-noop-v0-safe/capacity-noop-metadata.json
+          if-no-files-found: error
+          retention-days: 21
