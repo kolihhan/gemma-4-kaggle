@@ -1,0 +1,140 @@
+{
+  "artifact_id": 13308702997,
+  "artifact_zip_sha256": "944b8acaac1e5f349f81bb0c941348dbc7c5694a57a48ce0ea843023a416711b",
+  "contains_raw_patch_or_task_text": false,
+  "gold_pass_count": 10,
+  "results": [
+    {
+      "error_type": null,
+      "gold_pass": true,
+      "instance_id": "rich_3063",
+      "repo": "Textualize/rich",
+      "status": "completed",
+      "test_exit_code": 0
+    },
+    {
+      "error_type": null,
+      "gold_pass": true,
+      "instance_id": "rich_3454",
+      "repo": "Textualize/rich",
+      "status": "completed",
+      "test_exit_code": 0
+    },
+    {
+      "error_type": null,
+      "gold_pass": true,
+      "instance_id": "rich_3676",
+      "repo": "Textualize/rich",
+      "status": "completed",
+      "test_exit_code": 0
+    },
+    {
+      "error_type": null,
+      "gold_pass": true,
+      "instance_id": "rich_3470",
+      "repo": "Textualize/rich",
+      "status": "completed",
+      "test_exit_code": 0
+    },
+    {
+      "error_type": null,
+      "gold_pass": false,
+      "instance_id": "fastapi_13207",
+      "repo": "fastapi/fastapi",
+      "status": "completed",
+      "test_exit_code": 2
+    },
+    {
+      "error_type": null,
+      "gold_pass": true,
+      "instance_id": "fastapi_14301",
+      "repo": "fastapi/fastapi",
+      "status": "completed",
+      "test_exit_code": 0
+    },
+    {
+      "error_type": null,
+      "gold_pass": true,
+      "instance_id": "fastapi_11194",
+      "repo": "fastapi/fastapi",
+      "status": "completed",
+      "test_exit_code": 0
+    },
+    {
+      "error_type": null,
+      "gold_pass": false,
+      "instance_id": "fastapi_11355",
+      "repo": "fastapi/fastapi",
+      "status": "completed",
+      "test_exit_code": 2
+    },
+    {
+      "error_type": null,
+      "gold_pass": false,
+      "instance_id": "fastapi_14978",
+      "repo": "fastapi/fastapi",
+      "status": "completed",
+      "test_exit_code": 2
+    },
+    {
+      "error_type": null,
+      "gold_pass": true,
+      "instance_id": "fastapi_14419",
+      "repo": "fastapi/fastapi",
+      "status": "completed",
+      "test_exit_code": 0
+    },
+    {
+      "error_type": null,
+      "gold_pass": false,
+      "instance_id": "fastapi_15785",
+      "repo": "fastapi/fastapi",
+      "status": "completed",
+      "test_exit_code": 1
+    },
+    {
+      "error_type": null,
+      "gold_pass": false,
+      "instance_id": "fastapi_14459",
+      "repo": "fastapi/fastapi",
+      "status": "completed",
+      "test_exit_code": 2
+    },
+    {
+      "error_type": null,
+      "gold_pass": true,
+      "instance_id": "fastapi_9753",
+      "repo": "fastapi/fastapi",
+      "status": "completed",
+      "test_exit_code": 0
+    },
+    {
+      "error_type": null,
+      "gold_pass": false,
+      "instance_id": "fastapi_13786",
+      "repo": "fastapi/fastapi",
+      "status": "completed",
+      "test_exit_code": 2
+    },
+    {
+      "error_type": null,
+      "gold_pass": true,
+      "instance_id": "fastapi_14794",
+      "repo": "fastapi/fastapi",
+      "status": "completed",
+      "test_exit_code": 0
+    },
+    {
+      "error_type": null,
+      "gold_pass": true,
+      "instance_id": "fastapi_15800",
+      "repo": "fastapi/fastapi",
+      "status": "completed",
+      "test_exit_code": 0
+    }
+  ],
+  "screened": 16,
+  "source_run_id": 41803516800,
+  "source_selector_sha256": "4abe73d79afcabd64795e7f2eedde5682732a85290f07a09e3f8a181594fd593",
+  "version": "capacity-v0-replacement-gold-eligibility"
+}
