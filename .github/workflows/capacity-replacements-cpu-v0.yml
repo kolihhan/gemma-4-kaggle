@@ -1,0 +1,87 @@
+name: Capacity v0 metadata-only replacement queue CPU gate
+
+on:
+  push:
+    branches: [exp/capacity-boundary-v0]
+    paths:
+      - "scripts/build_capacity_replacements_v0.py"
+      - "tests/test_build_capacity_replacements_v0.py"
+      - "docs/evaluation/capacity-v0-noop-screen-2026-11-04.json"
+      - ".github/workflows/capacity-replacements-cpu-v0.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  replacement-queue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Contract tests and source compilation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_build_capacity_replacements_v0 tests.test_capacity_preflight_v0
+          python -m py_compile scripts/build_capacity_replacements_v0.py scripts/capacity_preflight_v0.py
+
+      - name: Produce preregistered replacement queue from metadata only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/build_capacity_replacements_v0.py --repo . --out /tmp/capacity-v0-replacements.json
+
+      - name: Audit candidate queue against preselection Git source history
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.audit_capacity_history_v0 import scan_history
+
+          data=json.loads(Path("/tmp/capacity-v0-replacements.json").read_text(encoding="utf-8"))
+          # Predefine a small extra cushion for gold/no-op failures, not a model-result-based choice.
+          needed={
+              repo:sum(row[repo] for row in data["missing_by_cohort"].values())
+              for repo in data["queues"]
+          }
+          candidates = [
+              task
+              for repo, queue in data["queues"].items()
+              for task in queue[:min(len(queue), 2*needed[repo]+2)]
+          ]
+          if len(candidates) != len(set(candidates)):
+              raise SystemExit("history audit candidate duplicate")
+          result=scan_history(Path(".").resolve(), candidates)
+          print("HISTORY_REVISIONS=",result["checked_revisions"])
+          print("HISTORY_CANDIDATES=",len(candidates))
+          print("HISTORY_PRESELECTION_EXPOSED_COUNT=",len(result["historical_exposed_ids"]))
+          print("HISTORY_CERTIFIES_BLIND=",result["certifies_blind"])
+          if result["historical_exposed_ids"]:
+              raise SystemExit("preselection source exposure: fail closed before candidate screening")
+          result["queue_source_selector_sha256"]=data["source_selector_sha256"]
+          result["note"]="Tracked Git source only; no assertion about old private artifacts or human inspection"
+          Path("/tmp/capacity-v0-replacements-history.json").write_text(
+              json.dumps(result,indent=2,sort_keys=True)+"\n",encoding="utf-8"
+          )
+          PY
+
+      - name: Upload safe queue and historical provenance metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capacity-v0-replacement-queue-${{ github.run_id }}
+          path: |
+            /tmp/capacity-v0-replacements.json
+            /tmp/capacity-v0-replacements-history.json
+          if-no-files-found: warn
+          retention-days: 21
