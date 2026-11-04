@@ -1,0 +1,152 @@
+name: Capacity v0 replacement gold-control CPU only
+
+on:
+  push:
+    branches: [exp/capacity-boundary-v0]
+    paths:
+      - "scripts/render_capacity_replacement_gold_v0.py"
+      - "tests/test_render_capacity_replacement_gold_v0.py"
+      - ".github/workflows/capacity-replacement-gold-cpu-v0.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: capacity-v0-replacement-gold-cpu
+  cancel-in-progress: false
+
+jobs:
+  replacement-gold:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-capacity-replacement-gold-${{ github.run_id }}
+      KERNEL_DIR: /tmp/capacity-replacement-gold-kernel
+      OUTPUT_DIR: /tmp/capacity-replacement-gold-private
+      SAFE_DIR: /tmp/capacity-replacement-gold-safe
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Static tests and preregistered source-history gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_build_capacity_replacements_v0 tests.test_render_capacity_replacement_gold_v0
+          python -m py_compile scripts/render_capacity_replacement_gold_v0.py
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.audit_capacity_history_v0 import scan_history
+          from scripts.render_capacity_replacement_gold_v0 import create_manifest
+          root=Path(".").resolve()
+          ids=[x["instance_id"] for x in create_manifest(root)["holdout"]]
+          audit=scan_history(root,ids)
+          assert audit["candidate_count"]==16, audit
+          assert not audit["historical_exposed_ids"],audit["historical_exposed_ids"]
+          assert audit["checked_revisions"]>=467,audit["checked_revisions"]
+          print("REPLACEMENT_HISTORICAL_GIT_SOURCE_AUDIT=PASS")
+          print("REPLACEMENT_IDS_HISTORICALLY_CERTIFIED_BLIND=NO")
+          PY
+
+      - name: Render private CPU reference-patch gold gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$KERNEL_DIR" "$OUTPUT_DIR" "$SAFE_DIR"
+          mkdir -p "$KERNEL_DIR" "$OUTPUT_DIR" "$SAFE_DIR"
+          python scripts/render_capacity_replacement_gold_v0.py --repo . --out "$KERNEL_DIR" --kernel-ref "$KERNEL_REF"
+
+      - name: Install pinned Kaggle CLI
+        run: python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+
+      - name: Launch private Kaggle CPU only with confirmed push
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          kaggle kernels push -p "$KERNEL_DIR" -t 5400 > /tmp/replacement-kernel-push.log 2>&1
+          exit_code=$?
+          set -e
+          cat /tmp/replacement-kernel-push.log
+          python scripts/check_capacity_31b_push_v0.py --log /tmp/replacement-kernel-push.log --client-exit-code "$exit_code"
+
+      - name: Poll CPU Kaggle kernel
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 300); do
+            output="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            echo "[$attempt] $output"
+            lower="$(printf '%s' "$output" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal=complete; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal=error; break; fi
+            sleep 20
+          done
+          echo "terminal=${terminal:-timeout}" >> "$GITHUB_OUTPUT"
+          test "$terminal" = complete
+
+      - name: Sanitize private reference-control result to metadata-only evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o >/dev/null
+          test -s "$OUTPUT_DIR/verifier_gold_sweep.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from scripts.render_capacity_replacement_gold_v0 import create_manifest
+          output=Path(os.environ["OUTPUT_DIR"])/"verifier_gold_sweep.json"
+          data=json.loads(output.read_text(encoding="utf-8"))
+          inputs=create_manifest(Path("."))
+          expected=[x["instance_id"] for x in inputs["holdout"]]
+          assert data.get("status")=="completed",data.get("status")
+          assert data.get("requested")==16,data.get("requested")
+          results=data.get("results",[])
+          assert len(results)==16,len(results)
+          assert [row.get("instance_id") for row in results]==expected,expected
+          rows=[]
+          for got,want in zip(results,inputs["holdout"]):
+            assert got.get("repo")==want["repo"], got.get("instance_id")
+            passed=got.get("status")=="completed" and got.get("resolved") is True and got.get("test_exit_code")==0
+            rows.append({
+                "instance_id":want["instance_id"],
+                "repo":want["repo"],
+                "gold_pass":passed,
+                "test_exit_code":got.get("test_exit_code"),
+                "status":got.get("status"),
+                "error_type":got.get("error_type"),
+            })
+          safe={
+              "version":"capacity-v0-replacement-gold-eligibility",
+              "source_run_id":int(os.environ["GITHUB_RUN_ID"]),
+              "source_selector_sha256":inputs["selector_sha256"],
+              "gold_pass_count":sum(row["gold_pass"] for row in rows),
+              "screened":len(rows),
+              "results":rows,
+              "contains_raw_patch_or_task_text":False,
+          }
+          dest=Path(os.environ["SAFE_DIR"])/"replacement-gold-metadata.json"
+          dest.write_text(json.dumps(safe,indent=2,sort_keys=True)+"\n",encoding="utf-8")
+          print("REPLACEMENT_GOLD_SCREENED=",safe["screened"])
+          print("REPLACEMENT_GOLD_PASS_COUNT=",safe["gold_pass_count"])
+          print("REPLACEMENT_GOLD_RAW_TASK_PATCH_PUBLISHED=NO")
+          PY
+
+      - name: Upload metadata-only gold evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capacity-replacement-gold-${{ github.run_id }}
+          path: ${{ env.SAFE_DIR }}/replacement-gold-metadata.json
+          if-no-files-found: warn
+          retention-days: 21
