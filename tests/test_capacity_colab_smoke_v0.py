@@ -56,7 +56,7 @@ class CapacityColabSmokeContractTests(unittest.TestCase):
         self.assertIn("raise RuntimeError", self.sources[1])
         self.assertIn("if not eligible:", self.sources[1])
         self.assertNotIn("pip", self.sources[1])
-        self.assertNotIn("vllm", self.sources[1].lower())
+        self.assertNotIn("subprocess.Popen", self.sources[1])
         self.assertIn("pip", self.sources[2])
         self.assertIn("urlopen", self.sources[3])
         self.assertIn("Popen", self.sources[4])
