@@ -16,6 +16,8 @@ from scripts import render_capacity_replacement_noop_v0 as noop_renderer
 
 NOOP_METADATA = "docs/evaluation/capacity-v0-replacement-noop-2026-11-04.json"
 NOOP_RUN_ID = 41817822401
+NOOP_ARTIFACT_ID = 13315174170
+NOOP_ARTIFACT_SHA256 = "14b7d69c2afd5d04075e770cbf70215bded62b9b73156b5cf8aff19c6deb42c1"
 EXPECTED_ROWS = 10
 QUOTAS = {"feasibility": 2, "confirmation": 6}
 
@@ -26,6 +28,8 @@ def replacement_eligible(root: Path, metadata_path: Path | None = None) -> set[s
     if (
         data.get("version") != "capacity-v0-replacement-noop-eligibility"
         or data.get("source_run_id") != NOOP_RUN_ID
+        or data.get("source_artifact_id") != NOOP_ARTIFACT_ID
+        or data.get("source_artifact_zip_sha256") != NOOP_ARTIFACT_SHA256
         or data.get("source_gold_run_id") != noop_renderer.GOLD_RUN
         or data.get("source_gold_artifact_id") != noop_renderer.GOLD_ARTIFACT
         or data.get("source_gold_artifact_zip_sha256") != noop_renderer.GOLD_ARTIFACT_SHA256
