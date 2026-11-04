@@ -51,6 +51,9 @@ class CapacityPreflightV0Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / "repo"
             shutil.copytree(ROOT / "submission", repo / "submission")
+            (repo / "scripts").mkdir()
+            shutil.copy2(ROOT / "scripts" / "render_reliability_v1_kernel.py",
+                         repo / "scripts" / "render_reliability_v1_kernel.py")
             agent = repo / "submission" / "agent.yaml"
             agent.write_text(agent.read_text() + "\n# drift\n")
             with self.assertRaisesRegex(ValueError, "hash"):
