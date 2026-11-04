@@ -1,0 +1,107 @@
+{
+  "version": "capacity-v0-gold-eligibility",
+  "source_run_id": 41782992381,
+  "source_artifact_id": 13299564669,
+  "source_artifact_sha256": "12a7ff7a377258eee08dd639ebd60726bdeb260649892c451c1d47d81e9e2f",
+  "source_selector_sha256": "4abe73d79afcabd64795e7f2eedde5682732a85290f07a09e3f8a181594fd593",
+  "screened": 16,
+  "gold_pass_count": 10,
+  "results": [
+    {
+      "instance_id": "rich_3935",
+      "repo": "Textualize/rich",
+      "gold_pass": true,
+      "test_exit_code": 0
+    },
+    {
+      "instance_id": "rich_3472",
+      "repo": "Textualize/rich",
+      "gold_pass": true,
+      "test_exit_code": 0
+    },
+    {
+      "instance_id": "fastapi_14349",
+      "repo": "fastapi/fastapi",
+      "gold_pass": false,
+      "test_exit_code": 2
+    },
+    {
+      "instance_id": "fastapi_14458",
+      "repo": "fastapi/fastapi",
+      "gold_pass": true,
+      "test_exit_code": 0
+    },
+    {
+      "instance_id": "rich_3296",
+      "repo": "Textualize/rich",
+      "gold_pass": false,
+      "test_exit_code": 1
+    },
+    {
+      "instance_id": "rich_4075",
+      "repo": "Textualize/rich",
+      "gold_pass": true,
+      "test_exit_code": 0
+    },
+    {
+      "instance_id": "rich_4076",
+      "repo": "Textualize/rich",
+      "gold_pass": true,
+      "test_exit_code": 0
+    },
+    {
+      "instance_id": "rich_3894",
+      "repo": "Textualize/rich",
+      "gold_pass": true,
+      "test_exit_code": 0
+    },
+    {
+      "instance_id": "rich_3905",
+      "repo": "Textualize/rich",
+      "gold_pass": true,
+      "test_exit_code": 0
+    },
+    {
+      "instance_id": "rich_3518",
+      "repo": "Textualize/rich",
+      "gold_pass": true,
+      "test_exit_code": 0
+    },
+    {
+      "instance_id": "fastapi_14492",
+      "repo": "fastapi/fastapi",
+      "gold_pass": true,
+      "test_exit_code": 0
+    },
+    {
+      "instance_id": "fastapi_14953",
+      "repo": "fastapi/fastapi",
+      "gold_pass": false,
+      "test_exit_code": 2
+    },
+    {
+      "instance_id": "fastapi_14430",
+      "repo": "fastapi/fastapi",
+      "gold_pass": false,
+      "test_exit_code": 2
+    },
+    {
+      "instance_id": "fastapi_12942",
+      "repo": "fastapi/fastapi",
+      "gold_pass": false,
+      "test_exit_code": 2
+    },
+    {
+      "instance_id": "fastapi_14186",
+      "repo": "fastapi/fastapi",
+      "gold_pass": false,
+      "test_exit_code": 2
+    },
+    {
+      "instance_id": "fastapi_15589",
+      "repo": "fastapi/fastapi",
+      "gold_pass": true,
+      "test_exit_code": 0
+    }
+  ]
+}
