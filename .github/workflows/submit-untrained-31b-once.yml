@@ -1,0 +1,189 @@
+name: Submit untrained Gemma 4 31B once
+
+on:
+  push:
+    branches: [exp/capacity-boundary-v0]
+    paths:
+      - ".github/workflows/submit-untrained-31b-once.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gemma4-untrained-31b-official-submission-once
+  cancel-in-progress: false
+
+jobs:
+  official-31b-submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      COMPETITION: gemma-4-developer-agent
+      CANDIDATE_MARKER: "untrained-31b-v0:same-policy-as-reliability-v1"
+      KERNEL_REF: kolihhan/gemma4-untrained-31b-submit-${{ github.run_id }}
+      BUILD_DIR: /tmp/gemma4-untrained-31b-kernel
+      RESULTS_DIR: /tmp/gemma4-untrained-31b-results
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify frozen E4B control and model-only 31B treatment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_untrained_31b_submission tests.test_reliability_v1_deploy
+          python -m py_compile scripts/render_untrained_31b_submission.py
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.render_untrained_31b_submission import payload, create_zip_bytes, sha, NEW_MODEL, BASE_MODEL
+          baseline, trial=payload(Path(".").resolve())
+          assert baseline["agent.yaml"].count("model: "+BASE_MODEL)==1
+          assert trial["agent.yaml"].count("model: "+NEW_MODEL)==1
+          assert trial["agent.yaml"].replace(NEW_MODEL,BASE_MODEL,1)==baseline["agent.yaml"]
+          assert sum(baseline[n]!=trial[n] for n in baseline)==1
+          print("MODEL_ONLY_INTERVENTION=PASS")
+          print("UNTRAINED_31B_ZIP_SHA256=", sha(create_zip_bytes(trial)))
+          PY
+      - name: Install pinned Kaggle CLI
+        run: python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+      - name: Check Kaggle submission slot and deduplicate
+        id: slot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RESULTS_DIR"
+          kaggle competitions submissions "$COMPETITION" -v > "$RESULTS_DIR/current-submissions-private.csv"
+          python - <<'PY'
+          import csv, os
+          from pathlib import Path
+          path=Path(os.environ["RESULTS_DIR"])/"current-submissions-private.csv"
+          rows=list(csv.DictReader(path.open(newline="",encoding="utf-8-sig")))
+          marker=os.environ["CANDIDATE_MARKER"]
+          prior=[r for r in rows if marker in (r.get("description") or "")]
+          pending=[r for r in rows if "PENDING" in (r.get("status") or "").upper() or "RUNNING" in (r.get("status") or "").upper()]
+          print("CURRENT_SUBMISSIONS=",len(rows))
+          print("ALREADY_SUBMITTED_31B=",bool(prior))
+          print("OTHER_PENDING_SUBMISSIONS=",len(pending))
+          with open(os.environ["GITHUB_OUTPUT"],"a",encoding="utf-8") as out:
+              out.write(f"already_submitted={'true' if prior else 'false'}\n")
+          if pending and not prior:
+              raise SystemExit("BLOCKED: previous submission still pending; no duplicate attempt")
+          PY
+      - name: Render private Kaggle CPU code builder (no weights, no GPU)
+        if: steps.slot.outputs.already_submitted != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$BUILD_DIR"
+          python scripts/render_untrained_31b_submission.py --repo . --out "$BUILD_DIR" --kernel-ref "$KERNEL_REF"
+      - name: Push private Kaggle CPU builder (fail-closed)
+        if: steps.slot.outputs.already_submitted != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          kaggle kernels push -p "$BUILD_DIR" -t 3600 > /tmp/gemma4-31b-builder-push.log 2>&1
+          code=$?
+          set -e
+          cat /tmp/gemma4-31b-builder-push.log
+          python scripts/check_capacity_31b_push_v0.py --log /tmp/gemma4-31b-builder-push.log --client-exit-code "$code"
+      - name: Verify uploaded builder reached COMPLETE
+        if: steps.slot.outputs.already_submitted != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 45); do
+            status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            echo "builder poll $attempt: $status"
+            low="$(printf '%s' "$status" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$low"; then terminal=complete; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$low"; then terminal=error; break; fi
+            sleep 20
+          done
+          test "$terminal" = complete
+      - name: Validate remote kernel output zip SHA and files
+        if: steps.slot.outputs.already_submitted != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle kernels output "$KERNEL_REF" -p "$RESULTS_DIR" -o >/dev/null
+          test -s "$RESULTS_DIR/submission.zip"
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.render_untrained_31b_submission import payload,create_zip_bytes,sha,NEW_MODEL
+          import os,zipfile
+          root=Path(".").resolve()
+          _,trial=payload(root)
+          path=Path(os.environ["RESULTS_DIR"])/"submission.zip"
+          expected=sha(create_zip_bytes(trial))
+          actual=sha(path.read_bytes())
+          assert actual==expected, (expected,actual)
+          with zipfile.ZipFile(path) as archive:
+              assert sorted(archive.namelist())==sorted(trial)
+              assert all(archive.read(n)==t.encode("utf-8") for n,t in trial.items())
+          print("PRIVATE_KAGGLE_31B_ZIP_VALIDATED=PASS")
+          print("ZIP_SHA256=",actual)
+          print("BASE_MODEL=",NEW_MODEL)
+          print("NO_ADAPTERS_OR_TRAINING=TRUE")
+          PY
+      - name: Submit untrained 31B from Kaggle code kernel exactly once
+        if: steps.slot.outputs.already_submitted != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os,requests
+          from pathlib import Path
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          api=KaggleApi(); api.authenticate()
+          marker=os.environ["CANDIDATE_MARKER"]
+          result={"competition":os.environ["COMPETITION"],"description":marker,"kernel":os.environ["KERNEL_REF"],"kernel_version":1}
+          try:
+              response=api.competition_submit_code(
+                  file_name="submission.zip",message=marker,
+                  competition=os.environ["COMPETITION"],
+                  kernel=os.environ["KERNEL_REF"],
+                  kernel_version=1,quiet=False,
+              )
+              result["accepted"]=True
+              result["response"]=response.to_dict() if hasattr(response,"to_dict") else repr(response)
+              print("KAGGLE_UNTRAINED_31B_SUBMISSION_ACCEPTED=",json.dumps(result,sort_keys=True,default=str))
+          except requests.HTTPError as exc:
+              result["accepted"]=False
+              result["http_status"]=exc.response.status_code if exc.response is not None else None
+              result["response_text"]=(exc.response.text if exc.response is not None else "")[:2500]
+              print("KAGGLE_UNTRAINED_31B_SUBMISSION_REJECTED=",json.dumps(result,sort_keys=True))
+              raise
+          finally:
+              Path(os.environ["RESULTS_DIR"],"submission-result.json").write_text(json.dumps(result,indent=2,sort_keys=True,default=str)+"\n")
+          PY
+      - name: Read back submitted score status
+        if: steps.slot.outputs.already_submitted != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle competitions submissions "$COMPETITION" -v > "$RESULTS_DIR/submissions-after-private.csv"
+          python - <<'PY'
+          import csv,os
+          from pathlib import Path
+          path=Path(os.environ["RESULTS_DIR"])/"submissions-after-private.csv"
+          matches=[row for row in csv.DictReader(path.open(newline="",encoding="utf-8-sig")) if os.environ["CANDIDATE_MARKER"] in (row.get("description") or "")]
+          if not matches:
+              raise SystemExit("Submission API reported success but no matching listing yet; check Kaggle directly before retrying")
+          for row in matches:
+              print("UNTRAINED_31B_VISIBLE=", {k:row.get(k) for k in ("ref","date","status","publicScore","privateScore")})
+          PY
+      - name: Upload sanitized submit receipt only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: untrained-31b-submit-receipt-${{ github.run_id }}
+          path: ${{ env.RESULTS_DIR }}/submission-result.json
+          if-no-files-found: warn
+          retention-days: 30
