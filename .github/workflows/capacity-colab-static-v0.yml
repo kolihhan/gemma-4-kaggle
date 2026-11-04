@@ -1,0 +1,31 @@
+name: Capacity 31B Colab notebook static gate
+
+on:
+  push:
+    branches: [exp/capacity-boundary-v0]
+    paths:
+      - "notebooks/capacity_31b_colab_smoke.ipynb"
+      - "tests/test_capacity_colab_smoke_v0.py"
+      - ".github/workflows/capacity-colab-static-v0.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-colab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate notebook syntax and frozen synthetic-only contract
+        run: |
+          python -m unittest -v tests.test_capacity_colab_smoke_v0
+      - name: Check GPU is not used
+        run: |
+          echo "COLAB_NOTEBOOK_STATIC_ONLY=YES"
+          echo "KAGGLE_GPU_USED=NO"
+          echo "COLAB_RUNTIME_EXECUTED=NO"
