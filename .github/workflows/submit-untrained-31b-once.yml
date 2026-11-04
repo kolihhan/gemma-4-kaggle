@@ -80,7 +80,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$BUILD_DIR"
-          python scripts/render_untrained_31b_submission.py --repo . --out "$BUILD_DIR" --kernel-ref "$KERNEL_REF"
+          python -m scripts.render_untrained_31b_submission --repo . --out "$BUILD_DIR" --kernel-ref "$KERNEL_REF"
       - name: Push private Kaggle CPU builder (fail-closed)
         if: steps.slot.outputs.already_submitted != 'true'
         shell: bash
