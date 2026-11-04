@@ -2,6 +2,19 @@
 
 Updated: 2026-11-04 (capacity v0 Git-history/31B startup gate)
 
+## Colab 31B synthetic-only feasibility alternative — 2026-11-04
+
+**User-requested alternative to Kaggle GPU-quota blockade:** Added `notebooks/capacity_31b_colab_smoke.ipynb` on `exp/capacity-boundary-v0`. **Notebook created and statically validated; NOT executed on any Colab GPU yet.**
+
+- [Static CI 41805674499](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41805674499): PASS; source/cell syntax and no-competition-data contract verified.
+- Model checkpoint: `google/gemma-4-31B-it-qat-w4a16-ct`; frozen original synthetic probe code pinned at commit `b13087b402ceef0aa0aa2ce55d1f7aa2c99108c3` and verified with Git blob hash; 32K max context, 0.90 GPU-memory utilization, no LoRA.
+- Fail-closed resource gate before installs/downloads: exactly one GPU with >=32 GiB **free** GPU memory, compute capability >=8.0, >=30 GiB free disk. These are screening heuristics and do not guarantee model fit. A 16 GiB Colab T4 fails by design; Colab GPU types/quotas are not guaranteed.
+- For qualifying Colab runtimes, install vLLM, attempt one 31B TP=1 startup, then reuse original **plain / scalar tool / array tool synthetic probes**. Save only structured scalar metrics locally; do not mirror raw data or auto-upload logs.
+- **Scientific boundary:** Colab uses a separate GPU topology (TP=1) and installed vLLM, not the four-L4 Kaggle official scorer wheelhouse. A successful Colab probe is merely supplementary model/parser feasibility evidence. It does not unblock the Kaggle quota, validate official scorer equivalence, score tasks, or authorize any 4+12 model A/B or leaderboard submission.
+- A Colab account owner must attach/select a capable GPU and execute the notebook. No integrated Colab execution was available from this GitHub-only workflow. Future results must be recorded with GPU identity, versions, error classification, and whether they were reproduced in the official Kaggle environment.
+
+**Next action:** User runs the notebook in Colab on a compatible GPU and shares the metrics JSON. On failure, distinguish insufficient hardware / installation / model initialization / parser errors. Keep Kaggle 31B blocked until an official compatible kernel can actually start.
+
 ## Capacity v0 replacement checkpoint — 2026-11-04 (CPU-only)
 
 **Verified original eligibility (no model):** original 16 metadata-preselected IDs yielded **10/16 gold-pass** and, for those exact ten gold-pass IDs, **10/10 no-op-fail**. The per-ID no-op record was downloaded and checked against the original private [run 41786342489](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41786342489), artifact `13300818683`, then retained as metadata-only `docs/evaluation/capacity-v0-noop-screen-2026-11-04.json`. No raw patches, issue text, or hidden tests were committed.
