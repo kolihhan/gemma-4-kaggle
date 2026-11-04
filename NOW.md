@@ -2,6 +2,19 @@
 
 Updated: 2026-11-04 (capacity v0 Git-history/31B startup gate)
 
+## Untrained Gemma 4 31B official Kaggle submission — 2026-11-04
+
+**OFFICIAL SUBMISSION ACCEPTED; SCORING PENDING.** User explicitly authorized submitting an untrained pretrained Gemma 4 31B variant without running any self-training or LoRA, superseding the prior research-only no-submit hold. This is a **new untrained model-only comparison**, not completion of the frozen local 4+12 capacity experiment.
+
+- **Kaggle submission ref:** `57983156`; accepted via Kaggle API at **2026-11-04 11:38:59.950 UTC**. Read-back from Kaggle CLI shows `SubmissionStatus.PENDING`, Public score blank and Private score blank at ~11:39 UTC.
+- **Submission description:** `untrained-31b-v0:same-policy-as-reliability-v1`.
+- [GitHub Actions successful workflow 41822538668](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41822538668), job `126548987873`. Kaggle private **CPU-only ZIP builder** kernel `kolihhan/gemma4-untrained-31b-submit-41822538668`, version **1**. No Kaggle notebook GPU was used to build the artifact. **Official scored runtime may use Kaggle GPUs**, as required by competition.
+- **ZIP SHA-256:** `42ac2e15e42118b51a2e8835ad5fc5e51cbbdfb472e65e3b8720b38b69738820`. Workflow fetched the private builder's `submission.zip` and verified exact byte-for-byte SHA and every member against deterministic local build before calling `competition_submit_code`.
+- Source E4B Reliability-v1 submission ref `57921371` was **COMPLETE, Public LB 0.03**. The new 31B submission changes **only `agent.yaml` root model field** from `gemma-4-e4b-it-qat-w4a16-ct` to `gemma-4-31b-it-qat-w4a16-ct`. All five frozen source files are hash-validated, remaining prompt/tools/sampling/budgets unchanged. **No adapters or self-training**. Static contract tests and Kaggle read-back passed.
+- Relevant new sources: `scripts/render_untrained_31b_submission.py`, `tests/test_untrained_31b_submission.py`, `.github/workflows/submit-untrained-31b-once.yml`. First workflow attempt `41822409300` failed in local Python import before Kaggle kernel creation; fixed module entry, then accepted on second workflow run. The submit workflow includes pre-submit dedupe and pending-slot check to prevent duplicate submissions.
+- **No scored result yet.** The Public LB may differ due to model class, model/runtime topology, throughput, and host epoch. No model-capacity causal claim or task-level correctness comparison can be made just from future LB delta. Do not create another 31B submission until this ID is terminal and reviewed; do not silently tune the E4B prompt to this outcome.
+- Next read-only check: `kaggle competitions submission 57983156` or `kaggle competitions submissions gemma-4-developer-agent -v`. Record terminal public score, submission status, and elapsed time with exact probe timestamp. Keep frozen 4+12 preselected cohort unexposed unless independently authorized for a separate experiment.
+
 ## Capacity v0 double-eligibility + frozen 4+12 cohort — 2026-11-04
 
 **Actual CPU-only execution completed (no model, no training, no GPU, no scored Kaggle submission).**
