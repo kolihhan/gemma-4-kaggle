@@ -1,0 +1,127 @@
+name: Capacity v0 31B standalone GPU startup smoke
+
+on:
+  push:
+    branches: [exp/capacity-boundary-v0]
+    paths:
+      - "kaggle/capacity_31b_startup_v0.py"
+      - "scripts/render_capacity_31b_startup_v0.py"
+      - "tests/test_capacity_31b_startup_v0.py"
+      - ".github/workflows/capacity-31b-startup-smoke-v0.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gemma4-capacity-v0-31b-startup
+  cancel-in-progress: false
+
+jobs:
+  startup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-capacity31b-startup-v0-${{ github.run_id }}
+      KERNEL_DIR: /tmp/gemma4-capacity31b-startup-v0
+      OUTPUT_DIR: /tmp/gemma4-capacity31b-startup-v0-output
+      SAFE_DIR: /tmp/gemma4-capacity31b-startup-v0-safe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Static unit tests and frozen E4B control contract
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_capacity_31b_startup_v0 tests.test_capacity_preflight_v0
+          python -m py_compile kaggle/capacity_31b_startup_v0.py scripts/render_capacity_31b_startup_v0.py
+          rm -rf /tmp/gemma4-capacity-control-check
+          python scripts/capacity_preflight_v0.py --repo . --out /tmp/gemma4-capacity-control-check
+          test -f /tmp/gemma4-capacity-control-check/model_pairs/31b/agent.yaml
+
+      - name: Render one private L4x4 synthetic-only kernel
+        run: |
+          set -euo pipefail
+          rm -rf "$KERNEL_DIR" "$OUTPUT_DIR" "$SAFE_DIR"
+          mkdir -p "$OUTPUT_DIR" "$SAFE_DIR"
+          python scripts/render_capacity_31b_startup_v0.py --repo . --out "$KERNEL_DIR" --kernel-ref "$KERNEL_REF"
+
+      - name: Install pinned Kaggle client
+        run: python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+
+      - name: Push private 31B L4x4 startup probe (NO TASKS)
+        run: |
+          set -euo pipefail
+          kaggle kernels push -p "$KERNEL_DIR" --accelerator NvidiaL4 -t 5400
+
+      - name: Poll standalone GPU probe
+        id: poll
+        run: |
+          set -euo pipefail
+          terminal=""
+          for n in $(seq 1 180); do
+            output="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            printf '[%03d] %s\n' "$n" "$output"
+            lower="$(printf '%s' "$output" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal=complete; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal=error; break; fi
+            sleep 30
+          done
+          test -n "$terminal" || terminal=timeout
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+
+      - name: Retrieve structured status only, no raw model output or competition data
+        if: always()
+        run: |
+          set +e
+          mkdir -p "$OUTPUT_DIR" "$SAFE_DIR"
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o >/dev/null 2>&1
+          if [ -s "$OUTPUT_DIR/capacity_31b_startup_result.json" ]; then
+            cp "$OUTPUT_DIR/capacity_31b_startup_result.json" "$SAFE_DIR/capacity_31b_startup_result.json"
+            python - <<'PY'
+          import json, os
+          from pathlib import Path
+          p=Path(os.environ["SAFE_DIR"])/"capacity_31b_startup_result.json"
+          r=json.loads(p.read_text())
+          assert r["version"]=="capacity-v0-31b-startup-smoke"
+          assert r["competition_tasks_used"]==0
+          assert r["model"]=="gemma-4-31b-it-qat-w4a16-ct"
+          print("CAPACITY_31B_STATUS=",r.get("status"))
+          print("CAPACITY_31B_STARTUP_SECONDS=",r.get("startup_seconds"))
+          print("CAPACITY_31B_GPU_COUNT=",r.get("gpu_count"))
+          print("CAPACITY_31B_PLAIN_HTTP_OK=",(r.get("plain") or {}).get("http_ok"))
+          print("CAPACITY_31B_SCALAR_TOOL=",(r.get("scalar") or {}).get("recognized_tool_call"))
+          print("CAPACITY_31B_ARRAY_TOOL=",(r.get("array") or {}).get("recognized_tool_call"))
+          PY
+          else
+            echo "CAPACITY_31B_NO_RESULT_FILE=TRUE"
+          fi
+
+      - name: Upload sanitized startup metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capacity-v0-31b-startup-${{ github.run_id }}
+          path: /tmp/gemma4-capacity31b-startup-v0-safe/capacity_31b_startup_result.json
+          if-no-files-found: warn
+          retention-days: 21
+
+      - name: Gate startup result; no benchmark conclusion here
+        run: |
+          set -euo pipefail
+          test "${{ steps.poll.outputs.terminal }}" = complete
+          test -s "$SAFE_DIR/capacity_31b_startup_result.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          x=json.loads((Path(os.environ["SAFE_DIR"])/"capacity_31b_startup_result.json").read_text())
+          assert x.get("status")=="smoke_completed",x.get("status")
+          assert x.get("gpu_count")==4,x.get("gpu_count")
+          assert (x.get("plain") or {}).get("http_ok") is True
+          assert (x.get("scalar") or {}).get("recognized_tool_call") is True
+          assert (x.get("array") or {}).get("recognized_tool_call") is True
+          print("CAPACITY_31B_BOOT_AND_TOOL_CALL_GATE=PASS")
+          PY
