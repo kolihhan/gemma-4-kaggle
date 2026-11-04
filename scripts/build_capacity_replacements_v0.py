@@ -12,6 +12,10 @@ import json
 import re
 from pathlib import Path
 
+# Also support `python scripts/build_capacity_replacements_v0.py --out ...`.
+import sys
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts import capacity_preflight_v0 as preflight
 
 
