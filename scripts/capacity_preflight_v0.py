@@ -172,6 +172,7 @@ def audit_candidate_text_mentions(repo: Path, manifest: dict) -> dict[str, objec
     # Keep the exception exact and documented; other files still fail closed.
     input_paths = set(EXPOSURE_FILES) | {
         "docs/evaluation/capacity-v0-gold-screen-2026-11-04.json",
+        "docs/evaluation/capacity-v0-noop-screen-2026-11-04.json",
     }
     findings: list[dict[str, str]] = []
     scanned = 0
