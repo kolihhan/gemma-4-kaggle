@@ -1,6 +1,6 @@
-# NOW — 2026-11-03
+# NOW — 2026-11-04
 
-Updated: 2026-11-03 23:43 MYT
+Updated: 2026-11-04 11:13 MYT
 
 ## North star
 
@@ -8,22 +8,21 @@ Build a competitive Gemma 4 software-engineering agent by learning which mechani
 
 Research must remain anti-overfit, resource-aware, mechanism-first, and willing to reopen model/training/topology classes when evidence changes. Read `RESEARCH_DOCTRINE.md` before preserving or rejecting a major method class.
 
-## Current live state
+## Terminal scoring / active decision
 
-**Frozen Reliability-v1 remains unchanged while its real Kaggle submission is pending.**
+**Reliability-v1 is terminal; its preregistered Public-LB prediction failed.**
 
-- baseline ref `57879765`: COMPLETE, Public LB **0.03**;
-- Reliability-v1 ref `57921371`: **PENDING** at fresh read-only probe **2026-11-03 15:43 UTC / 23:43 MYT**;
-- preregistered Reliability-v1 prediction: point **0.08**, interval **0.05–0.12**;
-- do not submit a duplicate Reliability-v1 candidate;
-- do not rerun the inspected 17-task development denominator;
-- do not tune prompts against known Rich/FastAPI failures;
-- no new expensive model/GPU experiment while the live score is unresolved.
+Fresh read-only probe on **2026-11-04 03:13 UTC / 11:13 MYT**:
+- baseline ref `57879765`: **COMPLETE**, Public LB **0.03**;
+- Reliability-v1 ref `57921371`: **COMPLETE**, Public LB **0.03**, private score not available;
+- frozen prediction: **0.08 [0.05, 0.12]**; observed result **0.03**, **-0.05** vs point, **0.02** below lower bound;
+- observed displayed Public-LB gain over baseline: **0.00**.
 
-Latest status probe:
-- workflow run `41585360688`;
-- latest job `126023940185`;
-- result: `SubmissionStatus.PENDING`.
+Source: GitHub Actions run `41585360688`, latest job `126363546071`. Canonical calibration: `docs/evaluation/reliability-v1-terminal-calibration-2026-11-04.md`.
+
+**Activated predeclared branch: Public LB < 0.05.** Do **not** automatically implement evidence-before-mutation-v0. Open an architecture/model-policy capacity discriminating lane, while explicitly preserving uncertainty about *which* mechanism failed.
+
+Frozen Reliability-v1 submission remains untouched. No duplicate submission, no rerun of inspected 17-task denominator, and no task-specific prompt tuning.
 
 ## Frozen control / development evidence
 
@@ -74,7 +73,7 @@ The analyzer is conservative; use these values for same-classifier mechanism com
 
 ### H-lifecycle — evidence before mutation
 
-Status: **ACTIVE / provisional first candidate if live score does not trigger a broader pivot.**
+Status: **OPEN, but no longer the automatic first candidate after the <0.05 pivot trigger.**
 
 Current mechanism:
 
@@ -93,7 +92,7 @@ Implementation plan:
 
 ### H-capacity — E4B/model-policy ceiling
 
-Status: **REOPENED globally, not selected for execution.**
+Status: **SELECTED for next discriminating research lane; not proven as the dominant bottleneck.**
 
 External evidence includes a materially stronger public 31B-era no-LoRA system, but that comparison is confounded by model size, topology, prompts, budgets, and development history.
 
@@ -169,9 +168,9 @@ Canonical probe:
 - workflow run `41624178623`;
 - job `125877217844`.
 
-## Decision rule when Reliability-v1 becomes terminal
+## Predeclared score fork — terminal branch now activated
 
-### Public LB < 0.05
+### Public LB < 0.05 — TRIGGERED (observed 0.03)
 
 The live candidate underperformed the preregistered interval.
 
@@ -201,8 +200,13 @@ Proceed with the untouched evidence-v0 causal test, but do not treat one LB scor
 
 ## Next action
 
-**Wait only on the external dependency: terminal status for ref `57921371`.**
+**Open exactly one capacity/model-policy test lane on a new branch.** Do not mistake the failed E4B policy prediction for proof that increasing model size works.
 
-While it remains pending, productive work is limited to cheap non-contaminating research, static/runtime verification, and source-of-truth cleanup. Do not implement or execute the next scientific candidate prematurely.
+1. Start from the corrected fallback `docs/design/model-capacity-probe-v0-2026-11-03.md` and the recovered 12B negative evidence.
+2. Verify availability/compatibility of the official 31B scorer model and adapter-free same-policy runtime **without GPU first**.
+3. Freeze an untouched task selector and all historical task exclusions before running any model on selected tasks.
+4. Preregister the smallest 31B-vs-E4B feasibility gate and paired outcome/resource comparison. The gate must distinguish timeout/infeasible throughput from weak reasoning quality.
+5. Execute Kaggle inference only after static/schema/model-source prerequisites are met; retire if the larger-model cost cannot be justified.
+6. Reconsider lifecycle, search, and trajectory-SFT after independent evidence—not as task-specific patches.
 
-Once the score is terminal, apply the preregistered decision rule above immediately and start exactly one discriminating experiment lane.
+No new capacity run or score has been produced at this update.
