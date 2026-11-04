@@ -43,15 +43,15 @@ class CapacityHistoricalExposureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             repo = self.make_repo(Path(d))
             (repo / "docs" / "research" / "old.md").write_text(
-                "Previously inspected rich_3935 and fastapi_14349.\n"
+                "Previously inspected rich_999999 and fastapi_999999.\n"
             )
             self.commit(repo, "2026-11-01T01:00:00+0000", "old")
             (repo / "docs" / "research" / "old.md").unlink()
             (repo / "docs" / "research" / "new.md").write_text("no id\n")
             self.commit(repo, "2026-11-02T01:00:00+0000", "delete")
-            result = history.scan_history(repo, ["rich_3935", "fastapi_14349"])
+            result = history.scan_history(repo, ["rich_999999", "fastapi_999999"])
             self.assertEqual(set(result["historical_exposed_ids"]), {
-                "rich_3935", "fastapi_14349"
+                "rich_999999", "fastapi_999999"
             })
             self.assertTrue(result["historical_mentions"])
             self.assertFalse(result["certifies_blind"])
@@ -60,10 +60,10 @@ class CapacityHistoricalExposureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             repo = self.make_repo(Path(d))
             (repo / "docs" / "evaluation" / "verifier-lora-split-v0.json").write_text(
-                '{"train":["rich_3935"]}\n'
+                '{"train":["rich_999999"]}\n'
             )
             self.commit(repo, "2026-11-01T01:00:00+0000", "metadata")
-            result = history.scan_history(repo, ["rich_3935"])
+            result = history.scan_history(repo, ["rich_999999"])
             self.assertEqual(result["historical_exposed_ids"], [])
             self.assertGreater(result["checked_revisions"], 0)
 
@@ -72,9 +72,9 @@ class CapacityHistoricalExposureTests(unittest.TestCase):
             repo = self.make_repo(Path(d))
             (repo / "docs" / "research" / "base.md").write_text("initial\n")
             self.commit(repo, "2026-11-01T01:00:00+0000", "base")
-            (repo / "docs" / "research" / "new.md").write_text("rich_3935\n")
+            (repo / "docs" / "research" / "new.md").write_text("rich_999999\n")
             self.commit(repo, "2026-11-04T06:30:00+0000", "late")
-            result = history.scan_history(repo, ["rich_3935"])
+            result = history.scan_history(repo, ["rich_999999"])
             self.assertEqual(result["historical_exposed_ids"], [])
 
     def test_shallow_clone_fails_closed(self):
@@ -84,7 +84,7 @@ class CapacityHistoricalExposureTests(unittest.TestCase):
             self.commit(repo, "2026-11-01T01:00:00+0000", "base")
             (repo / ".git" / "shallow").write_text(run(repo, "rev-parse", "HEAD") + "\n")
             with self.assertRaisesRegex(ValueError, "shallow"):
-                history.scan_history(repo, ["rich_3935"])
+                history.scan_history(repo, ["rich_999999"])
 
 
 if __name__ == "__main__":
