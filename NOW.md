@@ -1,6 +1,16 @@
 # NOW — 2026-11-04
 
-Updated: 2026-11-04 11:13 MYT
+Updated: 2026-11-04 (capacity v0 Git-history/31B startup gate)
+
+## Latest PIC decision — 31B startup BLOCKED BY GPU QUOTA
+
+**Verified external blocker:** GitHub Actions [41794811345](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41794811345), job 126456289520, attempted to push a *private synthetic-only* 31B L4x4 startup kernel. Kaggle printed **"Kernel push error: Maximum weekly GPU quota of 30.00 hours reached."** CLI exit code was nevertheless 0. The subsequent HTTP 404 was for a kernel that was never created. Read-only status probe [41795018386](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41795018386) confirmed no notebook/result. **NO model weights loaded, no GPU inference, no candidate issues tested and no new leaderboard submission.**
+
+**Safeguards now implemented:** The 31B GPU workflow is **manual-only** (no auto-push on source commits); a new CLI push checker rejects zero-exit quota errors and requires an explicit successful push confirmation. CPU GitHub Action [41795366875](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41795366875) reports **9/9 tests PASS**, including the push-failure guard. Historical preselection Git-source audit scans **467 revisions** and found **0 pre-existing document/source mentions among the 16 candidate IDs**; this is stronger than checking only the current tree, but does *not* certify full blind status across past private artifacts/unrecorded views.
+
+**Decision:** Do not launch or re-run 31B GPU until account quota availability is verified. Startup/tool-call behavior remains UNKNOWN (not failed). Do not fill all 16 tasks merely to keep busy if model feasibility is still blocked; the 10 gold-pass/no-op-fail tasks remain frozen and unused by a model. An E4B-only evidence/repair lane is a potential separate pivot, not authorized as an automatic fallback by the quota error.
+
+Canonical report: docs/research/capacity-v0-31b-gpu-quota-blocker-2026-11-04.md
 
 ## North star
 
@@ -273,15 +283,12 @@ Proceed with the untouched evidence-v0 causal test, but do not treat one LB scor
 - No verifier-LoRA catch-up run merely for bookkeeping.
 - No repeated 12B `rich_3278` smoke.
 
-## Next action
+## Next action — revised after quota rejection
 
-**Complete the remaining preregistered eligibility gate, not a leaderboard submission.**
+1. **Hard stop on GPU:** Do not push the 31B model again while Kaggle's weekly 30-hour quota is exhausted. The exact reset time is UNKNOWN. Future check must verify account quota and inspect active workloads before any manual dispatch.
+2. **When quota is available, one explicit manual startup smoke:** use the now fail-closed workflow .github/workflows/capacity-31b-startup-smoke-v0.yml; record start, plain request, scalar tool, array-shaped tool, and total cost. This is zero-task feasibility only, not a model-capacity measurement.
+3. **Before issue evaluation:** keep original selection immutable, verify historical exposure beyond Git where feasible, and replenish eligibility by preregistered within-repo SHA order (1 Rich, 5 FastAPI missing) if 31B startup actually works. The gold/no-op current result is 10/16 eligible; no task text/ref patches shared.
+4. **If startup works and resources justify it:** execute the pre-registered four-task paired E4B/31B pilot; only then consider the 12-task independent confirmation. No changes to Reliability-v1, no per-task hyperparameter tuning, no leaderboard claims from pilot.
+5. **If quota remains unavailable:** hold the capacity experiment; evaluate separately whether the 0.03 failure warrants a cheap, independent E4B evidence/test/repair mechanism hypothesis. Do not silently call a model-class limitation proven.
 
-1. Reconcile the safe per-ID no-op artifact from completed CPU Action [41786342489](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41786342489): 10/10 gold-pass tasks are no-op failures; commit a safe eligibility summary.
-2. Construct a deterministic within-repo replacement queue from the original SHA-ranked 90 train metadata candidates, excluding known previously exposed IDs, the 16 screened IDs and any new evidence/provenance collisions.
-3. Screen the smallest useful tranche of replacements with the official private Kaggle gold/no-op checks (no model), fixing eligibility rather than tuning outcomes.
-4. Freeze the final pilot/confirmation denominators with provenance and eligibility evidence before any paired model result is inspected; note the Rich/FastAPI-only coverage limitation.
-5. Run a private *31B L4×4 initialization/throughput* feasibility check only when task eligibility and source/config checks are green; abort early on runtime resource failure.
-6. If practical, execute the preregistered paired four-task E4B-vs-31B pilot. No score promotion from four tasks; confirmation set remains untouched until the pilot's cost/performance gate passes.
-
-No new model inference, 31B GPU run, or Kaggle leaderboard submission is claimed at this update.
+No new model inference or Public LB score has been produced by this checkpoint.
