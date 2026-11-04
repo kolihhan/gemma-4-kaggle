@@ -24,6 +24,18 @@ Source: GitHub Actions run `41585360688`, latest job `126363546071`. Canonical c
 
 Frozen Reliability-v1 submission remains untouched. No duplicate submission, no rerun of inspected 17-task denominator, and no task-specific prompt tuning.
 
+## Root-cause investigation after the 0.03 miss
+
+Research audit: `docs/research/why-reliability-v1-only-003-2026-11-04.md`.
+
+**First-party evidence:** 1/17 resolved, 13/17 non-empty patches, 0/17 classifier-recognized pre-edit targeted witnesses, 14/17 without recognized targeted tests, 0 repairs after the two recognized failed targeted checks. Existing development result JSON shows **0/17 five-minute time-cap hits** (max ~201 sec) and **0/17 tool-cap exhaustions** (max 30 of 32).
+
+**Main diagnostic hypothesis:** issue semantics/evidence → root cause → correct edit/repair is unreliable. Reliability-v1 reduced broad tests (14→10) without increasing recognized targeted tests (3→3), suggesting a possible verification-starvation trade-off rather than a knowledge gain.
+
+**Not established:** hidden scorer task-level failure classes, same solved IDs across baseline/v1, model-capacity ceiling, partial hidden runtime/harness failures. The 17 development tasks are Rich/FastAPI-only and were inspected. Gold-pass/no-op-fail selection weakens blanket broken-harness explanations for that 17, not for hidden private-repo tasks.
+
+**Decision correction:** the <0.05 pivot opens capacity as a *testable alternative*, not as the proven root cause. Before an expensive comparison, run a cheap scorer/model-source feasibility gate and freeze a genuinely untouched paired denominator. Do not assume that 5 minutes/32 calls caused the local 1/17 (neither limit was reached).
+
 ## Frozen control / development evidence
 
 Reliability-v1 is the current frozen E4B single-root control.
@@ -200,7 +212,7 @@ Proceed with the untouched evidence-v0 causal test, but do not treat one LB scor
 
 ## Next action
 
-**Open exactly one capacity/model-policy test lane on a new branch.** Do not mistake the failed E4B policy prediction for proof that increasing model size works.
+**Open one capacity/model-policy diagnostic on `exp/capacity-boundary-v0`, with the root-cause audit as gate zero.** Do not mistake the failed E4B policy prediction for proof that increasing model size works.
 
 1. Start from the corrected fallback `docs/design/model-capacity-probe-v0-2026-11-03.md` and the recovered 12B negative evidence.
 2. Verify availability/compatibility of the official 31B scorer model and adapter-free same-policy runtime **without GPU first**.
