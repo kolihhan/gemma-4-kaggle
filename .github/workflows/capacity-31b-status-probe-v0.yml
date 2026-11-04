@@ -1,0 +1,80 @@
+name: Read only capacity 31B submitted kernel status
+
+on:
+  push:
+    branches: [exp/capacity-boundary-v0]
+    paths:
+      - ".github/workflows/capacity-31b-status-probe-v0.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-capacity31b-startup-v0-41794811345
+      SAFE_DIR: /tmp/capacity31b-status-safe
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned Kaggle CLI
+        run: python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+      - name: Read session and notebook listing (never launch new kernel)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$SAFE_DIR"
+          python - <<'PY'
+          import json,os,re,subprocess
+          from pathlib import Path
+          ref = os.environ["KERNEL_REF"]
+          def cmd(*args):
+              p=subprocess.run(["kaggle",*args],capture_output=True,text=True,timeout=90)
+              return p.returncode,(p.stdout+"\n"+p.stderr)
+          status_code,status=cmd("kernels","status",ref)
+          listing_code,listing=cmd("kernels","list","--mine","--sort-by","dateCreated","-p","1")
+          marker=re.search(r"KernelWorkerStatus\.([A-Z_]+)",status)
+          code = "KERNEL_"+marker.group(1) if marker else ("HTTP_404" if "404" in status else "OTHER")
+          known=ref.split("/",1)[1].lower() in listing.lower()
+          result={"version":"capacity-v0-31b-session-check","kernel_ref":ref,
+                  "status_class":code,"status_exit_code":status_code,
+                  "listed_in_recent_mine":known,"list_command_ok":listing_code==0,
+                  "new_gpu_submitted":False}
+          Path(os.environ["SAFE_DIR"]).joinpath("status.json").write_text(json.dumps(result,sort_keys=True,indent=2)+"\n")
+          print("CAPACITY_31B_READONLY_STATUS=",code)
+          print("CAPACITY_31B_NOTEBOOK_LISTED=",known)
+          print("CAPACITY_31B_NEW_GPU_SUBMITTED=NO")
+          PY
+      - name: Collect structured startup result if present
+        run: |
+          set +e
+          mkdir -p "$SAFE_DIR" /tmp/capacity31b-readonly-output
+          kaggle kernels output "$KERNEL_REF" -p /tmp/capacity31b-readonly-output -o >/dev/null 2>&1
+          if [ -s /tmp/capacity31b-readonly-output/capacity_31b_startup_result.json ]; then
+            cp /tmp/capacity31b-readonly-output/capacity_31b_startup_result.json "$SAFE_DIR/startup.json"
+            python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path(os.environ["SAFE_DIR"])/"startup.json"
+          j=json.loads(p.read_text())
+          assert j.get("version")=="capacity-v0-31b-startup-smoke" and j.get("competition_tasks_used")==0
+          print("CAPACITY_31B_RESULT_STATUS=",j.get("status"))
+          print("CAPACITY_31B_STARTUP_SECONDS=",j.get("startup_seconds"))
+          print("CAPACITY_31B_ERROR_TYPE=",j.get("error_type"))
+          PY
+          else
+            echo "CAPACITY_31B_RESULT_AVAILABLE=NO"
+          fi
+      - name: Upload structured status only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capacity-31b-readonly-status-${{ github.run_id }}
+          path: /tmp/capacity31b-status-safe
+          if-no-files-found: error
+          retention-days: 14
