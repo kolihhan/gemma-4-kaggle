@@ -2,6 +2,19 @@
 
 Updated: 2026-11-04 (capacity v0 Git-history/31B startup gate)
 
+## Capacity v0 double-eligibility + frozen 4+12 cohort — 2026-11-04
+
+**Actual CPU-only execution completed (no model, no training, no GPU, no scored Kaggle submission).**
+
+- [Private CPU replacement no-op run 41817822401](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41817822401): **SUCCESS**, 10/10 gold-passing replacements were **no-op-fail**, no no-op-pass or ambiguous records. Source artifact `13315174170`, verified ZIP SHA-256 `14b7d69c2afd5d04075e770cbf70215bded62b9b73156b5cf8aff19c6deb42c1`. Metadata-only [screen](docs/evaluation/capacity-v0-replacement-noop-2026-11-04.json), Rich 4 + FastAPI 6.
+- Original frozen 16 had 10 gold-pass + independent no-op-fail. With this replacement pool, six missing positions can be filled by **frozen SHA rank, without task-text or model-result selection**.
+- [CPU-only frozen allocation CI 41818760587](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41818760587): **SUCCESS** using actual vetted artifacts; manifest returned **feasibility 4** (Rich 2/FastAPI 2) + disjoint **confirmation 12** (Rich 6/FastAPI 6), six ranked replacements. Artifact `13315922648`, ZIP SHA-256 `5047248721f904fb99c792504d720737811fb842dddb9b6d7e9d5a7c8412bce9`.
+- Frozen [cohort metadata](docs/evaluation/capacity-v0-paired-cohort-2026-11-04.json) and deterministic [allocator](scripts/freeze_capacity_paired_v0.py) are now versioned. A contract test verifies the committed cohort matches recomputation and fails closed on provenance/order/count/overlap drift.
+
+**Limitations:** Gold-pass plus no-op-fail is **benchmark eligibility**, not agent task resolution, a leaderboard improvement, or proof of fully uninspected historical data. Git-source pre-exposure scanning found no earlier source mentions in 467 checked revisions, but past private artifacts/unrecorded views remain unverified. The four-task pilot is for model/runtime feasibility, not candidate promotion.
+
+**Current execution boundary:** Follow the submission-first/no-new-training directive. The E4B and 31B comparison is still **NOT run** because of Kaggle weekly GPU quota and the separately paused Colab path. Do not automatically resume GPU runs, LoRA, or leaderboard submissions. The frozen E4B Reliability-v1 submission remains unchanged at recorded Public LB **0.03**.
+
 ## Submission-first audit completed — 2026-11-04 (read-only + metadata archive)
 
 **Latest deliverable:** [submission-first research decision](docs/research/submission-first-no-training-decision-2026-11-04.md), based on scored baseline `57879765` and Reliability-v1 `57921371` (both displayed Public **0.03**), inspected development-trace mechanics, prior 12B one-task negative, and publicly scored **no-training** 31B comparators. No new model/GPU/LoRA/leaderboard run occurred.
