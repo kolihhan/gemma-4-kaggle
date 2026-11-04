@@ -1,0 +1,151 @@
+name: Capacity v0 replacement no-op eligibility CPU only
+
+on:
+  push:
+    branches: [exp/capacity-boundary-v0]
+    paths:
+      - "scripts/render_capacity_replacement_noop_v0.py"
+      - "tests/test_render_capacity_replacement_noop_v0.py"
+      - ".github/workflows/capacity-replacement-noop-cpu-v0.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gemma4-capacity-v0-replacement-noop-cpu
+  cancel-in-progress: false
+
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-capacity-replacement-noop-${{ github.run_id }}
+      KERNEL_DIR: /tmp/capacity-replacement-noop-v0
+      OUTPUT_DIR: /tmp/capacity-replacement-noop-v0-private
+      SAFE_DIR: /tmp/capacity-replacement-noop-v0-safe
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Static contract tests and preregistered Git-history check
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_render_capacity_replacement_noop_v0 tests.test_render_capacity_replacement_gold_v0 tests.test_build_capacity_replacements_v0
+          python -m py_compile scripts/render_capacity_replacement_noop_v0.py
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.audit_capacity_history_v0 import scan_history
+          from scripts.render_capacity_replacement_gold_v0 import create_manifest
+          from scripts.render_capacity_replacement_noop_v0 import get_gold_pass_items
+          root=Path(".").resolve()
+          ids=[x["instance_id"] for x in create_manifest(root)["holdout"]]
+          assert len(ids)==16 and len(get_gold_pass_items(root))==10
+          audit=scan_history(root, ids)
+          assert audit["candidate_count"]==16 and not audit["historical_exposed_ids"],audit
+          assert audit["checked_revisions"]>=467 and audit["certifies_blind"] is False
+          print("REPLACEMENT_NOOP_HISTORY_GATE=PASS; FULL_BLIND_CERTIFIED=NO")
+          PY
+      - name: Render private synthetic-model-free CPU kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$KERNEL_DIR" "$OUTPUT_DIR" "$SAFE_DIR"
+          mkdir -p "$KERNEL_DIR" "$OUTPUT_DIR" "$SAFE_DIR"
+          python scripts/render_capacity_replacement_noop_v0.py --repo . --out "$KERNEL_DIR" --kernel-ref "$KERNEL_REF"
+      - name: Install pinned Kaggle CLI
+        run: python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+      - name: Push private CPU kernel (fail closed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          kaggle kernels push -p "$KERNEL_DIR" -t 5400 > /tmp/replacement-noop-push.log 2>&1
+          code=$?
+          set -e
+          cat /tmp/replacement-noop-push.log
+          python scripts/check_capacity_31b_push_v0.py --log /tmp/replacement-noop-push.log --client-exit-code "$code"
+      - name: Poll CPU kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 300); do
+            output="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            printf '[%03d] %s\n' "$attempt" "$output"
+            lower="$(printf '%s' "$output" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal=complete; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal=error; break; fi
+            sleep 20
+          done
+          test "$terminal" = complete
+      - name: Sanitize private result to metadata-only evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o >/dev/null
+          test -s "$OUTPUT_DIR/capacity_replacement_noop_screen.json"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from scripts.render_capacity_replacement_noop_v0 import (
+              get_gold_pass_items, GOLD_RUN, GOLD_ARTIFACT, GOLD_ARTIFACT_SHA256, VERSION,
+          )
+          from scripts.render_capacity_replacement_gold_v0 import create_manifest
+          root=Path(".").resolve()
+          data=json.loads((Path(os.environ["OUTPUT_DIR"])/"capacity_replacement_noop_screen.json").read_text(encoding="utf-8"))
+          assert data.get("status")=="completed" and data.get("control")=="noop"
+          assert data.get("version")==VERSION
+          records=data.get("results",[])
+          wanted=get_gold_pass_items(root)
+          assert data.get("requested")==10 and len(records)==10
+          assert [(r.get("instance_id"),r.get("repo")) for r in records]==[(r["instance_id"],r["repo"]) for r in wanted]
+          rows=[]
+          for item in records:
+              code=item.get("test_exit_code")
+              completed=item.get("status")=="completed" and item.get("control")=="noop"
+              fails=completed and item.get("resolved") is False and type(code) is int and code!=0
+              passes=completed and item.get("resolved") is True and type(code) is int and code==0
+              rows.append({
+                  "instance_id":item["instance_id"],"repo":item["repo"],
+                  "status":item.get("status"),"test_exit_code":code,
+                  "noop_fail":fails,"noop_pass":passes,
+                  "ambiguous":not (fails or passes),
+                  "error_type":item.get("error_type"),
+              })
+          safe={
+              "version":"capacity-v0-replacement-noop-eligibility",
+              "source_run_id":int(os.environ["GITHUB_RUN_ID"]),
+              "source_gold_run_id":GOLD_RUN,
+              "source_gold_artifact_id":GOLD_ARTIFACT,
+              "source_gold_artifact_zip_sha256":GOLD_ARTIFACT_SHA256,
+              "source_selector_sha256":create_manifest(root)["selector_sha256"],
+              "kernel_ref":os.environ["KERNEL_REF"],
+              "screened":len(rows),
+              "noop_fail_count":sum(x["noop_fail"] for x in rows),
+              "noop_pass_count":sum(x["noop_pass"] for x in rows),
+              "ambiguous_count":sum(x["ambiguous"] for x in rows),
+              "results":rows,"contains_raw_patch_or_task_text":False,
+          }
+          p=Path(os.environ["SAFE_DIR"])/"replacement-noop-metadata.json"
+          p.write_text(json.dumps(safe,indent=2,sort_keys=True)+"\n",encoding="utf-8")
+          print("NOOP_SCREENED=",safe["screened"])
+          print("NOOP_FAIL_COUNT=",safe["noop_fail_count"])
+          print("NOOP_AMBIGUOUS=",safe["ambiguous_count"])
+          print("COMPETITION_DATA_PUBLISHED=NO")
+          PY
+      - name: Upload metadata-only CPU screen result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capacity-replacement-noop-${{ github.run_id }}
+          path: ${{ env.SAFE_DIR }}/replacement-noop-metadata.json
+          if-no-files-found: warn
+          retention-days: 21
