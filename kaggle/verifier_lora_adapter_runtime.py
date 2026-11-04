@@ -185,10 +185,10 @@ def install_frozen_verifier_adapter() -> None:
     verifier_config = verifier_path.read_text(encoding="utf-8")
     if "adapter:" in verifier_config:
         raise RuntimeError("verifier config already specifies an adapter")
-    anchor = "model: gemma-4-e4b-it-qat-w4a16-ct\\n"
+    anchor = "model: gemma-4-e4b-it-qat-w4a16-ct\n"
     if verifier_config.count(anchor) != 1:
         raise RuntimeError("unexpected verifier base model declaration")
-    verifier_config = verifier_config.replace(anchor, anchor + f"adapter: {ADAPTER_NAME}\\n", 1)
+    verifier_config = verifier_config.replace(anchor, anchor + f"adapter: {ADAPTER_NAME}\n", 1)
     verifier_path.write_text(verifier_config, encoding="utf-8")
     print("FROZEN_ADAPTER_ATTACHED", ADAPTER_NAME, sorted(EXPECTED_ADAPTER_SHA256), flush=True)
 
