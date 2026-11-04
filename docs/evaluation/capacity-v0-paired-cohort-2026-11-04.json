@@ -1,0 +1,98 @@
+{
+  "version": "capacity-v0-paired-denominator-v1",
+  "status": "MODEL_UNTOUCHED_METADATA_ELIGIBLE_NOT_FULLY_BLIND_CERTIFIED",
+  "source_selector_sha256": "4abe73d79afcabd64795e7f2eedde5682732a85290f07a09e3f8a181594fd593",
+  "replacement_noop_run_id": 41817822401,
+  "feasibility": [
+    {
+      "instance_id": "rich_3935",
+      "repo": "Textualize/rich",
+      "source": "original"
+    },
+    {
+      "instance_id": "rich_3472",
+      "repo": "Textualize/rich",
+      "source": "original"
+    },
+    {
+      "instance_id": "fastapi_14458",
+      "repo": "fastapi/fastapi",
+      "source": "original"
+    },
+    {
+      "instance_id": "fastapi_14301",
+      "repo": "fastapi/fastapi",
+      "source": "replacement"
+    }
+  ],
+  "confirmation": [
+    {
+      "instance_id": "rich_4075",
+      "repo": "Textualize/rich",
+      "source": "original"
+    },
+    {
+      "instance_id": "rich_4076",
+      "repo": "Textualize/rich",
+      "source": "original"
+    },
+    {
+      "instance_id": "rich_3894",
+      "repo": "Textualize/rich",
+      "source": "original"
+    },
+    {
+      "instance_id": "rich_3905",
+      "repo": "Textualize/rich",
+      "source": "original"
+    },
+    {
+      "instance_id": "rich_3518",
+      "repo": "Textualize/rich",
+      "source": "original"
+    },
+    {
+      "instance_id": "rich_3063",
+      "repo": "Textualize/rich",
+      "source": "replacement"
+    },
+    {
+      "instance_id": "fastapi_14492",
+      "repo": "fastapi/fastapi",
+      "source": "original"
+    },
+    {
+      "instance_id": "fastapi_15589",
+      "repo": "fastapi/fastapi",
+      "source": "original"
+    },
+    {
+      "instance_id": "fastapi_11194",
+      "repo": "fastapi/fastapi",
+      "source": "replacement"
+    },
+    {
+      "instance_id": "fastapi_14419",
+      "repo": "fastapi/fastapi",
+      "source": "replacement"
+    },
+    {
+      "instance_id": "fastapi_9753",
+      "repo": "fastapi/fastapi",
+      "source": "replacement"
+    },
+    {
+      "instance_id": "fastapi_14794",
+      "repo": "fastapi/fastapi",
+      "source": "replacement"
+    }
+  ],
+  "totals": {
+    "feasibility": 4,
+    "confirmation": 12,
+    "replacements_used": 6
+  },
+  "contains_raw_patch_or_task_text": false,
+  "model_evaluation_executed": false,
+  "certifies_blind": false
+}
