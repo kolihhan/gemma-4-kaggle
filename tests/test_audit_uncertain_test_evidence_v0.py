@@ -7,14 +7,14 @@ from pathlib import Path
 from scripts import audit_uncertain_test_evidence_v0 as candidate
 
 
-def step(tool, cmd=None):
+def step(tool, cmd=None, *, exit_code=0):
     return {
         "extra": {"author": "swe_e4b_coder"},
         "tool_calls": [{
             "function_name": tool,
             "arguments": {"command": cmd} if cmd else {}
         }],
-        "observation": {"content": json.dumps({"exit_code": 0})},
+        "observation": {"content": json.dumps({"exit_code": exit_code})},
     }
 
 
@@ -88,6 +88,42 @@ class TestInvocationSensitivityTests(unittest.TestCase):
             self.assertEqual(counts["tasks_with_recognized_pre_edit_test"], 0)
             self.assertEqual(json.dumps(summary).find("private_test_id"), -1)
             self.assertNotIn("secret_test", json.dumps(summary))
+
+    def test_failed_test_submit_without_repair_is_distinct_from_repaired_retest(self):
+        fail = {"steps": [
+            step("edit_file"),
+            step("run_command", "pytest tests/test_x.py -q", exit_code=1),
+            step("submit_patch"),
+        ]}
+        result = candidate.reduce_one(fail, "swe_e4b_coder")
+        self.assertEqual(result["recognized_nonzero_exit_calls"], 1)
+        self.assertTrue(result["last_recognized_test_nonzero_exit"])
+        self.assertFalse(result["has_repair_after_nonzero_test_exit"])
+        self.assertTrue(result["has_submit_after_nonzero_test_exit_without_repair"])
+
+        repaired = {"steps": [
+            step("edit_file"),
+            step("run_command", "pytest tests/test_x.py -q", exit_code=1),
+            step("edit_file"),
+            step("run_command", "pytest tests/test_x.py -q", exit_code=0),
+            step("submit_patch"),
+        ]}
+        second = candidate.reduce_one(repaired, "swe_e4b_coder")
+        self.assertEqual(second["recognized_nonzero_exit_calls"], 1)
+        self.assertEqual(second["recognized_zero_exit_calls"], 1)
+        self.assertTrue(second["has_repair_after_nonzero_test_exit"])
+        self.assertTrue(second["last_recognized_test_zero_exit"])
+        self.assertFalse(second["has_submit_after_nonzero_test_exit_without_repair"])
+
+    def test_known_exit_codes_are_not_inferred_from_missing_observations(self):
+        observed = {"steps": [
+            {"extra": {"author": "swe_e4b_coder"},
+             "tool_calls": [{"function_name": "run_command", "arguments": {"command": "pytest tests/test_x.py -q"}}]}
+        ]}
+        result = candidate.reduce_one(observed, "swe_e4b_coder")
+        self.assertEqual(result["recognized_unknown_exit_calls"], 1)
+        self.assertEqual(result["recognized_zero_exit_calls"], 0)
+        self.assertFalse(result["last_recognized_test_zero_exit"])
 
     def test_missing_trace_is_hard_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
