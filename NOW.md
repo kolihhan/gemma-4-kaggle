@@ -1,6 +1,15 @@
 # NOW — 2026-11-04
 
-Updated: 2026-11-04 (capacity v0 Git-history/31B startup gate)
+Updated: 2026-11-05 (official 31B public score 0.08)
+
+## Untrained 31B scored result — 2026-11-05
+
+**OFFICIAL RESULT: COMPLETE; PUBLIC LB 0.08.** Submission `57983156` (`untrained-31b-v0:same-policy-as-reliability-v1`) was checked read-only via authenticated Kaggle CLI on **2026-11-05 06:18:27 UTC / 14:18:27 MYT**. Returned `SubmissionStatus.COMPLETE`, `publicScore: "0.08"`, `privateScore: ""`. Primary verification: [successful GitHub Actions read-only probe 41979509173](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41979509173), job `127086109897`. No additional submission or training happened during this probe.
+
+- **Control E4B Reliability-v1:** Kaggle ref `57921371`, displayed Public LB **0.03** (previously recorded COMPLETE).
+- **Treatment pretrained 31B, no LoRA:** Kaggle ref `57983156`, displayed Public LB **0.08**. Difference **+0.05 points**, approximately **2.67×** the displayed control score. The 31B artifact changes only the root `agent.yaml` model name; prompt, tools, sampling and budgets remain unchanged.
+- **Supported claim:** The submitted 31B variant achieved a better official Public score than the earlier E4B submission. **Not supported:** deterministic task-level improvement, causal proof that model capacity alone is responsible, fully equivalent scorer epochs, private-LB generalization, or significance claims. Public LB is a limited, potentially noisy comparison.
+- **Decision:** Preserve these scored artifacts and IDs, do not re-submit the same ZIP, do not reintroduce self-training/LoRA. Next meaningful work is analysis of the bottleneck and controlled, uninspected evaluation (frozen 4+12 cohort if resource capacity and provenance allow); no automatic GPU or new leaderboard submissions authorized.
 
 ## Untrained Gemma 4 31B official Kaggle submission — 2026-11-04
 
