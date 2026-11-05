@@ -1,0 +1,139 @@
+name: Discriminating Evidence v0 private CPU gold eligibility
+
+on:
+  push:
+    branches: [research/discriminating-evidence-v0]
+    paths:
+      - "scripts/render_discriminating_evidence_gold.py"
+      - "tests/test_render_discriminating_evidence_gold.py"
+      - ".github/workflows/discriminating-evidence-gold-cpu.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: discriminating-evidence-gold-cpu-v0
+  cancel-in-progress: false
+
+jobs:
+  gold:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-evidence-gold-${{ github.run_id }}
+      KERNEL_DIR: /tmp/gemma4-evidence-gold-kernel
+      OUTPUT_DIR: /tmp/gemma4-evidence-gold-private
+      SAFE_DIR: /tmp/gemma4-evidence-gold-safe
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify static tests and original preselection history gate
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_discriminating_evidence_exploratory tests.test_render_discriminating_evidence_gold
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.discriminating_evidence_history_audit import audit
+          x = audit(Path(".").resolve())
+          assert x["candidate_count"] == 30
+          assert not x["historical_exposed_ids"], x["historical_exposed_ids"]
+          assert x["checked_revisions"] >= 593, x["checked_revisions"]
+          assert not x["certifies_blind"]
+          print("ELIGIBILITY_HISTORICAL_TRACKED_SOURCE_GATE=PASS")
+          print("FULL_BLIND_CERTIFICATION=NO")
+          PY
+
+      - name: Render no-model private Kaggle CPU reference-control kernel
+        run: |
+          set -euo pipefail
+          rm -rf "$KERNEL_DIR" "$OUTPUT_DIR" "$SAFE_DIR"
+          mkdir -p "$KERNEL_DIR" "$OUTPUT_DIR" "$SAFE_DIR"
+          python -m scripts.render_discriminating_evidence_gold \
+            --repo . --out "$KERNEL_DIR" --kernel-ref "$KERNEL_REF"
+
+      - name: Install pinned Kaggle CLI
+        run: python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+
+      - name: Execute private CPU-only gold eligibility (not competition submission)
+        run: |
+          set -euo pipefail
+          kaggle kernels push -p "$KERNEL_DIR" -t 5400
+
+      - name: Poll private CPU gold kernel until terminal
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 300); do
+            output="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            echo "[$attempt] $output"
+            lower="$(printf '%s' "$output" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal="complete"; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal="error"; break; fi
+            sleep 20
+          done
+          test "$terminal" = complete
+
+      - name: Sanitize private gold run to metadata flags only
+        run: |
+          set -euo pipefail
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o >/dev/null
+          test -s "$OUTPUT_DIR/verifier_gold_sweep.json"
+          python - <<'PY'
+          from pathlib import Path
+          import os, json
+          from scripts.render_discriminating_evidence_gold import build_gold_manifest
+          root=Path(".").resolve()
+          expected=build_gold_manifest(root)
+          ids=[x["instance_id"] for x in expected["holdout"]]
+          raw=json.loads((Path(os.environ["OUTPUT_DIR"])/"verifier_gold_sweep.json").read_text())
+          assert raw.get("status")=="completed",raw.get("status")
+          assert raw.get("requested")==30,raw.get("requested")
+          rows=raw.get("results",[])
+          assert len(rows)==30,len(rows)
+          assert [x.get("instance_id") for x in rows]==ids
+          safe=[]
+          for x,want in zip(rows,expected["holdout"]):
+            assert x.get("repo")==want["repo"]
+            good=x.get("status")=="completed" and x.get("resolved") is True and x.get("test_exit_code")==0
+            safe.append({
+              "instance_id":want["instance_id"],
+              "repo":want["repo"],
+              "gold_pass":good,
+              "test_exit_code":x.get("test_exit_code"),
+              "error_type":x.get("error_type"),
+              "status":x.get("status"),
+            })
+          result={
+            "version":"discriminating-evidence-v0-exploratory-gold-screen",
+            "source_run_id":int(os.environ["GITHUB_RUN_ID"]),
+            "source_selector_sha256":expected["selector_sha256"],
+            "screened":len(safe),
+            "gold_pass_count":sum(x["gold_pass"] for x in safe),
+            "results":safe,
+            "contains_raw_patch_or_task_text":False,
+            "certifies_blind":False,
+            "model_evaluation_executed":False,
+          }
+          out=Path(os.environ["SAFE_DIR"])/"discriminating-evidence-gold-metadata.json"
+          out.write_text(json.dumps(result,sort_keys=True,indent=2)+"\n")
+          print("EVIDENCE_GOLD_SCREENED=",result["screened"])
+          print("EVIDENCE_GOLD_PASS_COUNT=",result["gold_pass_count"])
+          print("EVIDENCE_GOLD_RAW_TASK_OR_PATCH_PUBLISHED=NO")
+          PY
+
+      - name: Publish metadata-safe gold flags only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-v0-gold-metadata-${{ github.run_id }}
+          path: /tmp/gemma4-evidence-gold-safe/discriminating-evidence-gold-metadata.json
+          if-no-files-found: warn
+          retention-days: 21
