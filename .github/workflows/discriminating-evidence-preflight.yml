@@ -1,0 +1,48 @@
+name: Discriminating Evidence v0 CPU-only preflight
+
+on:
+  push:
+    branches: [research/discriminating-evidence-v0]
+    paths:
+      - "scripts/discriminating_evidence_preflight.py"
+      - "tests/test_discriminating_evidence_preflight.py"
+      - ".github/workflows/discriminating-evidence-preflight.yml"
+      - "docs/research/discriminating-evidence-v0-gate-2026-11-05.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  metadata-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile and test metadata-only gate
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/discriminating_evidence_preflight.py tests/test_discriminating_evidence_preflight.py
+          python -m unittest -v tests.test_discriminating_evidence_preflight
+      - name: Confirm known NO-GO without tasks, models or Kaggle
+        run: |
+          set -euo pipefail
+          python scripts/discriminating_evidence_preflight.py \
+            --repo . --out /tmp/discriminating-evidence-preflight.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r = json.loads(Path("/tmp/discriminating-evidence-preflight.json").read_text())
+          assert r["status"] == "NO_GO_INADEQUATE_REPLACEMENT_BUFFER"
+          assert r["candidate_counts"] == {"Textualize/rich": 14, "fastapi/fastapi": 16}
+          assert r["replacement_counts"] == {"Textualize/rich": 0, "fastapi/fastapi": 2}
+          assert len(r["pilot_ids"]) == 4 and len(r["confirmation_ids"]) == 24
+          assert not r["certifies_blind"]
+          assert not r["gold_noop_eligible"]
+          assert not r["GPU_or_Kaggle_submission_authorized"]
+          print("DISCRIMINATING_EVIDENCE_PREFLIGHT=EXPECTED_NO_GO")
+          print("NO_KAGGLE_NO_GPU_NO_TRAINING_NO_SUBMISSION=PASS")
+          PY
