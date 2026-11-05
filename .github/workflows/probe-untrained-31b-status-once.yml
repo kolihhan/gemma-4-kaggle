@@ -1,4 +1,4 @@
-name: Read-only Kaggle 31B submission status probe
+name: Read-only Kaggle Budget-Fit V2 58019162 scoring status probe
 # Read-only refresh 2026-11-05 10:04 MYT; no resubmit or training.
 # Read-only status refresh: 2026-11-04 22:25 MYT. No new Kaggle submission.
 # Read-only status refresh; no new submission or training. 2026-11-04 21:10 MYT
@@ -10,6 +10,7 @@ on:
     paths:
       - ".github/workflows/probe-untrained-31b-status-once.yml"
   workflow_dispatch:
+# Fresh status of accepted reference 58019162, read-only; no new submission, no GPU.
 # Read-only status refresh requested 2026-11-05 14:17 MYT (submission 57983156)
 
 permissions:
@@ -22,7 +23,7 @@ jobs:
     env:
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
       COMPETITION: gemma-4-developer-agent
-      TARGET_REF: "57983156"
+      TARGET_REF: "58019162"
       OUT: /tmp/kaggle-31b-readonly-status
     steps:
       - uses: actions/setup-python@v5
