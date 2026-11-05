@@ -1,3 +1,17 @@
+# NOW — discriminating-evidence research checkpoint (2026-11-05)
+
+**This branch is research-only. Status: NO-GO for model inference, holdout evaluation and Kaggle submission.** No training or LoRA. The inherited capacity-v0 state is preserved below, but its open 31B hypothesis is not execution authorization for this branch.
+
+- New experiment contract: [docs/research/discriminating-evidence-v0-gate-2026-11-05.md](docs/research/discriminating-evidence-v0-gate-2026-11-05.md).
+- CPU-only reproducible gate: scripts/discriminating_evidence_preflight.py. Run python -m unittest -v tests.test_discriminating_evidence_preflight.
+- **Verified CI:** [run 42060942156](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42060942156), success, 4/4 tests; selected metadata-only 4 pilot + 24 proposed confirmation, **Rich 14 candidates (zero replacements)**, FastAPI 16 candidates (two replacements). Selection fingerprint 13be4ff5205813de3ae869b65a7f7b5a37806589fa633f39dff8fd9dd265a137.
+- **NO-GO reason:** an independent 24-task confirmation cannot yet have a robust eligibility replacement buffer; historical provenance and official gold-pass/no-op-fail checks remain undone. Not certified blind. The old capacity-v0 4+12 is still reserved and unmodified.
+- The harness supports declarative LlmAgent subagents, output_key and include_contents: none in documentation, but a model-free *actual scorer-wheelhouse compiler check for B/C* and a dynamic evidence-isolation smoke have **NOT** been performed. Prior root-SequentialAgent compaction bug remains a design constraint.
+- The scored 31B A baseline remains Kaggle ref 57983156, Public 0.08. At last authenticated query the attributed public Budget-Fit V2 ref 58019162 was PENDING; do not treat its author's reported score as ours.
+- **Next allowed decision:** broaden/prove a genuinely uninspected replacement-safe denominator, OR explicitly freeze a smaller exploratory-only experiment with limited claims; then validate B/C against current official wheelhouse. Do not launch GPU, mutate submission/, train, or submit in this research branch.
+
+---
+
 # NOW — 2026-11-04
 
 Updated: 2026-11-05 (new attributed public 31B V2 reference submitted ref 58019162 PENDING)
