@@ -1,6 +1,7 @@
 name: Capacity v0 31B standalone GPU startup smoke
 
 # A GPU run requires a fresh decision after the recorded quota-exhausted push.
+# Explicit 2026-11-05 31B diagnostic retry after frozen-metadata scan correction.
 # Never auto-start expensive Kaggle kernels on ordinary source pushes.
 on:
   push:
