@@ -1,5 +1,6 @@
 name: Read-only test invocation sensitivity on existing E4B traces
 # V0.1: exclude legacy echo/grep false positives while retaining uncertainty bounds.
+# V0.2: diagnose returned test exit codes and repair-after-nonzero transitions.
 
 on:
   push:
