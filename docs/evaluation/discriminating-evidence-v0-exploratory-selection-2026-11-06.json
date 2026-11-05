@@ -1,0 +1,52 @@
+{
+  "version": "discriminating-evidence-v0-exploratory-4plus12",
+  "source_preflight_selection_digest": "13be4ff5205813de3ae869b65a7f7b5a37806589fa633f39dff8fd9dd265a137",
+  "selection_digest_sha256": "20bca18b905161123ba0054d058a4f2b963cce6526c67b29e0175a81d17cc343",
+  "pilot_ids": [
+    "rich_3471",
+    "rich_3006",
+    "fastapi_14303",
+    "fastapi_13537"
+  ],
+  "exploratory_ids": [
+    "rich_3506",
+    "rich_3468",
+    "rich_3944",
+    "rich_3675",
+    "rich_2943",
+    "rich_3938",
+    "fastapi_14356",
+    "fastapi_14512",
+    "fastapi_5624",
+    "fastapi_14964",
+    "fastapi_14791",
+    "fastapi_14455"
+  ],
+  "replacement_ids": [
+    "rich_3480",
+    "rich_3469",
+    "rich_4077",
+    "rich_3535",
+    "rich_3521",
+    "rich_3043",
+    "fastapi_14099",
+    "fastapi_14372",
+    "fastapi_14262",
+    "fastapi_14786",
+    "fastapi_14487",
+    "fastapi_15745",
+    "fastapi_14360",
+    "fastapi_15588"
+  ],
+  "candidate_counts": {
+    "Textualize/rich": 14,
+    "fastapi/fastapi": 16
+  },
+  "replacement_counts": {
+    "Textualize/rich": 6,
+    "fastapi/fastapi": 8
+  },
+  "status": "RESERVED_METADATA_ONLY_ELIGIBILITY_UNCHECKED",
+  "certifies_blind": false,
+  "model_evaluation_executed": false
+}
