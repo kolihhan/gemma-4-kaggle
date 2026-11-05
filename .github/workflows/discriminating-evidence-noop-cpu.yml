@@ -1,0 +1,153 @@
+name: Discriminating Evidence v0 private CPU no-op eligibility
+
+on:
+  push:
+    branches: [research/discriminating-evidence-v0]
+    paths:
+      - ".github/workflows/discriminating-evidence-noop-cpu.yml"
+      - "scripts/render_discriminating_evidence_noop.py"
+      - "tests/test_render_discriminating_evidence_noop.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: discriminating-evidence-noop-cpu-v0
+  cancel-in-progress: false
+
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+      GOLD_RUN: "42066105011"
+      KERNEL_REF: kolihhan/gemma4-evidence-noop-${{ github.run_id }}
+      KERNEL_DIR: /tmp/gemma4-evidence-noop-kernel
+      OUTPUT_DIR: /tmp/gemma4-evidence-noop-private
+      SAFE_DIR: /tmp/gemma4-evidence-noop-safe
+      GOLD_DIR: /tmp/gemma4-evidence-noop-gold-safe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Unit tests for dynamic no-op gold-source gate
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_discriminating_evidence_exploratory tests.test_render_discriminating_evidence_gold tests.test_render_discriminating_evidence_noop
+          python -m py_compile scripts/render_discriminating_evidence_noop.py
+
+      - name: Wait for exact gold source run to reach SUCCESS
+        run: |
+          set -euo pipefail
+          conclusion=""
+          for attempt in $(seq 1 300); do
+            output="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GOLD_RUN" --jq '[.status,.conclusion] | @tsv')"
+            echo "GOLD_SOURCE_STATE=$output"
+            if grep -q completed <<< "$output"; then
+              conclusion="$(printf '%s' "$output" | awk '{print $2}')"
+              break
+            fi
+            sleep 20
+          done
+          test "$conclusion" = "success"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: evidence-v0-gold-metadata-42066105011
+          path: /tmp/gemma4-evidence-noop-gold-safe
+          run-id: 42066105011
+          github-token: ${{ github.token }}
+
+      - name: Validate gold provenance and render private no-op CPU kernel
+        run: |
+          set -euo pipefail
+          mkdir -p "$KERNEL_DIR" "$OUTPUT_DIR" "$SAFE_DIR"
+          python -m scripts.render_discriminating_evidence_noop \
+            --repo . \
+            --gold-metadata "$GOLD_DIR/discriminating-evidence-gold-metadata.json" \
+            --out "$KERNEL_DIR" --kernel-ref "$KERNEL_REF"
+
+      - name: Install pinned Kaggle CLI
+        run: python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+
+      - name: Execute private no-model CPU no-op eligibility
+        run: |
+          set -euo pipefail
+          kaggle kernels push -p "$KERNEL_DIR" -t 5400
+
+      - name: Poll private CPU no-op kernel until terminal
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 300); do
+            status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            echo "[$attempt] $status"
+            lower="$(printf '%s' "$status" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal="complete"; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal="error"; break; fi
+            sleep 20
+          done
+          test "$terminal" = complete
+
+      - name: Sanitize no-op results to derived metadata flags
+        run: |
+          set -euo pipefail
+          kaggle kernels output "$KERNEL_REF" -p "$OUTPUT_DIR" -o >/dev/null
+          test -s "$OUTPUT_DIR/evidence_noop_screen.json"
+          python - <<'PY'
+          from pathlib import Path
+          import json,os
+          from scripts.render_discriminating_evidence_noop import load_gold_pass_items
+          root=Path(".").resolve()
+          gold=Path(os.environ["GOLD_DIR"])/"discriminating-evidence-gold-metadata.json"
+          expected=load_gold_pass_items(root,gold)
+          rows=json.loads((Path(os.environ["OUTPUT_DIR"])/"evidence_noop_screen.json").read_text())
+          assert rows.get("status")=="completed",rows.get("status")
+          raw=rows.get("results",[])
+          assert len(raw)==len(expected),len(raw)
+          assert rows.get("requested")==len(expected),rows.get("requested")
+          assert [x.get("instance_id") for x in raw]==[x["instance_id"] for x in expected]
+          safe=[]
+          for x,want in zip(raw,expected):
+            assert x.get("repo")==want["repo"]
+            fail=(x.get("status")=="completed" and x.get("resolved") is False and
+                  isinstance(x.get("test_exit_code"),int) and x.get("test_exit_code")!=0)
+            safe.append({
+              "instance_id":want["instance_id"],"repo":want["repo"],
+              "noop_fail":fail,"status":x.get("status"),
+              "test_exit_code":x.get("test_exit_code"),
+              "error_type":x.get("error_type"),
+            })
+          result={
+            "version":"discriminating-evidence-v0-exploratory-noop-screen",
+            "source_gold_action_run_id":42066105011,
+            "source_noop_action_run_id":int(os.environ["GITHUB_RUN_ID"]),
+            "source_selector_sha256":json.loads(gold.read_text())["source_selector_sha256"],
+            "screened":len(safe),
+            "noop_fail_count":sum(x["noop_fail"] for x in safe),
+            "results":safe,
+            "contains_raw_patch_or_task_text":False,
+            "certifies_blind":False,
+            "model_evaluation_executed":False,
+          }
+          target=Path(os.environ["SAFE_DIR"])/"discriminating-evidence-noop-metadata.json"
+          target.write_text(json.dumps(result,indent=2,sort_keys=True)+"\n")
+          print("EVIDENCE_NOOP_SCREENED=",result["screened"])
+          print("EVIDENCE_NOOP_FAIL_COUNT=",result["noop_fail_count"])
+          print("RAW_COMPETITION_DATA_OR_TEST_LOG_PUBLISHED=NO")
+          PY
+
+      - name: Publish vetted no-op flags only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-v0-noop-metadata-${{ github.run_id }}
+          path: /tmp/gemma4-evidence-noop-safe/discriminating-evidence-noop-metadata.json
+          if-no-files-found: warn
+          retention-days: 21
