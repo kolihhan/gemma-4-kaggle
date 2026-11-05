@@ -82,6 +82,7 @@ class TestInvocationSensitivityTests(unittest.TestCase):
             self.assertEqual(counts["tasks"], 17)
             self.assertEqual(counts["resolved"], 1)
             self.assertEqual(counts["recognized_test_calls"], 1)
+            self.assertEqual(counts["legacy_unsafe_recognized_calls"], 1)
             self.assertEqual(counts["unclassified_possible_test_calls"], 1)
             self.assertEqual(counts["tasks_without_any_recognized_or_candidate_test"], 15)
             self.assertEqual(counts["tasks_with_recognized_pre_edit_test"], 0)
