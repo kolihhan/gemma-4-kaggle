@@ -6,10 +6,13 @@ on:
     paths:
       - "scripts/discriminating_evidence_preflight.py"
       - "scripts/discriminating_evidence_exploratory.py"
+      - "scripts/discriminating_evidence_history_audit.py"
       - "tests/test_discriminating_evidence_preflight.py"
       - "tests/test_discriminating_evidence_exploratory.py"
       - ".github/workflows/discriminating-evidence-preflight.yml"
       - "docs/research/discriminating-evidence-v0-gate-2026-11-05.md"
+      - "docs/research/discriminating-evidence-v0-exploratory-4plus12-2026-11-06.md"
+      - "docs/evaluation/discriminating-evidence-v0-exploratory-selection-2026-11-06.json"
   workflow_dispatch:
 
 permissions:
@@ -18,9 +21,11 @@ permissions:
 jobs:
   metadata-preflight:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -72,4 +77,24 @@ jobs:
             "selection_digest_sha256": r["selection_digest_sha256"],
             "status": r["status"],
           }, sort_keys=True))
+          PY
+      - name: Audit preselection tracked Git history without task data
+        run: |
+          set -euo pipefail
+          python -m scripts.discriminating_evidence_history_audit \
+            --repo . --out /tmp/discriminating-evidence-history-audit.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          a = json.loads(Path("/tmp/discriminating-evidence-history-audit.json").read_text())
+          assert a["candidate_count"] == 30
+          assert a["cutoff_utc"] == "2026-11-05T15:59:38Z"
+          assert not a["certifies_blind"]
+          print("HISTORY_SOURCE_AUDIT=", json.dumps({
+              "status": a["status"],
+              "historical_exposed_ids": a["historical_exposed_ids"],
+              "checked_revisions": a["checked_revisions"],
+              "checked_branch_refs": a["checked_branch_refs"],
+          }, sort_keys=True))
+          print("NOT_FULL_BLIND_CERTIFICATION=TRUE")
           PY
