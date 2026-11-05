@@ -27,7 +27,7 @@ def trace(*steps):
 
 
 class TraceMechanicsCliTests(unittest.TestCase):
-    def run_analyzer(self, traces, results):
+    def run_analyzer(self, traces, results, *, shell_chain_v2=False):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             trace_dir = tmp / "traces"
@@ -38,7 +38,8 @@ class TraceMechanicsCliTests(unittest.TestCase):
             results_path.write_text(json.dumps({"results": results}), encoding="utf-8")
             output = tmp / "out.json"
             proc = subprocess.run(
-                [sys.executable, str(SCRIPT), str(trace_dir), "--results", str(results_path), "--output", str(output)],
+                [sys.executable, str(SCRIPT), str(trace_dir), "--results", str(results_path), "--output", str(output)]
+                + (["--shell-chain-v2"] if shell_chain_v2 else []),
                 cwd=ROOT,
                 text=True,
                 capture_output=True,
@@ -113,6 +114,36 @@ class TraceMechanicsCliTests(unittest.TestCase):
         self.assertEqual(task["broad_test_count"], 1)
         self.assertEqual(task["targeted_test_count"], 0)
         self.assertFalse(task["pre_edit_targeted_evidence"])
+
+    def test_v2_recognizes_cd_then_targeted_test_without_changing_v1(self):
+        sample = {"a": trace(
+            step("run_command", arguments={"command": "cd pkg && python -m pytest tests/test_x.py -q"}, exit_code=1),
+            step("edit_file", arguments={"filepath": "pkg/x.py"}, exit_code=0),
+        )}
+        rows = [{"instance_id": "a", "resolved": False}]
+        old = self.run_analyzer(sample, rows)
+        new = self.run_analyzer(sample, rows, shell_chain_v2=True)
+        self.assertEqual(old["version"], "root-trace-mechanics-v1")
+        self.assertEqual(new["version"], "root-trace-mechanics-v2")
+        self.assertFalse(old["tasks"][0]["pre_edit_targeted_evidence"])
+        self.assertTrue(new["tasks"][0]["pre_edit_targeted_evidence"])
+        self.assertEqual(new["tasks"][0]["targeted_test_count"], 1)
+
+    def test_v2_recognizes_single_bash_lc_cd_then_test(self):
+        data = self.run_analyzer(
+            {"a": trace(step("run_command",
+                arguments={"command": "bash -lc 'cd pkg && pytest tests/test_x.py -q'"}, exit_code=0))},
+            [{"instance_id": "a", "resolved": True}], shell_chain_v2=True)
+        self.assertEqual(data["tasks"][0]["targeted_test_count"], 1)
+
+    def test_v2_does_not_claim_test_exit_when_trailing_command_masks_failure(self):
+        for cmd in ("pytest tests/test_x.py ; echo ok", "pytest tests/test_x.py && git status",
+                    "pytest tests/test_x.py || true", "pytest tests/test_x.py | cat"):
+            with self.subTest(cmd=cmd):
+                data = self.run_analyzer(
+                    {"a": trace(step("run_command", arguments={"command": cmd}, exit_code=0))},
+                    [{"instance_id": "a", "resolved": False}], shell_chain_v2=True)
+                self.assertEqual(data["tasks"][0]["targeted_test_count"], 0)
 
     def test_non_test_command_uses_safe_other_command_category(self):
         data = self.run_analyzer(
