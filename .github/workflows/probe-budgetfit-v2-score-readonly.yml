@@ -1,0 +1,43 @@
+name: Read-only latest Gemma 4 Kaggle submission 58019162
+
+on:
+  push:
+    branches: [exp/capacity-boundary-v0]
+    paths:
+      - .github/workflows/probe-budgetfit-v2-score-readonly.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  query:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Kaggle client
+        run: python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+      - name: Query exactly two submitted refs read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import csv,json,subprocess,datetime
+          p=subprocess.run(["kaggle","competitions","submissions","gemma-4-developer-agent","-v"],capture_output=True,text=True,timeout=120)
+          if p.returncode: raise RuntimeError("authenticated Kaggle list failed; status unknown")
+          rows=list(csv.DictReader(p.stdout.splitlines()))
+          result={}
+          for ref in ("57983156","58019162"):
+              matched=[r for r in rows if str(r.get("ref","")).strip()==ref]
+              if len(matched)!=1: raise RuntimeError(f"expected one record for {ref}, found {len(matched)}")
+              r=matched[0]
+              result[ref]={k:str(r.get(k) or "") for k in ("ref","date","status","publicScore","privateScore","description")}
+          output={"checked_utc":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                  "records":result,"new_submission":False,"gpu_used":False,"training":False}
+          print("GEMMA4_READ_ONLY_SCORES",json.dumps(output,sort_keys=True))
+          PY
