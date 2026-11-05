@@ -1,0 +1,97 @@
+name: Read-only test invocation sensitivity on existing E4B traces
+
+on:
+  push:
+    branches: [exp/capacity-boundary-v0]
+    paths:
+      - ".github/workflows/audit-test-invocation-sensitivity-v0.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+  TOPOLOGY_KERNEL: kolihhan/gemma4-topology-single-41458804862
+  RELIABILITY_KERNEL: kolihhan/gemma4-reliability-v1-diag-41485671952
+  RAW_TOPOLOGY: /tmp/trace-sensitivity-existing-topology-private
+  RAW_RELIABILITY: /tmp/trace-sensitivity-existing-reliability-private
+  DERIVED: /tmp/trace-sensitivity-safe
+
+jobs:
+  audit-existing-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify conservative inference and privacy tests
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_audit_uncertain_test_evidence_v0 tests.test_analyze_root_trace_mechanics
+          python -m py_compile scripts/audit_uncertain_test_evidence_v0.py
+      - name: Download only completed private Kaggle kernel outputs
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p "$RAW_TOPOLOGY" "$RAW_RELIABILITY" "$DERIVED"
+          kaggle kernels output "$TOPOLOGY_KERNEL" -p "$RAW_TOPOLOGY" -o >/dev/null
+          kaggle kernels output "$RELIABILITY_KERNEL" -p "$RAW_RELIABILITY" -o >/dev/null
+          test -s "$RAW_TOPOLOGY/verifier_baseline_results.json"
+          test -s "$RAW_RELIABILITY/verifier_baseline_results.json"
+          test "$(find "$RAW_TOPOLOGY/verifier-baseline-results/traces" -maxdepth 1 -name 'trace_*.json' | wc -l)" -eq 17
+          test "$(find "$RAW_RELIABILITY/verifier-baseline-results/traces" -maxdepth 1 -name 'trace_*.json' | wc -l)" -eq 17
+      - name: Derive uncertainty counts only without exposing task text
+        run: |
+          set -euo pipefail
+          python -m scripts.audit_uncertain_test_evidence_v0 \
+            --traces "$RAW_TOPOLOGY/verifier-baseline-results/traces" \
+            --results "$RAW_TOPOLOGY/verifier_baseline_results.json" \
+            --out "$DERIVED/topology-sensitivity.json"
+          python -m scripts.audit_uncertain_test_evidence_v0 \
+            --traces "$RAW_RELIABILITY/verifier-baseline-results/traces" \
+            --results "$RAW_RELIABILITY/verifier_baseline_results.json" \
+            --out "$DERIVED/reliability-sensitivity.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          out=Path(os.environ["DERIVED"])
+          runs={name:json.loads((out/f"{name}-sensitivity.json").read_text())["totals"]
+                for name in ("topology","reliability")}
+          assert all(v["tasks"]==17 and v["resolved"]==1 for v in runs.values())
+          assert all(0<=v["tasks_without_any_recognized_or_candidate_test"]<=17 for v in runs.values())
+          report={
+              "version":"trace-test-sensitivity-comparison-v0",
+              "source":"read-only completed E4B development traces, NOT 31B scored task traces",
+              "topology_kernel":os.environ["TOPOLOGY_KERNEL"],
+              "reliability_kernel":os.environ["RELIABILITY_KERNEL"],
+              "aggregate":runs,
+              "raw_competition_material":False,
+              "new_training":False,
+              "new_gpu":False,
+              "new_submission":False,
+          }
+          (out/"comparison.json").write_text(json.dumps(report,indent=2,sort_keys=True)+"\n")
+          forbidden={"instance_id","command","problem_description","patch","messages","arguments","observation","tool_calls","stdout","stderr","task_text"}
+          def check(x):
+              if isinstance(x,dict):
+                  for k,v in x.items():
+                      assert k not in forbidden,k
+                      check(v)
+              elif isinstance(x,list):
+                  for v in x: check(v)
+          for path in out.glob("*.json"):
+              check(json.loads(path.read_text()))
+          print("TEST_SENSITIVITY_SAFE_COMPARISON",json.dumps(report,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-invocation-sensitivity-v0-${{ github.run_id }}
+          path: ${{ env.DERIVED }}
+          if-no-files-found: warn
+          retention-days: 21
