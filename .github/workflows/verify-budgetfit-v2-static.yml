@@ -1,0 +1,61 @@
+name: Static proof of attributed public Budget-Fit 31B V2
+
+on:
+  push:
+    branches: [exp/capacity-boundary-v0]
+    paths:
+      - .github/workflows/verify-budgetfit-v2-static.yml
+      - scripts/prepare_public_budgetfit_v2.py
+      - tests/test_prepare_public_budgetfit_v2.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      SOURCE_REF: lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2
+      DATA_DIR: /tmp/public-budgetfit-v2-preflight
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify source builder contract
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_prepare_public_budgetfit_v2
+          python -m py_compile scripts/prepare_public_budgetfit_v2.py
+      - name: Fetch exact public scored V2 output (not V3)
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p "$DATA_DIR/source"
+          kaggle kernels output "$SOURCE_REF" -p "$DATA_DIR/source" -o >/dev/null
+          test -s "$DATA_DIR/source/submission.zip"
+      - name: Verify pinned archive and private CPU builder
+        run: |
+          set -euo pipefail
+          python -m scripts.prepare_public_budgetfit_v2 \
+            --source-zip "$DATA_DIR/source/submission.zip" \
+            --out "$DATA_DIR/builder" \
+            --kernel-ref kolihhan/gemma4-v2-static-verification
+          OUTPUT_DIR="$DATA_DIR/built" python "$DATA_DIR/builder/build_public_v2_control.py"
+          cmp "$DATA_DIR/source/submission.zip" "$DATA_DIR/built/submission.zip"
+          python - <<'PY'
+          import hashlib,os
+          from pathlib import Path
+          from scripts.prepare_public_budgetfit_v2 import EXPECTED_ZIP_SHA256
+          root=Path(os.environ["DATA_DIR"])
+          digest=hashlib.sha256((root/"built/submission.zip").read_bytes()).hexdigest()
+          assert digest == EXPECTED_ZIP_SHA256
+          print("PINNED_SCORED_V2_STATIC_VERIFY=PASS",digest)
+          print("ORIGINAL_AUTHOR=lynnsakurai SOURCE_VERSION=2 LICENSE=Apache-2.0")
+          print("NO_NEW_SUBMISSION=TRUE NO_TRAINING=TRUE NO_GPU=TRUE")
+          PY
