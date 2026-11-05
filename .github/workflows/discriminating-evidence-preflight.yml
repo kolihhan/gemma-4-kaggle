@@ -48,3 +48,28 @@ jobs:
           print("DISCRIMINATING_EVIDENCE_PREFLIGHT=EXPECTED_NO_GO")
           print("NO_KAGGLE_NO_GPU_NO_TRAINING_NO_SUBMISSION=PASS")
           PY
+      - name: Freeze proposed 4 plus 12 metadata-only selection
+        run: |
+          set -euo pipefail
+          python -m scripts.discriminating_evidence_exploratory \
+            --repo . --out /tmp/discriminating-evidence-exploratory.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r = json.loads(Path("/tmp/discriminating-evidence-exploratory.json").read_text())
+          assert r["status"] == "NO_GO_HISTORY_AND_ELIGIBILITY_UNCHECKED", r["status"]
+          assert len(r["pilot_ids"]) == 4 and len(r["exploratory_ids"]) == 12
+          assert r["replacement_counts"] == {"Textualize/rich": 6, "fastapi/fastapi": 8}
+          assert not r["certifies_blind"] and not r["gpu_or_submission_authorized"]
+          print("EXPLORATORY_COHORT_FROZEN_METADATA=", json.dumps({
+            "version": r["version"],
+            "pilot_ids": r["pilot_ids"],
+            "exploratory_ids": r["exploratory_ids"],
+            "replacement_ids": r["replacement_ids"],
+            "candidate_counts": r["candidate_counts"],
+            "replacement_counts": r["replacement_counts"],
+            "parent_selection_fingerprint_sha256": r["parent_selection_fingerprint_sha256"],
+            "selection_digest_sha256": r["selection_digest_sha256"],
+            "status": r["status"],
+          }, sort_keys=True))
+          PY
