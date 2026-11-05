@@ -1,6 +1,17 @@
 # NOW — 2026-11-04
 
-Updated: 2026-11-05 (official 31B public score 0.08)
+Updated: 2026-11-05 (31B quota-blocked post-score diagnosis; existing E4B traces re-audited)
+
+## After-0.08 diagnosis execution checkpoint — 2026-11-05
+
+**Outcome: Existing E4B trace-mechanics finding survived a stronger parser audit; new private 31B task-level diagnosis is GPU-QUOTA BLOCKED, not attempted.** No training, LoRA, or new scored Kaggle submission was created. The official pretrained 31B Public LB remains **0.08** (submission `57983156`), E4B Reliability-v1 remains **0.03**.
+
+- Verified frozen CPU preregistration/preflight after a minor source-audit regression fix: [Actions 41980757540](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41980757540) **SUCCESS**. The earlier check incorrectly considered the *later-created frozen cohort metadata* a pre-selection exposure. The exemption now validates exact structured fields, supported IDs, counts, no task/patch text, and `certifies_blind=false` before skipping the manifest in a present-tree source scan. Historical Git cutoff audit remains separate and strict; **do not claim fully certified blind**.
+- One explicitly authorized private 31B L4×4 startup/array-tool feasibility attempt was rejected on push: [Actions 41980782896](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41980782896), **`BLOCKED_GPU_QUOTA`, GPU run NOT STARTED, zero task evaluations**. Private Kaggle GPU quota remains a blocker even though the official competition submission ran successfully. The startup workflow was restored to **manual-dispatch only**, preventing accidental repeated GPU pushes.
+- Instead, audited **existing** (not newly generated) E4B 17-task traces with a conservative opt-in v2 parser recognizing only safe `cd ... && pytest target` or equivalent shell wrappers where the overall exit still reflects the test. [Actions 41981385025](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41981385025) **SUCCESS**; artifact `13393822468`, SHA-256 `dbbb61634f22d241a95607e4386dc31eee29e865ac4ea0fbb9b54df3258098f2`. **Every measured aggregate stayed unchanged** from v1 to v2 in both historical E4B arms.
+- Reliability-v1 existing E4B dev: **1/17 resolved**, **14/17 no *classifier-recognized* targeted test**, **0/17 classifier-recognized pre-edit targeted evidence**, **2 observed post-edit targeted failures with no subsequent edit**, **2 submits after recognized failed targeted test**. This strengthens the *process* signal, but complex test commands may still be unrecognized. These are E4B data, **not 31B hidden or fresh local task diagnostics**. Do not pretend the same counts explain individual 31B Public LB failures.
+- Evidence snapshot (metadata only): [docs/evaluation/gemma4-31b-postscore-diagnostic-checkpoint-2026-11-05.json](docs/evaluation/gemma4-31b-postscore-diagnostic-checkpoint-2026-11-05.json).
+- **Next gate:** No new 31B GPU pilot while quota is exhausted. Preserve frozen 4-task pilot + 12-task independent confirmation untouched. Once a legitimate GPU/private scorer runtime is available, run fixed-policy paired feasibility before testing any architecture change. Do not train or submit merely to bypass quota.
 
 ## Untrained 31B scored result — 2026-11-05
 
