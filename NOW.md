@@ -1,3 +1,19 @@
+# NOW — discriminating-evidence 4+12 CPU eligibility checkpoint (2026-11-06 MYT)
+
+**Research decision: NO-GO for balanced 4+12 exploratory A/B/C quality runs.** A separate, pre-outcome reduction from 4+24 reserved 4 pilot +12 exploratory IDs plus same-repo ordered replacements. [Exploratory contract](docs/research/discriminating-evidence-v0-exploratory-4plus12-2026-11-06.md), [frozen metadata-only manifest](docs/evaluation/discriminating-evidence-v0-exploratory-selection-2026-11-06.json). Neither contract certifies complete blindness.
+
+**Actual no-model reference gold CPU result:** [Action 42066105011](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42066105011) SUCCESS, 30 screened, **Rich 13/14 gold pass; FastAPI 6/16 gold pass** (10 FastAPI failures report test exit 2, cause not classified). The preregistered balanced pilot+exploratory needs 8 FastAPI, so **NO-GO regardless of no-op outcome**. The candidate pool must not be resampled or strengthened based on outcome. Only safe result flags stored in [docs/evaluation/discriminating-evidence-v0-gold-screen-2026-11-06.json](docs/evaluation/discriminating-evidence-v0-gold-screen-2026-11-06.json).
+
+**Verified static/compliance findings:**
+- Deterministic 4+12 selection digest `20bca18b905161123ba0054d058a4f2b963cce6526c67b29e0175a81d17cc343`; original capacity-v0 4+12 remains reserved and untouched.
+- [Action 42064561734](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42064561734) scanned 593 preselection Git source revisions and 14 refs, 0 tracked-ID historical mentions. This is NOT complete blind certification.
+- [Action 42065388698](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42065388698) validated B/C YAML under fresh official 41-wheel scorer; 31B base, no adapters, frozen budget; both schema PASS. Runtime transfer, information isolation and quality remain UNTESTED; root LlmAgent -> AgentTool(SequentialAgent(evidence->coder)) is a proposal, not proven end-to-end.
+- Private CPU no-op screening is linked to the exact passing gold set: [Action 42067120930](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42067120930). The eligibility-only frozen-order readiness check awaits it: [Actions workflow discriminating-evidence-ready-cpu](https://github.com/kolihhan/gemma-4-kaggle/actions/workflows/discriminating-evidence-ready-cpu.yml). These runs cannot reverse the FastAPI shortfall.
+
+**Execution boundary:** no 31B model inference, no GPU use, training, LoRA, competition submission, new public raw Kaggle data mirror or edit to canonical `submission/` in this research lane. Scientific next decision: obtain independently eligible FastAPI tasks under a new prospectively justified data plan, or retire this lane and prioritize the existing separately reserved capacity-v0 E4B-vs-31B causal test when GPU startup is feasible; do not fabricate a small quality win from gold/no-op control results.
+
+---
+
 # NOW — discriminating-evidence research checkpoint (2026-11-05)
 
 **This branch is research-only. Status: NO-GO for model inference, holdout evaluation and Kaggle submission.** No training or LoRA. The inherited capacity-v0 state is preserved below, but its open 31B hypothesis is not execution authorization for this branch.
