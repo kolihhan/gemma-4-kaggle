@@ -1,6 +1,12 @@
 # NOW — 2026-11-04
 
-Updated: 2026-11-05 (E4B test-command exit and unrepaired-submission audit, 31B still 0.08)
+Updated: 2026-11-05 (official 31B feedback API audited; only aggregate 0.08 available)
+
+## Official Kaggle feedback availability probe — 2026-11-05
+
+**Verified submission `57983156`: COMPLETE, Public LB 0.08, Private Score empty.** Authenticated read-only [GitHub Actions 42003198673](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42003198673) checked the Kaggle competition submission-detail endpoint: the returned human-readable fields were reference, status, public/private score and description. **No per-issue failure labels, hidden tests, patches or grader traces were exposed by this detail response.** The Kaggle CLI episode query returned no recognized structured episode IDs; this endpoint is documented for simulation competitions, while Gemma 4 is a scored patch-resolution prediction competition, so it is not a supported route to hidden issue traces. Do not misinterpret the episode command returning exit 0 as usable episode logs. No new submission, GPU, or data download occurred.
+
+**Interpretation:** Distinguish official hidden-issue aggregate LB from **private Kaggle local diagnostic kernel traces on already-inspected public development issues**. The latter are usable for process research but are not scoring feedback from submission 57983156. If Kaggle later adds a dedicated grader feedback download, verify it afresh. The official submission page is https://www.kaggle.com/competitions/gemma-4-developer-agent/submissions .
 
 ## Test-command evidence and repair audit — 2026-11-05
 
