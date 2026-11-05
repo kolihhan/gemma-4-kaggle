@@ -81,6 +81,24 @@ def plausible_test_invocation(command: str, depth: int = 0) -> bool:
 
 
 def reduce_one(trace: dict, author: str) -> dict[str, int | bool]:
+    # Normalizer shares a step's observation across multiple tool calls.
+    # Quantify this ambiguity before interpreting command exit codes.
+    multi_call_steps = 0
+    multi_call_test_steps = 0
+    for raw in trace.get("steps") or []:
+        if not isinstance(raw, dict) or (raw.get("extra") or {}).get("author") != author:
+            continue
+        calls = raw.get("tool_calls") or []
+        if not isinstance(calls, list) or len(calls) <= 1:
+            continue
+        multi_call_steps += 1
+        if any(
+            isinstance(call, dict)
+            and call.get("function_name") == "run_command"
+            and plausible_test_invocation((call.get("arguments") or {}).get("command"))
+            for call in calls
+        ):
+            multi_call_test_steps += 1
     steps = mechanics._normalize_tool_steps(trace, author)
     records = []
     first_edit = None
@@ -121,6 +139,8 @@ def reduce_one(trace: dict, author: str) -> dict[str, int | bool]:
     )
     last_test_code = test_exits[-1] if test_exits else None
     return {
+        "multi_call_steps": multi_call_steps,
+        "multi_call_steps_with_test_invocation": multi_call_test_steps,
         "recognized_test_calls": len(recognized_tests),
         "recognized_zero_exit_calls": sum(code == 0 for code in test_exits),
         "recognized_nonzero_exit_calls": sum(code is not None and code != 0 for code in test_exits),
@@ -155,6 +175,8 @@ def audit(trace_dir: Path, results_path: Path, author: str = "swe_e4b_coder") ->
     rows = list(rows_by_task.values())
     totals = {
         "tasks": len(rows),
+        "multi_call_steps": sum(r["multi_call_steps"] for r in rows),
+        "multi_call_steps_with_test_invocation": sum(r["multi_call_steps_with_test_invocation"] for r in rows),
         "recognized_test_calls": sum(r["recognized_test_calls"] for r in rows),
         "recognized_zero_exit_calls": sum(r["recognized_zero_exit_calls"] for r in rows),
         "recognized_nonzero_exit_calls": sum(r["recognized_nonzero_exit_calls"] for r in rows),
