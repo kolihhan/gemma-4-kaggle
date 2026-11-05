@@ -1,6 +1,16 @@
 # NOW — 2026-11-04
 
-Updated: 2026-11-05 (official 31B feedback API audited; only aggregate 0.08 available)
+Updated: 2026-11-05 (new attributed public 31B V2 reference submitted ref 58019162 PENDING)
+
+## Attributed public 31B V2 reproduction officially submitted — 2026-11-05
+
+**LATEST OWN SUBMISSION: Kaggle ref 58019162, PENDING (Public Score not yet available)**. Source: the openly published Apache-2.0 [Budget-Fit notebook by lynnsakurai](https://www.kaggle.com/code/lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue), precisely **Version 2**, whose author reports Best Score **0.18 V2**. This is **not yet our result and not an original innovation**. Our prior independent 31B model-only scored ref **57983156 remains 0.08**.
+
+- Actual version-aware public Kaggle API retrieval: [Actions 42007379647](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42007379647). V2 and V3 returned **different ZIP bytes**. Pinned V2 `submission.zip` SHA-256 `a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3`.
+- Contract and byte-identical private builder preflight: [Actions 42007948296](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42007948296), **SUCCESS, 4/4 tests**. Compiler sanity and exact output ZIP SHA pass. No training or GPU.
+- **Official submission accepted**: [Actions 42008171687](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42008171687), Kaggle API returned `ref: 58019162`; authenticated submission listing returned `SubmissionStatus.PENDING` at **2026-11-05 10:09:09 UTC**. Description `attributed-public-budgetfit-v2-repro:no-train`. Private CPU builder ref `kolihhan/gemma4-budgetfit-v2-reference-42008171687`, version 1, produced the **same exact scored public V2 ZIP bytes**. Personal Kaggle GPU quota was not consumed; official scorer runs separately.
+- No changes to canonical `submission/`, no LoRA, no additional scored submission or local holdout model evaluation. All source attribution, controls, thresholds and next original intervention gate: [public-budgetfit-v2-reproduction-2026-11-05.md](docs/research/public-budgetfit-v2-reproduction-2026-11-05.md).
+- **Next**: query exact ref **58019162** read-only until terminal; never assume the author's 0.18 is ours. If it scores, compare our 0.08 with the reproduced bundle carefully; the bundle changes policy, tools, sampling and time budgets together and may be scored in a different host epoch. Do not launch another candidate while this submission is pending.
 
 ## Official Kaggle feedback availability probe — 2026-11-05
 
