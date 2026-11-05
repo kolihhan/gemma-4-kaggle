@@ -107,6 +107,21 @@ class CapacityPreflightV0Tests(unittest.TestCase):
         self.assertEqual(scan["unexpected_mentions"], [])
         self.assertGreater(scan["scanned_files"], 0)
 
+    def test_frozen_cohort_is_exempt_only_with_valid_metadata_schema(self):
+        manifest = capacity.build_feasibility_manifest(ROOT)
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            shutil.copytree(ROOT / "docs/evaluation", repo / "docs/evaluation")
+            (repo / "docs/research").mkdir()
+            frozen_path = repo / "docs/evaluation/capacity-v0-paired-cohort-2026-11-04.json"
+            frozen = json.loads(frozen_path.read_text(encoding="utf-8"))
+            scan = capacity.audit_candidate_text_mentions(repo, manifest)
+            self.assertEqual(scan["unexpected_mentions"], [])
+            frozen["unexpected_issue_notes"] = "NOT_METADATA"
+            frozen_path.write_text(json.dumps(frozen), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "metadata fields"):
+                capacity.audit_candidate_text_mentions(repo, manifest)
+
     def test_missing_provenance_is_a_hard_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / "repo"
