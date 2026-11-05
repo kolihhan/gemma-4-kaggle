@@ -2,6 +2,8 @@
 
 Updated: 2026-11-05 (new attributed public 31B V2 reference submitted ref 58019162 PENDING)
 
+**Latest read-only scoring check: 2026-11-05 22:06 MYT / 14:06 UTC — submission 58019162 remains PENDING, Public/Private scores empty.** [Actions 42041728306](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42041728306) SUCCESS. No new submission, GPU use, or training. Do not infer an official score from the source author's 0.18.
+
 ## Attributed public 31B V2 reproduction officially submitted — 2026-11-05
 
 **LATEST OWN SUBMISSION: Kaggle ref 58019162, PENDING (Public Score not yet available)**. Source: the openly published Apache-2.0 [Budget-Fit notebook by lynnsakurai](https://www.kaggle.com/code/lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue), precisely **Version 2**, whose author reports Best Score **0.18 V2**. This is **not yet our result and not an original innovation**. Our prior independent 31B model-only scored ref **57983156 remains 0.08**.
