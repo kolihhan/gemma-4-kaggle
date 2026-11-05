@@ -1,0 +1,79 @@
+name: Probe official Kaggle submission feedback availability read-only
+
+on:
+  push:
+    branches: [exp/capacity-boundary-v0]
+    paths:
+      - ".github/workflows/probe-31b-official-feedback-readonly.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      REF: "57983156"
+      COMPETITION: "gemma-4-developer-agent"
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned Kaggle client
+        run: python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+      - name: Inspect official submission detail and optional episodes endpoint without raw output
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os,re,subprocess,datetime
+          from pathlib import Path
+          out=Path("/tmp/gemma4-feedback-check")
+          out.mkdir(parents=True,exist_ok=True)
+          ref=os.environ["REF"]
+          def cmd(*args):
+              try:
+                  p=subprocess.run(["kaggle","competitions",*args],capture_output=True,text=True,timeout=60)
+                  return p.returncode,p.stdout,p.stderr
+              except Exception as exc:
+                  return -99,"",type(exc).__name__
+          status_code,standard,err=cmd("submission",ref)
+          reported={}
+          for line in standard.splitlines():
+              parts=line.split(":",1)
+              if len(parts)!=2: continue
+              k,v=parts[0].strip().lower(),parts[1].strip()
+              if k in {"submission ref","status","public score","private score","description"}:
+                  reported[k]=v[:128]
+          episodes_code,episodes,episodes_err=cmd("episodes",ref)
+          episode_numbers=re.findall(r"(?m)^\s*(?:Episode\s+(?:ID|Id)|episodeId)\s*[:=]\s*(\d+)\b",episodes)
+          probe={
+              "checked_utc":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "submission_ref":ref,
+              "submission_detail_exit_code":status_code,
+              "submission_detail":reported,
+              "episodes_command_exit_code":episodes_code,
+              "episodes_known_ids_exposed":bool(episode_numbers),
+              "episodes_text_nonempty":bool(episodes.strip()),
+              "episodes_error_category":(
+                   "unsupported_or_unknown" if episodes_code!=0 else
+                   "returned_no_structured_episode_ids" if not episode_numbers else "episode_ids_returned"
+              ),
+              "grader_task_trace_retrieved":False,
+              "submission_download_attempted":False,
+              "gpu_run":False,
+              "new_submission":False,
+          }
+          # Do not log endpoint raw responses, errors, competition data or episode bodies.
+          (out/"feedback.json").write_text(json.dumps(probe,sort_keys=True,indent=2)+"\n")
+          print("KAGGLE_FEEDBACK_AVAILABILITY",json.dumps(probe,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: official-feedback-metadata-${{ github.run_id }}
+          path: /tmp/gemma4-feedback-check/feedback.json
+          if-no-files-found: error
+          retention-days: 14
