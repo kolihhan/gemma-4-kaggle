@@ -1,0 +1,86 @@
+name: Verify public scored Gemma 4 31B reference packages (CPU only)
+
+on:
+  push:
+    branches: [exp/capacity-boundary-v0]
+    paths:
+      - .github/workflows/verify-open-31b-references.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned read-only Kaggle client
+        run: python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+      - name: Pull public reference notebook sources and outputs, no new kernels
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, hashlib, os, zipfile, subprocess
+          from pathlib import Path
+          roots=Path("/tmp/gemma4-public-reference")
+          roots.mkdir(parents=True, exist_ok=True)
+          refs={
+            "scored_v19": "yiyu0716/g4-pack-yiyu-v19-fixed-trace-t7p5",
+            "budget_fit": "lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue",
+          }
+          safe={}
+          for alias,ref in refs.items():
+              dest=roots/alias
+              dest.mkdir()
+              commands=[
+                ["kaggle","kernels","pull","-k",ref,"-p",str(dest)],
+                ["kaggle","kernels","output",ref,"-p",str(dest),"--force"],
+              ]
+              outputs=[]
+              for command in commands:
+                  try:
+                      result=subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=150)
+                      outputs.append({"kind":command[2],"exit_code":result.returncode,
+                         "stderr_tail":result.stderr[-200:] if result.returncode else ""})
+                  except subprocess.TimeoutExpired:
+                      outputs.append({"kind":command[2],"exit_code":124})
+              entries=[]
+              for p in sorted(dest.rglob("*")):
+                  if not p.is_file():
+                      continue
+                  rel=p.relative_to(dest).as_posix()
+                  size=p.stat().st_size
+                  row={"path":rel,"size":size}
+                  if size<15000000:
+                      row["sha256"]=hashlib.sha256(p.read_bytes()).hexdigest()
+                  if p.suffix==".zip" and size<15000000:
+                      try:
+                          with zipfile.ZipFile(p) as z:
+                              members=z.infolist()
+                              row["members"]=[{"path":m.filename,"size":m.file_size,
+                                "sha256":hashlib.sha256(z.read(m.filename)).hexdigest()}
+                                for m in members if not m.is_dir()][:35]
+                              safe_paths={"agent.yaml","eval_config.yaml","configs/sampling.yaml","kernel-metadata.json"}
+                              for name in safe_paths:
+                                  if name in z.namelist():
+                                      text=z.read(name).decode("utf-8","replace")
+                                      row.setdefault("configs",{})[name]=text[:2800]
+                      except (zipfile.BadZipFile,KeyError):
+                          row["invalid_zip"]=True
+                  if p.name=="kernel-metadata.json":
+                      try:
+                          d=json.loads(p.read_text())
+                          row["metadata_summary"]={k:d.get(k) for k in ("id","title","is_private","enable_gpu","kernel_type","code_file")}
+                      except Exception:
+                          pass
+                  entries.append(row)
+              safe[alias]={"reference":ref,"queries":outputs,"files":entries}
+          print("PUBLIC_REFERENCE_INSPECTION",json.dumps(safe,sort_keys=True))
+          PY
