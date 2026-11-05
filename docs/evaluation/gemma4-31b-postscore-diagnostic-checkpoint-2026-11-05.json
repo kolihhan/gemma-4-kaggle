@@ -1,0 +1,55 @@
+{
+  "version": "gemma4-postscore-diagnostic-checkpoint-v1",
+  "date": "2026-11-05",
+  "objective": "Explain untrained 31B Public LB 0.08 using independent existing evidence without training, new Kaggle submission, or tuning to scored tasks",
+  "official_score": {
+    "submission_ref": "57983156",
+    "model": "gemma-4-31b-it-qat-w4a16-ct",
+    "public": 0.08,
+    "status": "COMPLETE",
+    "hidden_task_traces_available": false
+  },
+  "cpu_preflight": {
+    "workflow_run_id": 41980757540,
+    "conclusion": "success",
+    "scope": "frozen eligibility and startup static contracts"
+  },
+  "private_31b_startup": {
+    "workflow_run_id": 41980782896,
+    "classification": "BLOCKED_GPU_QUOTA",
+    "kernel_started": false,
+    "competition_tasks_executed": 0
+  },
+  "e4b_trace_reaudit": {
+    "workflow_run_id": 41981385025,
+    "conclusion": "success",
+    "artifact_id": 13393822468,
+    "artifact_digest_sha256": "dbbb61634f22d241a95607e4386dc31eee29e865ac4ea0fbb9b54df3258098f2",
+    "source": "17 already-inspected development tasks per E4B arm; not Kaggle hidden 31B",
+    "reliability_v1": {
+      "tasks": 17,
+      "resolved": 1,
+      "without_classifier_recognized_targeted_test": 14,
+      "with_pre_edit_classifier_recognized_targeted_evidence": 0,
+      "failed_targeted_test_without_repair": 2,
+      "submission_after_failed_targeted_test": 2,
+      "total_recognized_targeted_test_calls": 3
+    },
+    "topology_single": {
+      "tasks": 17,
+      "resolved": 1,
+      "without_classifier_recognized_targeted_test": 15,
+      "with_pre_edit_classifier_recognized_targeted_evidence": 0,
+      "total_recognized_targeted_test_calls": 3
+    },
+    "change_in_all_reported_metrics_under_opt_in_v2": 0,
+    "interpretation_limits": "Conservative parser still may not recognize commands using complex shell wrappers; no 31B task trace; no randomized controlled model experiment"
+  },
+  "output_policy": {
+    "contains_raw_competition_data": false,
+    "contains_task_or_patch_text": false,
+    "training_executed": false,
+    "scored_submission_created": false
+  },
+  "next_decision": "Do not run a 31B pilot while Kaggle private GPU quota blocks push. Retain four-task pilot and 12-task untouched confirmation; require a feasible 31B runtime and complete side-by-side logs before causal claims."
+}
