@@ -10,6 +10,7 @@ This does not re-run a model, change a submission, or certify test relevance.
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import re
 import shlex
@@ -62,6 +63,13 @@ def plausible_test_invocation(command: str, depth: int = 0) -> bool:
         if executable in {"python", "python3", "python3.10", "python3.11", "python3.12"} and len(section) > 2 and section[1] == "-m":
             if section[2] in {"pytest", "unittest", "nose", "tox"}:
                 return True
+        if executable in {"python", "python3", "python3.10", "python3.11", "python3.12"} and len(section) == 3 and section[1] == "-c":
+            try:
+                tree = ast.parse(section[2])
+            except SyntaxError:
+                continue
+            if any(isinstance(node, ast.Assert) for node in ast.walk(tree)):
+                return True
         if executable == "make" and len(section) >= 2 and section[1] in {"test", "tests", "check"}:
             return True
         if executable == "hatch" and len(section) >= 2 and section[1] in {"test", "run"}:
@@ -78,19 +86,22 @@ def reduce_one(trace: dict, author: str) -> dict[str, int | bool]:
     first_edit = None
     for i, step in enumerate(steps):
         kind = mechanics._action_kind(step, shell_chain_v2=True)
-        candidate = False
-        if step["tool"] == "run_command" and kind == "other_command":
-            candidate = plausible_test_invocation(mechanics._command(step["arguments"]))
+        mentioned_test = kind in {"targeted_test", "broad_test"}
+        executable_test = (step["tool"] == "run_command" and
+                           plausible_test_invocation(mechanics._command(step["arguments"])))
+        # Legacy v1/v2 can count echo/grep mentions of pytest. Reject those.
+        confirmed = bool(mentioned_test and executable_test)
+        possible = bool(executable_test and not mentioned_test)
+        rejected = bool(mentioned_test and not executable_test)
         if first_edit is None and kind in {"edit", "script_edit"}:
             first_edit = i
-        records.append((kind, candidate))
-    recognized_tests = [
-        i for i, (kind, _) in enumerate(records)
-        if kind in {"targeted_test", "broad_test"}
-    ]
-    uncertain_tests = [i for i, (_, maybe) in enumerate(records) if maybe]
+        records.append((confirmed, possible, rejected))
+    recognized_tests = [i for i, (certain, _, _) in enumerate(records) if certain]
+    uncertain_tests = [i for i, (_, maybe, _) in enumerate(records) if maybe]
+    rejected_legacy = [i for i, (_, _, rejected) in enumerate(records) if rejected]
     return {
         "recognized_test_calls": len(recognized_tests),
+        "legacy_unsafe_recognized_calls": len(rejected_legacy),
         "unclassified_possible_test_calls": len(uncertain_tests),
         "has_recognized_test": bool(recognized_tests),
         "has_possible_unclassified_test": bool(uncertain_tests),
@@ -113,6 +124,7 @@ def audit(trace_dir: Path, results_path: Path, author: str = "swe_e4b_coder") ->
     totals = {
         "tasks": len(rows),
         "recognized_test_calls": sum(r["recognized_test_calls"] for r in rows),
+        "legacy_unsafe_recognized_calls": sum(r["legacy_unsafe_recognized_calls"] for r in rows),
         "unclassified_possible_test_calls": sum(r["unclassified_possible_test_calls"] for r in rows),
         "tasks_with_recognized_test": sum(r["has_recognized_test"] for r in rows),
         "tasks_with_possible_unclassified_test": sum(r["has_possible_unclassified_test"] for r in rows),
@@ -125,7 +137,7 @@ def audit(trace_dir: Path, results_path: Path, author: str = "swe_e4b_coder") ->
     return {
         "version": "trace-test-invocation-sensitivity-v0",
         "source": "existing inspected E4B development traces only",
-        "classifier": "v2 recognized tests plus non-executed uncertainty check for test runner invocations in other_command",
+        "classifier": "legacy v2 recognition intersected with anchored test invocation; possible runner invocation counted separately; unsafe legacy recognitions rejected",
         "limits": "possible != executed, relevant, or passed; hidden 31B tasks not observed",
         "raw_commands_or_task_text_included": False,
         "new_model_run": False,
