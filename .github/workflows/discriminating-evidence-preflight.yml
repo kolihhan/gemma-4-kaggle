@@ -100,3 +100,61 @@ jobs:
           }, sort_keys=True))
           print("NOT_FULL_BLIND_CERTIFICATION=TRUE")
           PY
+
+  official-schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Render no-training B/C YAML packages to /tmp only
+        run: |
+          set -euo pipefail
+          python -m scripts.discriminating_evidence_schema --repo . --out /tmp/evidence-schema-pair
+      - name: Obtain latest official scorer wheelhouse (metadata/software only)
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p /tmp/evidence-scorer-wheelhouse /tmp/evidence-scorer-wheelhouse-fixed
+          kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse \
+            -p /tmp/evidence-scorer-wheelhouse --unzip
+          python - <<'PY'
+          from pathlib import Path
+          import shutil
+          source = Path("/tmp/evidence-scorer-wheelhouse")
+          out = Path("/tmp/evidence-scorer-wheelhouse-fixed")
+          for wheel in source.glob("*.whl"):
+              if "cutlass" in wheel.name.lower():
+                  continue
+              name = wheel.name.replace("cu128", "+cu128") if "cu128" in wheel.name and "+" not in wheel.name else wheel.name
+              shutil.copyfile(wheel, out / name)
+          assert list(out.glob("adk_submission-*.whl"))
+          assert list(out.glob("swegemma-*.whl"))
+          print("OFFICIAL_WHEELHOUSE_FILES=", len(list(out.glob("*.whl"))))
+          PY
+      - name: Validate B/C with current official ADK submission schema
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            --find-links /tmp/evidence-scorer-wheelhouse-fixed \
+            /tmp/evidence-scorer-wheelhouse-fixed/adk_submission-*.whl \
+            /tmp/evidence-scorer-wheelhouse-fixed/swegemma-*.whl
+          python - <<'PY'
+          from pathlib import Path
+          from adk_submission import validate_directory
+          from adk_submission.discovery import discover_declared_models
+          from swegemma.config import build_submission_limits
+          limits, _ = build_submission_limits()
+          for arm in ("b", "c"):
+              directory = Path("/tmp/evidence-schema-pair") / arm
+              validate_directory(directory, limits=limits)
+              models = discover_declared_models(directory)
+              assert models == {"gemma-4-31b-it-qat-w4a16-ct"}, (arm, models)
+              print("OFFICIAL_SCHEMA_ARM_" + arm.upper() + "=PASS")
+          print("NO_MODEL_INFERENCE_NO_TRAINING_NO_KAGGLE_SUBMISSION=TRUE")
+          print("SCHEMA_IS_NOT_HANDOFF_RUNTIME_PROOF=TRUE")
+          PY
