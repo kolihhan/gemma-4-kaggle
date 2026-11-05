@@ -99,8 +99,37 @@ def reduce_one(trace: dict, author: str) -> dict[str, int | bool]:
     recognized_tests = [i for i, (certain, _, _) in enumerate(records) if certain]
     uncertain_tests = [i for i, (_, maybe, _) in enumerate(records) if maybe]
     rejected_legacy = [i for i, (_, _, rejected) in enumerate(records) if rejected]
+    test_exits = [mechanics._exit_code(steps[i]["result"]) for i in recognized_tests]
+    mutations = [
+        i for i, step in enumerate(steps)
+        if mechanics._action_kind(step, shell_chain_v2=True) in {"edit", "script_edit"}
+    ]
+    submits = [i for i, step in enumerate(steps) if step["tool"] == "submit_patch"]
+    nonzero_test_indices = [
+        i for i, code in zip(recognized_tests, test_exits)
+        if code is not None and code != 0
+    ]
+    has_repair_after_test_failure = any(
+        any(edit > test for edit in mutations) for test in nonzero_test_indices
+    )
+    has_unrepaired_failure_submission = any(
+        any(
+            submit > test and not any(test < edit < submit for edit in mutations)
+            for submit in submits
+        )
+        for test in nonzero_test_indices
+    )
+    last_test_code = test_exits[-1] if test_exits else None
     return {
         "recognized_test_calls": len(recognized_tests),
+        "recognized_zero_exit_calls": sum(code == 0 for code in test_exits),
+        "recognized_nonzero_exit_calls": sum(code is not None and code != 0 for code in test_exits),
+        "recognized_unknown_exit_calls": sum(code is None for code in test_exits),
+        "has_recognized_test_after_edit": bool(first_edit is not None and any(i > first_edit for i in recognized_tests)),
+        "last_recognized_test_zero_exit": bool(recognized_tests and last_test_code == 0),
+        "last_recognized_test_nonzero_exit": bool(recognized_tests and last_test_code is not None and last_test_code != 0),
+        "has_repair_after_nonzero_test_exit": has_repair_after_test_failure,
+        "has_submit_after_nonzero_test_exit_without_repair": has_unrepaired_failure_submission,
         "legacy_unsafe_recognized_calls": len(rejected_legacy),
         "unclassified_possible_test_calls": len(uncertain_tests),
         "has_recognized_test": bool(recognized_tests),
@@ -119,11 +148,28 @@ def audit(trace_dir: Path, results_path: Path, author: str = "swe_e4b_coder") ->
         raise ValueError("results and trace IDs differ; fail closed")
     if len(paths) != 17:
         raise ValueError("expected exactly 17 already-inspected development tasks")
-    rows = [reduce_one(json.loads(paths[key].read_text(encoding="utf-8")), author)
-            for key in sorted(paths)]
+    rows_by_task = {
+        key: reduce_one(json.loads(paths[key].read_text(encoding="utf-8")), author)
+        for key in sorted(paths)
+    }
+    rows = list(rows_by_task.values())
     totals = {
         "tasks": len(rows),
         "recognized_test_calls": sum(r["recognized_test_calls"] for r in rows),
+        "recognized_zero_exit_calls": sum(r["recognized_zero_exit_calls"] for r in rows),
+        "recognized_nonzero_exit_calls": sum(r["recognized_nonzero_exit_calls"] for r in rows),
+        "recognized_unknown_exit_calls": sum(r["recognized_unknown_exit_calls"] for r in rows),
+        "tasks_with_recognized_test_after_edit": sum(r["has_recognized_test_after_edit"] for r in rows),
+        "tasks_with_repair_after_nonzero_test_exit": sum(r["has_repair_after_nonzero_test_exit"] for r in rows),
+        "tasks_with_submit_after_nonzero_test_exit_without_repair": sum(r["has_submit_after_nonzero_test_exit_without_repair"] for r in rows),
+        "unresolved_tasks_with_last_recognized_test_zero_exit": sum(
+            r["last_recognized_test_zero_exit"] and not outcome[key]
+            for key, r in rows_by_task.items()
+        ),
+        "unresolved_tasks_with_last_recognized_test_nonzero_exit": sum(
+            r["last_recognized_test_nonzero_exit"] and not outcome[key]
+            for key, r in rows_by_task.items()
+        ),
         "legacy_unsafe_recognized_calls": sum(r["legacy_unsafe_recognized_calls"] for r in rows),
         "unclassified_possible_test_calls": sum(r["unclassified_possible_test_calls"] for r in rows),
         "tasks_with_recognized_test": sum(r["has_recognized_test"] for r in rows),
@@ -138,7 +184,7 @@ def audit(trace_dir: Path, results_path: Path, author: str = "swe_e4b_coder") ->
         "version": "trace-test-invocation-sensitivity-v0",
         "source": "existing inspected E4B development traces only",
         "classifier": "legacy v2 recognition intersected with anchored test invocation; possible runner invocation counted separately; unsafe legacy recognitions rejected",
-        "limits": "possible != executed, relevant, or passed; hidden 31B tasks not observed",
+        "limits": "Test command exit codes are not proof of issue-level correctness; a zero exit may reflect irrelevant tests. Hidden 31B tasks not observed.",
         "raw_commands_or_task_text_included": False,
         "new_model_run": False,
         "new_submission": False,
