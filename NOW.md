@@ -1,6 +1,17 @@
 # NOW — 2026-11-04
 
-Updated: 2026-11-05 (31B quota-blocked post-score diagnosis; existing E4B traces re-audited)
+Updated: 2026-11-05 (E4B test-command exit and unrepaired-submission audit, 31B still 0.08)
+
+## Test-command evidence and repair audit — 2026-11-05
+
+**Verified CPU-only, no-training read of previously completed E4B development traces.** This is a process diagnosis, **not** an explanation derived from 31B hidden task logs. Official 31B Kaggle Public LB remains **0.08** (ref 57983156); no new submission or GPU evaluation was launched.
+
+- [Final read-only GitHub Actions 41987818297](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41987818297): **SUCCESS, 19 unit tests passed**, safe artifact 13397016902 (ZIP SHA-256 f962e9daaac457706786eb38cf42a52b9e832c76858cc065f20240ac8db21175). Outputs contain aggregate counts only; raw commands, issue text, task IDs and patches remain in ephemeral/private run inputs. Archived compact evidence: [trace-test-evidence-v0-2026-11-05.json](docs/evaluation/trace-test-evidence-v0-2026-11-05.json).
+- **Reliability-v1 E4B, previously inspected 17 dev tasks:** 11/17 contain a classifier-confirmed test command, 6/17 contain neither a confirmed nor a plausible overlooked test command; 13 test command calls in total, **12 explicitly nonzero** exits, **1 zero** exit, **0 unknown** exits. **0/17** tasks contain a confirmed pre-edit test. **5/17** tasks submitted a patch after a nonzero test command exit with no intervening mutation. **3/17** attempted a subsequent mutation after a nonzero test exit. **One unresolved task's last recognized test command exited 0**, so local test success is not sufficient proof of issue resolution.
+- **Predecessor single-root E4B, previously inspected same 17 dev tasks:** 11/17 confirmed a test command, 6/17 without candidate tests; 17 recognized test command calls, **16 nonzero**, 1 zero, no pre-edit test, **9/17** submitted after a nonzero test exit without a mutation, **1/17** attempted mutation after a nonzero exit.
+- **Quality check:** The previous permissive analyzer could synthetically miscount echo pytest as testing. A new anchored-executable sensitivity audit excludes this and identifies possible unclassified invocations separately. In actual traces, **zero** legacy unsafe recognitions and **zero** plausible unclassified invocations; **zero** multi-tool trace steps, so no shared-observation ambiguity in these counts. This strengthens the process finding beyond earlier counts of targeted tests only.
+- **Interpretation boundary:** A nonzero test *command* exit may reflect environment, import, or collection problems rather than a wrong patch; no per-test output cause classification was performed. These 17 dev tasks are not the hidden 31B scoring set, and one Public LB score does not prove capacity or architecture causality.
+- **Next discriminating step:** Do not add more prompt text just to demand testing; the existing soft instruction already says not to submit known-failing patches. Test whether a feasible runtime and validated workflow can enforce or induce a meaningful **verify → interpret failure → repair/retest** transition on a separately untouched, pre-registered denominator. No GPU private Kaggle pilot while quota still rejects startup, and no speculative scored submission.
 
 ## After-0.08 diagnosis execution checkpoint — 2026-11-05
 
