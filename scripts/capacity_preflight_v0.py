@@ -174,6 +174,47 @@ def audit_candidate_text_mentions(repo: Path, manifest: dict) -> dict[str, objec
         "docs/evaluation/capacity-v0-gold-screen-2026-11-04.json",
         "docs/evaluation/capacity-v0-noop-screen-2026-11-04.json",
     }
+    # Frozen after the original preselection cutoff. This is a structured
+    # metadata-only denominator, not evidence that somebody inspected task text.
+    # Validate schema before exempting it: arbitrary notes/raw content in that
+    # file must NOT silently bypass the exposure scan.
+    cohort_path = "docs/evaluation/capacity-v0-paired-cohort-2026-11-04.json"
+    if (repo / cohort_path).is_file():
+        frozen = read_json(repo, cohort_path)
+        expected_keys = {
+            "version", "status", "source_selector_sha256",
+            "replacement_noop_run_id", "feasibility", "confirmation",
+            "totals", "contains_raw_patch_or_task_text",
+            "model_evaluation_executed", "certifies_blind",
+        }
+        if set(frozen) != expected_keys:
+            raise ValueError("unexpected frozen cohort metadata fields")
+        if frozen["version"] != "capacity-v0-paired-denominator-v1":
+            raise ValueError("unexpected frozen cohort version")
+        if frozen["contains_raw_patch_or_task_text"] is not False:
+            raise ValueError("frozen cohort must contain metadata only")
+        if frozen["certifies_blind"] is not False or frozen["model_evaluation_executed"] is not False:
+            raise ValueError("frozen cohort status drift")
+        items = frozen.get("feasibility", []) + frozen.get("confirmation", [])
+        if not isinstance(frozen.get("feasibility"), list) or not isinstance(frozen.get("confirmation"), list):
+            raise ValueError("frozen cohort group is not a list")
+        if len(frozen["feasibility"]) != 4 or len(frozen["confirmation"]) != 12:
+            raise ValueError("frozen cohort population drift")
+        if any(
+            not isinstance(item, dict)
+            or set(item) != {"instance_id", "repo", "source"}
+            or item["source"] not in {"original", "replacement"}
+            or item["repo"] not in REPOS
+            or not re.fullmatch(r"(rich|fastapi)_\\d+", str(item["instance_id"]))
+            for item in items
+        ):
+            raise ValueError("frozen cohort item is not metadata-only")
+        if len({item["instance_id"] for item in items}) != 16:
+            raise ValueError("frozen cohort duplicated issue IDs")
+        if frozen["totals"] != {"feasibility": 4, "confirmation": 12, "replacements_used": 6}:
+            raise ValueError("frozen cohort totals drift")
+        input_paths.add(cohort_path)
+
     findings: list[dict[str, str]] = []
     scanned = 0
     for dirname in ("docs", "scripts", "tests", "kaggle", ".github/workflows"):
