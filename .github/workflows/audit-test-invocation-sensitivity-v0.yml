@@ -1,4 +1,5 @@
 name: Read-only test invocation sensitivity on existing E4B traces
+# V0.1: exclude legacy echo/grep false positives while retaining uncertainty bounds.
 
 on:
   push:
