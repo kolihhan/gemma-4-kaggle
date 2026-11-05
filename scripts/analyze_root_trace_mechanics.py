@@ -92,6 +92,51 @@ def classify_test_command(command: str) -> str:
     return "broad"
 
 
+
+def classify_test_command_shellsafe(command: str) -> str:
+    """Conservatively recognize a test in an explicit, safe shell wrapper.
+
+    Only a final test preceded by zero or more cd DIR steps is accepted.
+    A test followed by echo is NOT accepted: its aggregate exit code is not
+    the test exit. Pipelines, shell OR, multiple tests and other side-effects
+    remain unclassified to avoid treating non-evidence as a passing test.
+    This is an opt-in v2 metric; v1 results remain reproducible.
+    """
+    if not isinstance(command, str) or not command.strip():
+        return "not_test"
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return "not_test"
+    if not tokens:
+        return "not_test"
+    if tokens[0].rsplit("/", 1)[-1] in {"bash", "sh"} and len(tokens) == 3 and tokens[1] in {"-lc", "-c"}:
+        return classify_test_command_shellsafe(tokens[2]) if tokens[2] != command else "not_test"
+    if any(t in {"|", "||", "&", chr(96)} for t in tokens):
+        return "not_test"
+    if not any(t in {"&&", ";"} for t in tokens):
+        return classify_test_command(command)
+    commands = []
+    part = []
+    for t in tokens:
+        if t in {"&&", ";"}:
+            if not part:
+                return "not_test"
+            commands.append(part)
+            part = []
+        else:
+            part.append(t)
+    if not part:
+        return "not_test"
+    commands.append(part)
+    if len(commands) > 5:
+        return "not_test"
+    for prefix in commands[:-1]:
+        if len(prefix) != 2 or prefix[0] != "cd":
+            return "not_test"
+    return classify_test_command(shlex.join(commands[-1]))
+
+
 def _decode_observation(observation: Any) -> dict[str, Any]:
     if not isinstance(observation, dict):
         return {}
@@ -173,7 +218,7 @@ def _normalize_tool_steps(trace: dict[str, Any], author: str) -> list[dict[str, 
     return normalized
 
 
-def _action_kind(step: dict[str, Any]) -> str:
+def _action_kind(step: dict[str, Any], *, shell_chain_v2: bool = False) -> str:
     tool = step["tool"]
     if tool in EDIT_TOOLS:
         return "edit"
@@ -186,7 +231,8 @@ def _action_kind(step: dict[str, Any]) -> str:
     if tool != "run_command":
         return "other"
     command = _command(step["arguments"])
-    test_kind = classify_test_command(command)
+    test_kind = (classify_test_command_shellsafe(command) if shell_chain_v2
+                 else classify_test_command(command))
     if test_kind == "targeted":
         return "targeted_test"
     if test_kind == "broad":
@@ -202,9 +248,9 @@ def _action_kind(step: dict[str, Any]) -> str:
     return "other_command"
 
 
-def analyze_trace(instance_id: str, trace: dict[str, Any], resolved: bool, author: str) -> dict[str, Any]:
+def analyze_trace(instance_id: str, trace: dict[str, Any], resolved: bool, author: str, *, shell_chain_v2: bool = False) -> dict[str, Any]:
     steps = _normalize_tool_steps(trace, author)
-    actions = [(_action_kind(step), _exit_code(step["result"])) for step in steps]
+    actions = [(_action_kind(step, shell_chain_v2=shell_chain_v2), _exit_code(step["result"])) for step in steps]
     mutation_indices = [i for i, (kind, _) in enumerate(actions) if kind in {"edit", "script_edit"}]
     targeted = [(i, code) for i, (kind, code) in enumerate(actions) if kind == "targeted_test"]
     broad = [(i, code) for i, (kind, code) in enumerate(actions) if kind == "broad_test"]
@@ -321,6 +367,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--results", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--author", default="swe_e4b_coder")
+    parser.add_argument("--shell-chain-v2", action="store_true", help="opt-in conservative cd+test shell command recognition")
     args = parser.parse_args(argv)
 
     resolved_by_id = load_results(args.results)
@@ -336,10 +383,10 @@ def main(argv: list[str] | None = None) -> int:
     tasks = []
     for instance_id in sorted(trace_files):
         trace = json.loads(trace_files[instance_id].read_text(encoding="utf-8"))
-        tasks.append(analyze_trace(instance_id, trace, resolved_by_id[instance_id], args.author))
+        tasks.append(analyze_trace(instance_id, trace, resolved_by_id[instance_id], args.author, shell_chain_v2=args.shell_chain_v2))
 
     output = {
-        "version": "root-trace-mechanics-v1",
+        "version": "root-trace-mechanics-v2" if args.shell_chain_v2 else "root-trace-mechanics-v1",
         "author": args.author,
         "aggregate": aggregate(tasks),
         "tasks": tasks,
