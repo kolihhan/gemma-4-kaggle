@@ -56,3 +56,14 @@ Pilot cannot be reused to tune instructions before the frozen 12 without invalid
 ## Operational limits
 
 Do not train, LoRA, launch a Kaggle GPU, publish raw competition data, mutate `submission/`, submit a Kaggle score, alter old capacity/blind denominators, or claim improvement. CPU-only static checks/history/eligibility are in scope. Continue in this research branch and update its `NOW.md` after verified actions.
+
+## Verified CPU progress (2026-11-06 MYT)
+
+- Frozen metadata-only task list: [discriminating-evidence-v0-exploratory-selection-2026-11-06.json](../evaluation/discriminating-evidence-v0-exploratory-selection-2026-11-06.json). Selection SHA256 `20bca18b905161123ba0054d058a4f2b963cce6526c67b29e0175a81d17cc343`, nested in exact original parent sorted selection (no resampling).
+- [Run 42064561734](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42064561734): 593 preselection Git source revisions / 14 refs scanned, 0 metadata candidate ID mentions outside allowed metadata paths. This **does not** certify all historical data exposure, and is not a model outcome.
+- B/C schema renderer: [scripts/discriminating_evidence_schema.py](../../scripts/discriminating_evidence_schema.py) dynamically reconstructs exact scored baseline 31B ZIP hash, preserves eval/sampling budgets, creates equal-size B/C packages in /tmp with a single differing `prompts/coder_stage.md` packet interpolation. Unit tests confirm the intended only informational difference.
+- **Implementation refinement before model evaluation:** root `LlmAgent` wraps `AgentTool(SequentialAgent(evidence LlmAgent -> coder LlmAgent))`. Evidence agent can write `output_key: evidence_packet` on its **final** response before sequential coder begins. Root remains an `LlmAgent` for compaction. This is stronger than relying on root-to-child transfer before root `output_key` is available, but remains unproven at model runtime.
+- [Run 42065388698](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42065388698): **official scorer wheelhouse software downloaded (41 wheels); `validate_directory()` and `discover_declared_models()` passed for BOTH B and C**. This is software schema validation, not a real compiler invocation with bound tool/model registries, an ADK lifecycle trace, or a quality result.
+- A prospective private **CPU-only** gold-reference eligibility sweep of all thirty frozen IDs was launched by [workflow discriminating-evidence-gold-cpu](../../.github/workflows/discriminating-evidence-gold-cpu.yml). It embeds only metadata IDs, privately hydrates competition data, publishes only derived pass/fail flags, uses no model, no GPU, no training and no competition submission.
+
+**Remaining gates:** private gold result, same-repo preregistered replacement handling, no-op-fail eligibility, B/C bound compiler/lifecycle isolation, and 31B pilot feasibility. Do not infer model quality or a successful evidence transfer from these CPU-only results.
