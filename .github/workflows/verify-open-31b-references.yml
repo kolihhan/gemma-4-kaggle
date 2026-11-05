@@ -32,15 +32,16 @@ jobs:
           roots=Path("/tmp/gemma4-public-reference")
           roots.mkdir(parents=True, exist_ok=True)
           refs={
-            "scored_v19": "yiyu0716/g4-pack-yiyu-v19-fixed-trace-t7p5",
-            "budget_fit": "lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue",
+            "scored_v19_v1": "yiyu0716/g4-pack-yiyu-v19-fixed-trace-t7p5/1",
+            "budget_fit_v2_scored": "lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2",
+            "budget_fit_v3_latest": "lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/3",
           }
           safe={}
           for alias,ref in refs.items():
               dest=roots/alias
               dest.mkdir()
               commands=[
-                ["kaggle","kernels","pull","-k",ref,"-p",str(dest)],
+                ["kaggle","kernels","pull","-k",ref,"-p",str(dest),"-m"],
                 ["kaggle","kernels","output",ref,"-p",str(dest),"--force"],
               ]
               outputs=[]
