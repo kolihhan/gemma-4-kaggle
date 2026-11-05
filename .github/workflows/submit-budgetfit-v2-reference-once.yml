@@ -1,0 +1,184 @@
+name: Submit attributed public 31B Budget-Fit V2 reference once
+
+on:
+  push:
+    branches: [exp/capacity-boundary-v0]
+    paths:
+      - .github/workflows/submit-budgetfit-v2-reference-once.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gemma4-budgetfit-v2-reference-code-submission-once
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      COMPETITION: gemma-4-developer-agent
+      PUBLIC_SOURCE: lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2
+      CANDIDATE_MARKER: "attributed-public-budgetfit-v2-repro:no-train"
+      KERNEL_REF: kolihhan/gemma4-budgetfit-v2-reference-${{ github.run_id }}
+      WORK: /tmp/gemma4-budgetfit-public-v2-control
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Unit tests for exact public V2 byte contract and private builder
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_prepare_public_budgetfit_v2
+          python -m py_compile scripts/prepare_public_budgetfit_v2.py
+      - name: Install pinned Kaggle client
+        run: python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+      - name: Read current submissions and deduplicate this exact external reference
+        id: gate
+        run: |
+          set -euo pipefail
+          mkdir -p "$WORK"
+          kaggle competitions submissions "$COMPETITION" -v > "$WORK/submissions-private.csv"
+          python - <<'PY'
+          import csv,os
+          from pathlib import Path
+          path=Path(os.environ["WORK"])/"submissions-private.csv"
+          rows=list(csv.DictReader(path.open(newline="",encoding="utf-8-sig")))
+          mark=os.environ["CANDIDATE_MARKER"]
+          prior=[x for x in rows if mark in (x.get("description") or "")]
+          waiting=[x for x in rows if
+                   ("PENDING" in (x.get("status") or "").upper() or
+                    "RUNNING" in (x.get("status") or "").upper())]
+          print("EXISTING_ATTRIBUTED_V2_SUBMISSION=",bool(prior))
+          print("EXISTING_PENDING_SUBMISSIONS=",len(waiting))
+          if waiting and not prior:
+              raise SystemExit("Another submission pending: refuse duplicate slot use")
+          with open(os.environ["GITHUB_OUTPUT"],"a") as f:
+              f.write("prior="+("true" if prior else "false")+"\n")
+          for item in prior:
+              print("PREVIOUS_V2_REF=",item.get("ref"),"STATUS=",item.get("status"))
+          PY
+      - name: Fetch the originally scored V2 output, NEVER latest V3
+        if: steps.gate.outputs.prior != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "$WORK/external"
+          kaggle kernels output "$PUBLIC_SOURCE" -p "$WORK/external" -o >/dev/null
+          test -s "$WORK/external/submission.zip"
+      - name: Validate SHA-256 / members / original model and render private CPU builder
+        if: steps.gate.outputs.prior != 'true'
+        run: |
+          set -euo pipefail
+          python -m scripts.prepare_public_budgetfit_v2 \
+            --source-zip "$WORK/external/submission.zip" \
+            --out "$WORK/builder" \
+            --kernel-ref "$KERNEL_REF"
+          OUTPUT_DIR="$WORK/local" python "$WORK/builder/build_public_v2_control.py"
+          cmp "$WORK/external/submission.zip" "$WORK/local/submission.zip"
+          echo "EXACT_SCORED_PUBLIC_REFERENCE_BUILDER=PASS"
+      - name: Upload private CPU-only Kaggle code builder
+        if: steps.gate.outputs.prior != 'true'
+        run: |
+          set -euo pipefail
+          set +e
+          kaggle kernels push -p "$WORK/builder" -t 3600 > "$WORK/push.log" 2>&1
+          rc=$?
+          set -e
+          python scripts/check_capacity_31b_push_v0.py --log "$WORK/push.log" --client-exit-code "$rc"
+      - name: Verify completed kernel without training or GPU
+        if: steps.gate.outputs.prior != 'true'
+        run: |
+          set -euo pipefail
+          result=""
+          for attempt in $(seq 1 60); do
+              status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+              echo "CPU builder poll $attempt: $status"
+              low="$(printf '%s' "$status" | tr '[:upper:]' '[:lower:]')"
+              if grep -Eq 'complete|completed' <<<"$low"; then result=complete; break; fi
+              if grep -Eq 'error|failed|cancelled|canceled' <<<"$low"; then result=error; break; fi
+              sleep 15
+          done
+          test "$result" = complete
+      - name: Compare uploaded Kaggle builder's ZIP to scored V2 byte-for-byte
+        if: steps.gate.outputs.prior != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "$WORK/remote"
+          kaggle kernels output "$KERNEL_REF" -p "$WORK/remote" -o >/dev/null
+          test -s "$WORK/remote/submission.zip"
+          cmp "$WORK/remote/submission.zip" "$WORK/external/submission.zip"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from scripts.prepare_public_budgetfit_v2 import validate_source_zip,digest,EXPECTED_ZIP_SHA256
+          path=Path(os.environ["WORK"])/"remote/submission.zip"
+          body=path.read_bytes()
+          validate_source_zip(body)
+          assert digest(body)==EXPECTED_ZIP_SHA256
+          print("REMOTE_KAGGLE_V2_EXACT_ARCHIVE_VERIFIED=PASS",digest(body))
+          print("NO_LORA_NO_GPU_NO_TRAINING=TRUE")
+          PY
+      - name: Official Kaggle CODE submission of this attributed V2 reference
+        if: steps.gate.outputs.prior != 'true'
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os,datetime
+          from pathlib import Path
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          api=KaggleApi();api.authenticate()
+          result={
+              "competition":os.environ["COMPETITION"],
+              "source":"lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2",
+              "source_license":"Apache-2.0",
+              "source_best_public_score":"0.18 (on author's V2, not our score)",
+              "zip_sha256":"a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3",
+              "kernel":os.environ["KERNEL_REF"],
+              "kernel_version":1,
+              "description":os.environ["CANDIDATE_MARKER"],
+              "new_training":False,
+              "personal_gpu_used":False,
+              "sent_utc":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+          }
+          try:
+              response=api.competition_submit_code(
+                  file_name="submission.zip",message=os.environ["CANDIDATE_MARKER"],
+                  competition=os.environ["COMPETITION"],kernel=os.environ["KERNEL_REF"],
+                  kernel_version=1,quiet=False
+              )
+              result["accepted"]=True
+              result["response"]=response.to_dict() if hasattr(response,"to_dict") else repr(response)
+              print("PUBLIC_BUDGETFIT_V2_REFERENCE_SUBMISSION_ACCEPTED",json.dumps(result,sort_keys=True,default=str))
+          finally:
+              if result.get("accepted"):
+                  p=Path(os.environ["WORK"])/"receipt.json"
+                  p.write_text(json.dumps(result,indent=2,sort_keys=True,default=str)+"\n")
+          PY
+      - name: Verify candidate appears in official Kaggle submission records
+        if: steps.gate.outputs.prior != 'true'
+        run: |
+          set -euo pipefail
+          kaggle competitions submissions "$COMPETITION" -v > "$WORK/after-private.csv"
+          python - <<'PY'
+          import os,csv
+          from pathlib import Path
+          rows=list(csv.DictReader((Path(os.environ["WORK"])/"after-private.csv").open(newline="",encoding="utf-8-sig")))
+          matched=[x for x in rows if os.environ["CANDIDATE_MARKER"] in (x.get("description") or "")]
+          if not matched:
+              raise SystemExit("API accepted submission but not yet in listing; do not retry automatically")
+          for x in matched:
+              print("ATTRIBUTED_V2_OWN_SUBMISSION", {k:x.get(k) for k in ("ref","status","publicScore","privateScore","date")})
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: budgetfit-v2-attributed-receipt-${{ github.run_id }}
+          path: ${{ env.WORK }}/receipt.json
+          if-no-files-found: warn
+          retention-days: 30
