@@ -205,7 +205,7 @@ def audit_candidate_text_mentions(repo: Path, manifest: dict) -> dict[str, objec
             or set(item) != {"instance_id", "repo", "source"}
             or item["source"] not in {"original", "replacement"}
             or item["repo"] not in REPOS
-            or not re.fullmatch(r"(rich|fastapi)_\\d+", str(item["instance_id"]))
+            or not re.fullmatch(r"(rich|fastapi)_\d+", str(item["instance_id"]))
             for item in items
         ):
             raise ValueError("frozen cohort item is not metadata-only")
