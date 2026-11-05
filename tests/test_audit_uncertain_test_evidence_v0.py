@@ -115,6 +115,19 @@ class TestInvocationSensitivityTests(unittest.TestCase):
         self.assertTrue(second["last_recognized_test_zero_exit"])
         self.assertFalse(second["has_submit_after_nonzero_test_exit_without_repair"])
 
+    def test_multi_tool_step_flags_exit_code_attribution_as_ambiguous(self):
+        trace = {"steps": [{
+            "extra": {"author": "swe_e4b_coder"},
+            "tool_calls": [
+                {"function_name": "run_command", "arguments": {"command": "pytest tests/test_x.py -q"}},
+                {"function_name": "run_command", "arguments": {"command": "git status --short"}},
+            ],
+            "observation": {"content": json.dumps({"exit_code": 1})},
+        }]}
+        result = candidate.reduce_one(trace, "swe_e4b_coder")
+        self.assertEqual(result["multi_call_steps"], 1)
+        self.assertEqual(result["multi_call_steps_with_test_invocation"], 1)
+
     def test_known_exit_codes_are_not_inferred_from_missing_observations(self):
         observed = {"steps": [
             {"extra": {"author": "swe_e4b_coder"},
