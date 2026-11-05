@@ -51,6 +51,23 @@ class ExploratoryCohortTests(unittest.TestCase):
         }
         self.assertFalse(reserved_ids.intersection(all_ids))
 
+    def test_committed_manifest_matches_all_selected_ids_and_digest(self):
+        manifest = json.loads(
+            (ROOT / "docs/evaluation/discriminating-evidence-v0-exploratory-selection-2026-11-06.json")
+            .read_text(encoding="utf-8")
+        )
+        generated = build_exploratory(ROOT)
+        for key in ("version", "pilot_ids", "exploratory_ids", "replacement_ids",
+                    "candidate_counts", "replacement_counts", "selection_digest_sha256"):
+            self.assertEqual(manifest[key], generated[key], key)
+        self.assertEqual(
+            manifest["source_preflight_selection_digest"],
+            generated["parent_selection_fingerprint_sha256"]
+        )
+        self.assertEqual(manifest["status"], "RESERVED_METADATA_ONLY_ELIGIBILITY_UNCHECKED")
+        self.assertFalse(manifest["certifies_blind"])
+        self.assertFalse(manifest["model_evaluation_executed"])
+
     def test_repeatable_and_metadata_only(self):
         result = build_exploratory(ROOT)
         self.assertEqual(result, build_exploratory(ROOT))
