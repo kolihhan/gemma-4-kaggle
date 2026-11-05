@@ -1,0 +1,92 @@
+name: Discriminating Evidence v0 eligibility-only readiness gate
+
+on:
+  push:
+    branches: [research/discriminating-evidence-v0]
+    paths:
+      - "scripts/finalize_discriminating_evidence_eligible.py"
+      - "tests/test_finalize_discriminating_evidence_eligible.py"
+      - ".github/workflows/discriminating-evidence-ready-cpu.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GOLD_RUN: "42066105011"
+      NOOP_RUN: "42067120930"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run synthetic fail-closed cohort replacement tests
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_finalize_discriminating_evidence_eligible
+          python -m py_compile scripts/finalize_discriminating_evidence_eligible.py
+
+      - name: Await exact no-op source CPU run
+        run: |
+          set -euo pipefail
+          conclusion=""
+          for attempt in $(seq 1 300); do
+            state="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$NOOP_RUN" --jq '[.status,.conclusion] | @tsv')"
+            echo "NOOP_SOURCE_STATUS=$state"
+            if grep -q completed <<<"$state"; then
+              conclusion="$(printf '%s' "$state" | awk '{print $2}')"
+              break
+            fi
+            sleep 20
+          done
+          test "$conclusion" = success
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: evidence-v0-gold-metadata-42066105011
+          path: /tmp/evidence-ready-gold
+          run-id: 42066105011
+          github-token: ${{ github.token }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: evidence-v0-noop-metadata-42067120930
+          path: /tmp/evidence-ready-noop
+          run-id: 42067120930
+          github-token: ${{ github.token }}
+
+      - name: Apply immutable original plus same-repo replacement order
+        run: |
+          set -euo pipefail
+          python -m scripts.finalize_discriminating_evidence_eligible \
+            --repo . \
+            --gold-metadata /tmp/evidence-ready-gold/discriminating-evidence-gold-metadata.json \
+            --noop-metadata /tmp/evidence-ready-noop/discriminating-evidence-noop-metadata.json \
+            --out /tmp/evidence-ready-manifest.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          obj=json.loads(Path("/tmp/evidence-ready-manifest.json").read_text())
+          assert obj["status"]=="NO_GO_INSUFFICIENT_ELIGIBLE_TASKS",obj["status"]
+          assert obj["eligible_by_repo"]["fastapi/fastapi"]<8
+          assert not obj["certifies_blind"]
+          assert not obj["gpu_or_submission_authorized"]
+          print("READINESS_GATE=EXPECTED_NO_GO")
+          print("GPU_TRAINING_KAGGLE_SUBMISSION=NOT_RUN")
+          PY
+
+      - name: Publish only eligibility-level decisions and task IDs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-v0-readiness-metadata-${{ github.run_id }}
+          path: /tmp/evidence-ready-manifest.json
+          if-no-files-found: warn
+          retention-days: 21
