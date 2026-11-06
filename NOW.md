@@ -1,3 +1,15 @@
+# NOW — official 31B reference result and inference gate (2026-11-06 12:10 MYT)
+
+**VERIFIED latest:** exact attributed public V2 reproduction Kaggle ref `58019162` is **COMPLETE, Public 0.17, Private empty**. Authenticated [read-only run 42160680339](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42160680339) at 2026-11-06 04:08:31 UTC. Prior scored 31B original baseline `57983156` Public 0.08; +0.09 displayed difference represents a *bundle* of configuration/tool/prompt/budget changes, not original research or a causal ablation. V2 is a **single-root pretrained 31B** and confirms no complex multi-agent topology is needed for this score, not that extra agents could never improve it.
+
+**RESOURCE BLOCKER:** [authenticated `kaggle quota` run 42160889153](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42160889153) at 2026-11-06 04:10:34 UTC: **GPU 0.00h remaining, reset 2026-11-07 00:00 UTC / 08:00 MYT; TPU 19.97h remaining**. No GPU launch was attempted; do not claim a 31B experiment ran or switch hardware silently.
+
+**NEXT:** pause the proposed 5-vs-8 minute diagnostic because the exact V2 system (8 minutes) scored 0.17 and differs from the 5-minute system in several settings. Both are under a global 12-hour/approx.120-task competition limit; a higher per-task cap need not mean higher average runtime. When legit GPU quota permits, first obtain/inspect **one private 31B V2 trajectory on already-inspected development issue(s)**, or reuse any existing uninspected V2 trajectories, to identify whether the bottleneck is patch semantics, tool/context loops, localization, or time. Choose ONE single-variable test only after a concrete failure mechanism is observed. Do not touch reserved cohorts, alter canonical `submission/`, train, LoRA, or submit another copy.
+
+**REPORT:** [Independent Research Reset, updated Nov 6](docs/research/independent-strategy-reset-2026-11-06.md). Research decision is hypothesis review, not an improved original agent.
+
+---
+
 # NOW — Independent Gemma 4 research reset (2026-11-06 MYT)
 
 **ACTIVE RESEARCH DIRECTION: REASSESS THE BOTTLENECK. Do not continue the evidence-before-mutation B/C lane or build more candidate-selection infrastructure by default.** This decision is documented in [Independent Research Reset](docs/research/independent-strategy-reset-2026-11-06.md) and is not a negative performance result for that candidate, which was never evaluated.
