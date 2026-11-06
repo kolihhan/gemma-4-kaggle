@@ -1,0 +1,201 @@
+name: Official Kaggle audit - public V2 cap5 one-variable counterfactual
+# Source V2 Apache-2.0 derivative; global budget hypothesis only, not original research.
+# User explicitly requests official submit validation instead of self-run local model experiments.
+on:
+  push:
+    branches: [research/strategy-reset-2026-11-06]
+    paths: [".github/workflows/submit-audit-budget-cap5-once.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gemma4-audit-budget-cap5-one-off
+  cancel-in-progress: false
+
+jobs:
+  submit-once:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      COMPETITION: gemma-4-developer-agent
+      SOURCE: lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2
+      MARKER: "audit-globalbudget-cap5-v0:public-v2-derived"
+      KERNEL_REF: kolihhan/gemma4-audit-cap5-${{ github.run_id }}
+      WORK: /tmp/gemma4-audit-cap5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Static source verifier tests and Kaggle CLI
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_prepare_public_budgetfit_v2
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+      - name: Verify real submission slot and reject duplicates or pending entries
+        id: gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$WORK"
+          kaggle competitions submissions "$COMPETITION" -v > "$WORK/ledger.csv"
+          python - <<'PY'
+          import csv,datetime,os
+          from pathlib import Path
+          rows=list(csv.DictReader((Path(os.environ["WORK"])/"ledger.csv").open(newline="",encoding="utf-8-sig")))
+          marker=os.environ["MARKER"]
+          prior=[r for r in rows if marker in (r.get("description") or "")]
+          pending=[r for r in rows if any(t in str(r.get("status","")).upper() for t in ("PENDING","RUNNING","QUEUED"))]
+          today=datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+          today_rows=[r for r in rows if str(r.get("date","")).startswith(today)]
+          print("AUDIT_EXISTING_EXACT_CANDIDATE=",len(prior))
+          print("AUDIT_PENDING=",len(pending))
+          print("AUDIT_TODAY_UTC=",today,"COUNT=",len(today_rows))
+          if pending and not prior:
+              raise SystemExit("NO_GO: existing scoring pending, avoid overlapping submit")
+          if today_rows and not prior:
+              raise SystemExit("NO_GO: daily Kaggle slot may be used, preserve quota")
+          if not any(str(r.get("ref",""))=="58019162" and str(r.get("publicScore",""))=="0.17" for r in rows):
+              raise SystemExit("NO_GO: expected scored V2 0.17 reference missing")
+          with open(os.environ["GITHUB_OUTPUT"],"a") as out:
+              out.write("prior="+("true" if prior else "false")+"\n")
+          for r in prior:
+              print("EXACT_AUDIT_CANDIDATE_ALREADY_EXISTS=",r.get("ref"),r.get("status"))
+          PY
+      - name: Get scored Apache-2.0 V2 package by exact Kaggle source version
+        if: steps.gate.outputs.prior != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "$WORK/upstream"
+          kaggle kernels output "$SOURCE" -p "$WORK/upstream" -o >/dev/null
+          test -s "$WORK/upstream/submission.zip"
+      - name: Audit archive, change only the per-task minute cap, render CPU-only Kaggle builder
+        if: steps.gate.outputs.prior != 'true'
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64,hashlib,io,json,os,re,zipfile
+          from pathlib import Path
+          from scripts.prepare_public_budgetfit_v2 import validate_source_zip, EXPECTED_ZIP_SHA256
+          work=Path(os.environ["WORK"])
+          source=(work/"upstream/submission.zip").read_bytes()
+          original=validate_source_zip(source)
+          assert hashlib.sha256(source).hexdigest()==EXPECTED_ZIP_SHA256
+          assert len(original)==4 and set(original)=={"agent.yaml","configs/sampling.yaml","eval_config.yaml","prompts/system.md"}
+          old=original["eval_config.yaml"]
+          assert old.count("max_time_minutes: 8")==1
+          assert "timeout_seconds: 240" in old and "max_tool_calls: 28" in old and "max_turns: 80" in old
+          treatment=dict(original)
+          treatment["eval_config.yaml"]=old.replace("max_time_minutes: 8","max_time_minutes: 5",1)
+          assert treatment["eval_config.yaml"].replace("max_time_minutes: 5","max_time_minutes: 8",1)==old
+          assert all(treatment[n]==original[n] for n in original if n!="eval_config.yaml")
+          assert "model: gemma-4-31b-it-qat-w4a16-ct" in treatment["agent.yaml"]
+          assert not any("adapter:" in text or ".safetensors" in text for text in treatment.values())
+          b=io.BytesIO()
+          with zipfile.ZipFile(b,"w",zipfile.ZIP_DEFLATED) as z:
+              for name in sorted(treatment):
+                  z.writestr(name,treatment[name].encode("utf8"))
+          archive=b.getvalue()
+          sha=hashlib.sha256(archive).hexdigest()
+          dest=work/"expected"
+          dest.mkdir()
+          (dest/"submission.zip").write_bytes(archive)
+          code=(
+              "import base64,hashlib\n"
+              "from pathlib import Path\n"
+              f"PAYLOAD={base64.b64encode(archive).decode('ascii')!r}\n"
+              f"SHA256={sha!r}\n"
+              "blob=base64.b64decode(PAYLOAD)\n"
+              "assert hashlib.sha256(blob).hexdigest()==SHA256\n"
+              "Path('/kaggle/working/submission.zip').write_bytes(blob)\n"
+              "print('AUDIT_CAP5_CPU_ZIP_VERIFIED=',SHA256)\n"
+              "print('NO_TRAINING_NO_GPU_NO_TASK_EVAL=TRUE')\n"
+          )
+          builder=work/"builder"
+          builder.mkdir()
+          (builder/"build.py").write_text(code)
+          metadata={"id":os.environ["KERNEL_REF"],"title":"Gemma 4 public V2 cap5 official audit",
+                    "code_file":"build.py","language":"python","kernel_type":"script",
+                    "is_private":True,"enable_gpu":False,"enable_tpu":False,"enable_internet":False,
+                    "competition_sources":[os.environ["COMPETITION"]],"dataset_sources":[],
+                    "kernel_sources":[],"model_sources":[]}
+          (builder/"kernel-metadata.json").write_text(json.dumps(metadata,indent=2,sort_keys=True)+"\n")
+          print("SOURCE_ARCHIVE_SHA256=",EXPECTED_ZIP_SHA256)
+          print("CANDIDATE_SHA256=",sha)
+          print("SINGLE_DIFF=eval_config.yaml evaluation.max_time_minutes 8 to 5")
+          print("ATTRIBUTED_PUBLIC_V2_DERIVATIVE=TRUE NO_LOCAL_AGENT_TEST=TRUE")
+          PY
+      - name: Push one PRIVATE CPU-only builder (no model or issue evaluation)
+        if: steps.gate.outputs.prior != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          kaggle kernels push -p "$WORK/builder" -t 3600 > "$WORK/push.log" 2>&1
+          rc=$?
+          set -e
+          python scripts/check_capacity_31b_push_v0.py --log "$WORK/push.log" --client-exit-code "$rc"
+      - name: Poll private CPU builder to completion
+        if: steps.gate.outputs.prior != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          result=""
+          for i in $(seq 1 60); do
+              status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+              low="$(printf '%s' "$status" | tr '[:upper:]' '[:lower:]')"
+              if grep -Eq 'complete|completed' <<<"$low"; then result=complete; break; fi
+              if grep -Eq 'error|failed|cancelled|canceled' <<<"$low"; then result=error; break; fi
+              sleep 15
+          done
+          test "$result" = complete || { echo "NO_GO_BUILDER=$result"; exit 1; }
+      - name: Verify exact remote ZIP byte equality and singleton diff BEFORE official submit
+        if: steps.gate.outputs.prior != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$WORK/remote"
+          kaggle kernels output "$KERNEL_REF" -p "$WORK/remote" -o >/dev/null
+          cmp "$WORK/expected/submission.zip" "$WORK/remote/submission.zip"
+          echo "REMOTE_KAGGLE_ZIP_BIT_IDENTICAL=PASS"
+      - name: Submit exactly ONE attributed 31B code derivative to official Kaggle scorer
+        if: steps.gate.outputs.prior != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          api=KaggleApi()
+          api.authenticate()
+          res=api.competition_submit_code(
+              file_name="submission.zip",
+              message=os.environ["MARKER"],
+              competition=os.environ["COMPETITION"],
+              kernel=os.environ["KERNEL_REF"],
+              kernel_version=1,
+              quiet=False)
+          print("AUDIT_OFFICIAL_SUBMIT_ACCEPTED=",res.to_dict() if hasattr(res,"to_dict") else repr(res))
+          PY
+      - name: Verify official submission receipt by exact marker; no second submit on delay
+        if: steps.gate.outputs.prior != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle competitions submissions "$COMPETITION" -v > "$WORK/after.csv"
+          python - <<'PY'
+          import csv,json,os
+          from pathlib import Path
+          rows=list(csv.DictReader((Path(os.environ["WORK"])/"after.csv").open(newline="",encoding="utf-8-sig")))
+          matches=[r for r in rows if os.environ["MARKER"] in (r.get("description") or "")]
+          if len(matches)!=1:
+              raise SystemExit("SUBMIT_RECEIPT_UNVERIFIED_NO_AUTOMATIC_RETRY")
+          record={k:matches[0].get(k) for k in ("ref","date","status","publicScore","privateScore","description")}
+          print("AUDIT_CAP5_OFFICIAL_RECEIPT=",json.dumps(record,sort_keys=True))
+          print("OFFICIAL_SCORE_PENDING_NOT_AN_IMPROVEMENT_YET=TRUE")
+          PY
