@@ -73,3 +73,34 @@ jobs:
                   print("KAGGLE_GPU_QUOTA_REPORT=",json.dumps(data,sort_keys=True)[:3000])
           print("GPU_RESERVATION_OR_NOTEBOOK_LAUNCH=FALSE")
           PY
+
+      - name: Audit submission ledger and inspect exact public V2 static strategy
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gemma4-v2-audit
+          kaggle competitions submissions gemma-4-developer-agent -v > /tmp/gemma4-v2-audit/submissions.csv
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p /tmp/gemma4-v2-audit -o >/dev/null
+          python - <<'PY'
+          import csv,hashlib,io,json,zipfile
+          from pathlib import Path
+          root=Path("/tmp/gemma4-v2-audit")
+          rows=list(csv.DictReader((root/"submissions.csv").open(encoding="utf-8-sig",newline="")))
+          shown=[{k:r.get(k) for k in ("ref","date","status","publicScore","privateScore","description")} for r in rows]
+          print("SUBMISSION_LEDGER_COUNT=",len(shown))
+          print("SUBMISSION_LEDGER=",json.dumps(shown[:15],sort_keys=True))
+          payload=(root/"submission.zip").read_bytes()
+          digest=hashlib.sha256(payload).hexdigest()
+          expected="a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3"
+          assert digest==expected,(digest,expected)
+          with zipfile.ZipFile(io.BytesIO(payload)) as z:
+              assert sorted(z.namelist())==["agent.yaml","configs/sampling.yaml","eval_config.yaml","prompts/system.md"]
+              for name in z.namelist():
+                  body=z.read(name).decode("utf8")
+                  print("AUDITED_V2_MEMBER=",name,"bytes=",len(body.encode()),"sha256=",hashlib.sha256(body.encode()).hexdigest())
+                  print("AUDITED_V2_CONTENT_BEGIN",name)
+                  print(body[:16000])
+                  print("AUDITED_V2_CONTENT_END",name)
+          print("AUDITED_V2_ZIP_SHA256=",digest)
+          print("NO_LOCAL_MODEL_OR_BENCHMARK_RUN=TRUE")
+          PY
