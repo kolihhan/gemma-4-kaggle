@@ -1,5 +1,19 @@
 # Independent Research Reset — Gemma 4 agent (2026-11-06 MYT)
 
+## Follow-up evidence — Nov 6, 2026 (authenticated, read-only)
+
+**New official result:** Existing exact V2 reproduction ref `58019162` is **COMPLETE, Public 0.17, Private score not reported** as of **2026-11-06 04:08:31 UTC** (Actions [42160680339](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42160680339)). The author's claimed 0.18 was not our score; 0.17 is ours, and is a reproduction, **not original work**. Original 31B single-root 5-minute package ref `57983156` remains Public 0.08; these two runs change prompts/tool selections/budgets/turns and cannot identify a single causal variable. Both use pretrained 31B and no LoRA. Their 0.09 displayed-score difference is direct benchmark evidence of a stronger publicly shared **single-root** system, **not evidence for adding a sub-agent**.
+
+**Current resource gate:** `kaggle quota --format json`, authenticated at **2026-11-06 04:10:34 UTC** (Actions [42160889153](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42160889153)): **GPU remaining 0.00 h / 30 h**, used 31.79 h; quota refresh **2026-11-07 00:00 UTC = 08:00 MYT**. TPU shows 19.97 h remaining but moving to TPU changes runtime/hardware and invalidates the intended same-environment 31B comparison. No new GPU session was launched.
+
+**Research correction to the conditional 5 vs 8 minute plan below:** The 12-hour budget covers about 120 tasks including setup. A fixed 8-minute cap for every task could consume 960 minutes (vs 720 available); the cap is not mean time, so this does not itself prove V2 uses too much time. It does mean **5 vs 8 minutes alone is not yet the highest-value causal test**. A published author's multi-run 129-case v19 comparison reports 8-minute 44/129 vs 15-minute 44/129 in a separate configuration; not a direct 5-vs-8 controlled test or evidence of transfer. [Original author's Kaggle discussion](https://www.kaggle.com/competitions/gemma-4-developer-agent/discussion/747696).
+
+**Updated next decision once a legitimate GPU becomes available:** Reuse the exact public V2 baseline to collect **one diagnostic 31B trajectory on already-inspected development task(s)** in the official private scorer. Record first useful edit, repeated reads/tools, patch validity and wall-time. Do not choose a new model, edit prompts, inspect reserved holdouts or report a quality gain. Then decide whether the next falsifiable intervention should target budget allocation, localization or patch semantics. If adequate original V2 trajectories already exist, analyze them instead of rerunning a task. A 5-vs-8 paired test is justified only if the trajectory actually points to time cutoff as a bottleneck; otherwise retire that proposed ablation.
+
+**Interpretation:** We have a verified stronger external single-root baseline, but **no verified original agent improvement and no causal diagnosis**. No GPU/LoRA/training or new competition submission was performed in this follow-up.
+
+---
+
 **Decision: STOP extending the evidence-stage/verifier/topology lane. Do not treat the failed cohort gate as a negative model result. Do not default to another E4B-vs-31B benchmark either. Start with a simpler, architecture-neutral diagnosis of why attempts fail under the full competition budget.**
 
 This is an independent, critical source review, **not an experimental performance improvement**. No task/model evaluation, training, LoRA, Kaggle competition submission, GPU startup, scored artifact modification, or change to `submission/` was performed for this reset. An existing frozen experiment's data and controls remain reserved.
