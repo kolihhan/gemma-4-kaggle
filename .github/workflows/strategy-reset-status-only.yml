@@ -141,3 +141,25 @@ jobs:
             tail -8 /tmp/mine.err
           fi
           echo "NO_KERNEL_PUSH_OR_SUBMISSION=TRUE"
+
+      - name: Find newly created private kernel by date rather than hotness
+        shell: bash
+        run: |
+          set +e
+          kaggle kernels list --mine --sort-by dateCreated --page-size 100 -v > /tmp/mine-recent.csv 2>/tmp/mine-recent.err
+          rc=$?
+          echo "RECENT_OWN_KERNEL_LIST_EXIT=$rc"
+          if test "$rc" = 0; then
+            python - <<'PY'
+          import csv,json
+          rows=list(csv.DictReader(open("/tmp/mine-recent.csv",newline="",encoding="utf-8-sig")))
+          print("RECENT_OWN_KERNEL_TOTAL_RETURNED=",len(rows))
+          for x in rows:
+              line=json.dumps(x,sort_keys=True)
+              if any(s in line.lower() for s in ("cap5","budgetfit","budget-fit","gemma4-audit","gemma-4-public-v2")):
+                  print("MATCHED_RECENT_KERNEL=",line[:1300])
+          PY
+          else
+            tail -8 /tmp/mine-recent.err
+          fi
+          echo "NO_NEW_KERNEL_PUSH_OR_SUBMIT=TRUE"
