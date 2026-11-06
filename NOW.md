@@ -1,3 +1,15 @@
+# NOW — Base evidence retry v0 (2026-11-06 MYT)
+
+**Ready for one conditional Kaggle submission.** The private CPU notebook `gemma4-base-evidence-retry-v0-20261106` v1 produced the pinned ZIP `1944471ce98386371ebe52a0d3e6a9cc211ff81803684eeaff5f344532234c1b`. A local CPU build matched that hash. The workflow is active and is scheduled for November 7 at 08:13 MYT. It verifies the notebook ZIP, checks for a prior receipt, and requires both an available slot and no active Kaggle entry on the account before submitting. Ten offline cases passed, including a pending entry, zero quota, a changed ZIP, and a missing response. [CPU build](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42202422197) · [Scheduled workflow](https://github.com/kolihhan/gemma-4-kaggle/actions/workflows/scheduled-gemma4-retry-nov07.yml)
+
+**Latest Kaggle status at 23:10 MYT.** The five-minute cap audit `58045795` is PENDING. The exact eight-minute Budget-Fit V2 control `58019162` is COMPLETE at **0.17 Public**. Kaggle reported zero available submission slots at the staging check at 18:25 MYT. There is no recorded official receipt for the new candidate yet. [Authenticated status](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42171026894/job/127969338787)
+
+**Comparison.** The archive diff against the pinned V2 verified identical 31B model, sampling configuration, and evaluation limits. The candidate adds a read-only diagnosis helper for a relevant failed assertion, adds the conditions for calling it, and rewords the root agent's role line. Treat one official score as a screen of the combined change. Measuring the effect of base-only evidence requires an equal-cost helper with a conventional evidence handoff.
+
+**Next.** Verify the official receipt and compare the terminal Public score to `58019162`. If the scheduled run reports an unavailable slot or an unconfirmed receipt, inspect that outcome before any further submission.
+
+---
+
 # NOW — Independent Research Verdict (2026-11-06 MYT)
 
 **Research priority.** Test whether a fresh attempt can reuse repository observations that still hold on a clean checkout. Use the reproduced 31B Budget-Fit V2 as the practical comparator. The hypothesis concerns the information carried across a retry. The dominant bottleneck on the hidden set remains UNKNOWN.
