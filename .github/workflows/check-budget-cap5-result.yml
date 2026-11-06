@@ -1,0 +1,44 @@
+name: Check official Kaggle budget-cap5 score only
+on:
+  push:
+    branches: [research/strategy-reset-2026-11-06]
+    paths: [".github/workflows/check-budget-cap5-result.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Read only two exact existing Kaggle submissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import csv,datetime,json,subprocess
+          result=subprocess.run(["kaggle","competitions","submissions","gemma-4-developer-agent","-v"],
+                                capture_output=True,text=True,timeout=100)
+          if result.returncode: raise SystemExit("KAGGLE_LEDGER_UNAVAILABLE")
+          rows=list(csv.DictReader(result.stdout.splitlines()))
+          output={}
+          for ref in ("58019162","58045795"):
+              matched=[x for x in rows if str(x.get("ref","")).strip()==ref]
+              if len(matched)!=1: raise SystemExit("KAGGLE_REF_NOT_UNIQUELY_PRESENT="+ref)
+              r=matched[0]
+              output[ref]={k:str(r.get(k) or "") for k in ("ref","date","status","publicScore","privateScore","description")}
+          assert output["58019162"]["publicScore"]=="0.17",output
+          print("KAGGLE_CAP5_RESULT=",json.dumps({
+              "checked_utc":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "existing_ref_control":"58019162",
+              "existing_ref_candidate":"58045795",
+              "records":output,
+              "new_submission":False,"gpu_used":False,"training":False,
+          },sort_keys=True))
+          PY
