@@ -1,0 +1,113 @@
+name: Submit verified Gemma 4 research notebook
+
+on:
+  push:
+    branches: [exp/base-evidence-retry-v0]
+    paths: ["experiments/base-evidence-retry-v0/submit-once.json"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gemma4-official-base-evidence-retry
+  cancel-in-progress: false
+
+jobs:
+  official:
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      COMPETITION: gemma-4-developer-agent
+      KERNEL: kolihhan/gemma4-base-evidence-retry-v0-20261106
+      MARKER: "base-evidence-retry-v0:1944471ce983"
+      EXPECTED_SHA: "1944471ce98386371ebe52a0d3e6a9cc211ff81803684eeaff5f344532234c1b"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the Kaggle CLI
+        run: python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+      - name: Verify the pinned Kaggle output and submit once when eligible
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import csv, datetime, hashlib, io, json, os, subprocess, tempfile, time
+          from pathlib import Path
+          from kaggle.api.kaggle_api_extended import KaggleApi
+
+          competition = os.environ["COMPETITION"]
+          kernel = os.environ["KERNEL"]
+          expected = os.environ["EXPECTED_SHA"]
+          marker = os.environ["MARKER"]
+          gate = json.loads(Path("experiments/base-evidence-retry-v0/submit-once.json").read_text())
+          if gate != {"kernel": kernel, "version": 1, "sha256": expected}:
+              raise SystemExit("SUBMISSION_GATE_MISMATCH")
+          if datetime.datetime.now(datetime.timezone.utc) < datetime.datetime(2026, 11, 7, tzinfo=datetime.timezone.utc):
+              raise SystemExit("KAGGLE_SUBMISSION_BLOCKED_BEFORE_DAILY_RESET")
+
+          def submissions():
+              csv_text = subprocess.check_output(
+                  ["kaggle", "competitions", "submissions", competition, "-v"], encoding="utf-8-sig")
+              return list(csv.DictReader(io.StringIO(csv_text)))
+
+          def receipt(rows):
+              matches = [r for r in rows if r.get("description") == marker]
+              if len(matches) > 1:
+                  raise SystemExit("SUBMISSION_MARKER_DUPLICATED")
+              if matches:
+                  print("KAGGLE_OFFICIAL_RECEIPT=" + json.dumps({
+                      k: matches[0].get(k) for k in ("ref", "date", "status", "publicScore", "privateScore")
+                  }), flush=True)
+                  return True
+              return False
+
+          if receipt(submissions()):
+              raise SystemExit(0)
+          with tempfile.TemporaryDirectory() as output:
+              subprocess.run(["kaggle", "kernels", "output", kernel + "/1", "-p", output, "-o"],
+                             check=True, stdout=subprocess.DEVNULL)
+              archive = Path(output) / "submission.zip"
+              if hashlib.sha256(archive.read_bytes()).hexdigest() != expected:
+                  raise SystemExit("KAGGLE_REMOTE_ARCHIVE_HASH_MISMATCH")
+          print("KAGGLE_PINNED_NOTEBOOK_VERIFIED=" + expected, flush=True)
+
+          api = KaggleApi()
+          api.authenticate()
+          active_states = {"PENDING", "RUNNING", "QUEUED", "SCORING", "EVALUATING"}
+          for poll in range(16):
+              rows = submissions()
+              if receipt(rows):
+                  raise SystemExit(0)
+              active = [r.get("ref") for r in rows if (r.get("status") or "").upper().split(".")[-1] in active_states]
+              allowance = api.competition_get_submission_limits(competition)
+              if not active and allowance.num_allowed_now >= 1:
+                  break
+              print("KAGGLE_WAITING_FOR_SLOT=" + json.dumps({
+                  "allowed_now": allowance.num_allowed_now, "active_refs": active,
+                  "limited_by_total": allowance.limited_by_total
+              }), flush=True)
+              if not active or allowance.limited_by_total or poll == 15:
+                  raise SystemExit("KAGGLE_NO_ELIGIBLE_SLOT_NO_SUBMISSION_ATTEMPTED")
+              time.sleep(60)
+
+          print("KAGGLE_OFFICIAL_SUBMIT_STARTED", flush=True)
+          try:
+              result = api.competition_submit_code(
+                  file_name="submission.zip", message=marker, competition=competition,
+                  kernel=kernel, kernel_version=1, quiet=True,
+              )
+          except Exception as error:
+              print("KAGGLE_OFFICIAL_SUBMIT_REQUEST_ERROR=" + type(error).__name__, flush=True)
+          else:
+              print("KAGGLE_OFFICIAL_SUBMIT_RESPONSE=" + json.dumps(
+                  result.to_dict() if hasattr(result, "to_dict") else str(result), default=str), flush=True)
+          for attempt in range(6):
+              if receipt(submissions()):
+                  raise SystemExit(0)
+              time.sleep(8)
+          raise SystemExit("KAGGLE_RECEIPT_UNCONFIRMED_DO_NOT_RESUBMIT")
+          PY
