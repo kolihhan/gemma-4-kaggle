@@ -1,3 +1,17 @@
+# NOW — Kaggle-only audit / official cap5 submission accepted (2026-11-06 12:44 MYT)
+
+**USER-SELECTED METHOD: Audit → official Kaggle code submission → read-only score verification. No self-run model/issue experiments.**
+
+**OFFICIAL ENTRY ACCEPTED:** Kaggle ref **`58045795`**, `SubmissionStatus.PENDING` at authenticated read-back **2026-11-06 04:44:31 UTC**; Public Score and Private Score both empty. [Successful official recovery workflow 42164252901](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42164252901) independently fetched the already-built private CPU-only Kaggle artifact, verified ZIP SHA256 `c9eeb05c2b5c3c9a48689a6afd22ed48334efccd685999539c60567c8ef76551`, matched 3 unchanged original members byte-for-byte and the original `eval_config.yaml` after reversing exactly `max_time_minutes: 8 → 5`. The official submission API returned ref `58045795` and its existence in the authenticated Kaggle submission list was verified. **No score claim is yet possible.** This public V2 derivative is **not original novel research**.
+
+**CONTROL:** exact attributed public Budget-Fit V2 `58019162` COMPLETE Public **0.17**, originally upstream ref `lynnsakurai/.../2` (Apache-2.0), ZIP `a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3`. Original homegrown 31B `57983156` COMPLETE Public **0.08**. Only comparison `58045795` vs `58019162` is an identical-model/tool/prompt/sampling/budget-other-fields **single-variable cap change**, not a reliable task-level causal proof. Predeclared rationale and interpretive limits in [Research Reset](docs/research/independent-strategy-reset-2026-11-06.md).
+
+**Operational failure diagnosed/resolved without a second builder:** original [submit workflow 42162206978](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42162206978) failed because it polled the metadata ID `kolihhan/gemma4-audit-cap5-42162206978`, while Kaggle automatically slugified the supplied **title** and created `kolihhan/gemma-4-public-v2-cap5-official-audit`. [Read-only inspection 42164107617](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42164107617) identified the real slug. The recovery workflow reused that exact pre-existing COMPLETE private CPU build. No retraining, new GPU notebook, raw competition-data mirror or duplicate Kaggle code submission.
+
+**NEXT:** query **exact submission `58045795`** using authenticated Kaggle CLI until terminal; report score and difference versus 0.17 **without tuning/resubmitting based on Public LB**, and stop after this one candidate. The previously reported 0 GPU quota did not block this official code submission. Do not promote into canonical `submission/` solely from Public score.
+
+---
+
 # NOW — official 31B reference result and inference gate (2026-11-06 12:10 MYT)
 
 **VERIFIED latest:** exact attributed public V2 reproduction Kaggle ref `58019162` is **COMPLETE, Public 0.17, Private empty**. Authenticated [read-only run 42160680339](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42160680339) at 2026-11-06 04:08:31 UTC. Prior scored 31B original baseline `57983156` Public 0.08; +0.09 displayed difference represents a *bundle* of configuration/tool/prompt/budget changes, not original research or a causal ablation. V2 is a **single-root pretrained 31B** and confirms no complex multi-agent topology is needed for this score, not that extra agents could never improve it.
