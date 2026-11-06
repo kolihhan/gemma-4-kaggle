@@ -1,0 +1,52 @@
+name: Strategy reset - official V2 submission status (read only)
+on:
+  push:
+    branches: [research/strategy-reset-2026-11-06]
+    paths:
+      - ".github/workflows/strategy-reset-status-only.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  official-score:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Read exact existing submission without submitting or running GPU
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import datetime, json, subprocess
+          ref = "58019162"
+          p = subprocess.run(
+              ["kaggle", "competitions", "submission", ref],
+              capture_output=True, text=True, timeout=90
+          )
+          allowed = {"submission ref", "status", "public score", "private score", "description"}
+          fields = {}
+          for ln in p.stdout.splitlines():
+              key, sep, val = ln.partition(":")
+              if sep and key.strip().lower() in allowed:
+                  fields[key.strip().lower().replace(" ", "_")] = val.strip()[:200]
+          if p.returncode != 0 or fields.get("submission_ref") != ref:
+              print("READ_ONLY_STATUS=UNAVAILABLE; command_exit=",p.returncode)
+              raise SystemExit(1)
+          print("OFFICIAL_EXISTING_SUBMISSION_STATUS=",json.dumps({
+              "checked_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "source": "authenticated kaggle competitions submission",
+              "reference":ref,
+              "fields":fields,
+              "gpu_run":False,
+              "new_submission":False,
+              "training":False
+          },sort_keys=True))
+          PY
