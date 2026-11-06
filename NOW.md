@@ -1,3 +1,13 @@
+# NOW — case-level research verdict (2026-11-06 MYT)
+
+**RESEARCH-ONLY RESULT: CONTRASTIVE CONTRACT CHECKING DOWNRANKED.** Inspected the **existing** 17-task E4B topology single-root development trace artifact `13150931817` (Actions `41458804862`) and upstream original PR/issue evidence for ten concrete cases. The resulting [case-level audit](docs/research/semantic-repair-gap-audit-2026-11-06.md#completed-case-level-falsification-audit--existing-trajectories-only-2026-11-06) found **no demonstrated repository-recoverable competing-behavior witness (class B)** in reviewed concrete cases. This is **insufficient supporting evidence**, not a scored rejection of the method.
+
+**Distinct, supported sources of failure:** explicit requirement with incomplete/wrong edit (e.g. `fastapi_14448`, `rich_3061`), explicit requirement but failing edit-tool/navigation (`fastapi_14873`), versus externally specified requirement missing from offline task text (`rich_3934`, `rich_4079`, `rich_3105`). One positive control `fastapi_9425` **resolved** with a patch different from upstream reference; gold-text equality is not correctness. **At least five of 17 issue statements are materially underspecified** without their offsite issue/PR detail. Do not generalize prevalence to hidden 31B tasks or imply no repository clue can ever exist.
+
+**Next research direction (not authorized to implement or submit):** audit **specification sufficiency**, **multi-entry-point requirement coverage** and **edit semantic correctness** separately. Reopen class B / contrastive-contract intervention only after actual pre-edit repository evidence discriminates two legitimate interpretations in multiple independent examples. No benchmark runs, Kaggle submissions/status checks, model inference, training, or `submission/` edits in this research turn.
+
+---
+
 # NOW — mechanism-first research audit (2026-11-06 MYT)
 
 **ACTIVE DIRECTION: RESEARCH ONLY.** User explicitly corrected course: do not use Kaggle submissions, repeated status probes, prompt/budget tweaks, or deployment as a surrogate for independent research. **No Kaggle submit, GPU/TPU run, model inference, training, or `submission/` changes in this work.**
