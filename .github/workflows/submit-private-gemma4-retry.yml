@@ -4,6 +4,10 @@ on:
   push:
     branches: [exp/base-evidence-retry-v0]
     paths: ["experiments/base-evidence-retry-v0/submit-once.json"]
+  workflow_call:
+    secrets:
+      KAGGLE_API_TOKEN:
+        required: true
 
 permissions:
   contents: read
@@ -22,16 +26,31 @@ jobs:
       KERNEL: kolihhan/gemma4-base-evidence-retry-v0-20261106
       MARKER: "base-evidence-retry-v0:1944471ce983"
       EXPECTED_SHA: "1944471ce98386371ebe52a0d3e6a9cc211ff81803684eeaff5f344532234c1b"
+      SUBMISSION_EVENT: ${{ github.event_name }}
+      SUBMISSION_REPOSITORY: ${{ github.repository }}
+      SUBMISSION_REF: ${{ github.ref }}
     steps:
+      - name: Scope the scheduled run to the intended UTC date
+        id: window
+        run: |
+          if [[ "$SUBMISSION_EVENT" = schedule && "$(date -u +%F)" != 2026-11-07 ]]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v4
+        if: steps.window.outputs.ready == 'true'
         with:
           persist-credentials: false
       - uses: actions/setup-python@v5
+        if: steps.window.outputs.ready == 'true'
         with:
           python-version: "3.12"
       - name: Install the Kaggle CLI
+        if: steps.window.outputs.ready == 'true'
         run: python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
       - name: Verify the pinned Kaggle output and submit once when eligible
+        if: steps.window.outputs.ready == 'true'
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -43,11 +62,18 @@ jobs:
           kernel = os.environ["KERNEL"]
           expected = os.environ["EXPECTED_SHA"]
           marker = os.environ["MARKER"]
-          gate = json.loads(Path("experiments/base-evidence-retry-v0/submit-once.json").read_text())
-          if gate != {"kernel": kernel, "version": 1, "sha256": expected}:
-              raise SystemExit("SUBMISSION_GATE_MISMATCH")
-          if datetime.datetime.now(datetime.timezone.utc) < datetime.datetime(2026, 11, 7, tzinfo=datetime.timezone.utc):
+          now = datetime.datetime.now(datetime.timezone.utc)
+          if now.date() < datetime.date(2026, 11, 7):
               raise SystemExit("KAGGLE_SUBMISSION_BLOCKED_BEFORE_DAILY_RESET")
+          if os.environ["SUBMISSION_EVENT"] == "schedule":
+              if (os.environ["SUBMISSION_REPOSITORY"] != "kolihhan/gemma-4-kaggle"
+                      or os.environ["SUBMISSION_REF"] != "refs/heads/main"
+                      or now.date() != datetime.date(2026, 11, 7)):
+                  raise SystemExit("UNEXPECTED_SCHEDULED_SUBMISSION_SCOPE")
+          else:
+              gate = json.loads(Path("experiments/base-evidence-retry-v0/submit-once.json").read_text())
+              if gate != {"kernel": kernel, "version": 1, "sha256": expected}:
+                  raise SystemExit("SUBMISSION_GATE_MISMATCH")
 
           def submissions():
               csv_text = subprocess.check_output(
