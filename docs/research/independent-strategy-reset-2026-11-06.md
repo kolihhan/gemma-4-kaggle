@@ -1,0 +1,74 @@
+# Independent Research Reset — Gemma 4 agent (2026-11-06 MYT)
+
+**Decision: STOP extending the evidence-stage/verifier/topology lane. Do not treat the failed cohort gate as a negative model result. Do not default to another E4B-vs-31B benchmark either. Start with a simpler, architecture-neutral diagnosis of why attempts fail under the full competition budget.**
+
+This is an independent, critical source review, **not an experimental performance improvement**. No task/model evaluation, training, LoRA, Kaggle competition submission, GPU startup, scored artifact modification, or change to `submission/` was performed for this reset. An existing frozen experiment's data and controls remain reserved.
+
+## Actual evidence (and what it cannot establish)
+
+| Finding | Provenance and directly established result | Does *not* prove |
+|---|---|---|
+| Same-policy model swap | Scored E4B Reliability-v1 ref `57921371` Public **0.03**; scored untrained 31B ref `57983156` Public **0.08**, same source prompt/config except model declaration, per `NOW.md` and Actions 41979509173 | Model capacity causality, same hidden task-level improvements, host epoch equivalence, statistical significance |
+| Existing E4B development trajectories | Existing 17-task Reliability-v1 set resolved **1/17**; **16/17** made mutations, **11/17** ran an executable-classified test, **5/17** submitted after a nonzero test command with no intervening mutation, **0/17** had a recognized pre-edit test; `docs/evaluation/trace-test-evidence-v0-2026-11-05.json`, Actions 41987818297 | That verification is the primary bottleneck, that a nonzero command means wrong patch, or that 31B hidden failures match E4B development |
+| 12B smoke under fixed 5-minute budget | Two `rich_3278` cases with 12B at thinking 4096 and 1024 both produced **no patch** despite the second raising tools from **3 to 18**; `docs/evaluation/12b-rich3278-model-size-ab-2026-10-31.md` | 12B is always worse, model scaling has reached a ceiling, or 31B will be inefficient under a different budget |
+| Third-party reference scored bundle | Public Budget-Fit V2 reference uses 31B, **8 min/issue**, **28 tools**, **80 turns** and changes prompt/tools/sampling compared with our 31B **5 min/issue**, **32 tools**, **64 turns**; its author's claim is 0.18; our exact-source submitted ref `58019162` was **PENDING at last authenticated Nov 5 status check** | That 0.18 transferred to our account, that budget or any individual policy caused it, or that copying V2 is research |
+| Latest model-free quality gate | Frozen research lane: Rich gold-pass **13/14**, FastAPI **6/16**, total **19/30**; subsequent **19/19** gold-pass candidates failed the no-op, so the preregistered balanced 4+12 remains **NO-GO**. Actions 42066105011, 42067120930 and 42068107095 (all SUCCESS as CPU workflows). | That 11 gold-control failures are faulty tasks rather than version/dependency/test problems, or that evidence transfer worsens/helps resolution |
+| Harness scope | `submission/agent.yaml` on reviewed branch is a **single E4B root**, no evidence-stage. The Kaggle scorer currently supports declarative ADK agent configurations and closed bound workspace tools; a prior root SequentialAgent hit compaction. | That the more complex research-only B/C candidate has ever solved an issue or that any custom general-purpose Python tool can be submitted |
+
+**Repo-state warning:** default-branch `NOW.md` is dated Oct 31 and describes a different candidate; it must not override Nov 5–6 research artifacts. `PUBLIC_VISIBILITY.md` also differs between older main and later research branches. This audit intentionally does **not** change sharing/security policy or mark anything public-safe.
+
+**Competition constraint (official):** issue-level PASS/FAIL patch verification; **12 total hours for the agent phase across all tasks**, plus the model-variant and restricted tool rules. Source: https://www.kaggle.com/competitions/gemma-4-developer-agent/overview . Kaggle Staff subsequently added E4B/E2B/12B as supported variants; this announcement outranks the stale overview model allow-list: https://www.kaggle.com/competitions/gemma-4-developer-agent/discussion/748287 . The mismatch is explicit, not a licence to assume unsupported capabilities.
+
+## Audit of our past reasoning
+
+1. **Premise unsupported:** `0/17 pre-edit tests` was treated as proof that a new evidence stage should raise solved rate. This is only a trace characteristic; agent correctness may be limited by patch semantics, context, tool use, test reliability or insufficient time.
+2. **Causal inference error:** observed F4/F5 behavior on inspected E4B tasks was projected onto a different scored 31B system without matching trajectories. Even E4B's nonzero test exits were not classified as assertion vs import/dependency/collection failures.
+3. **Engineering became the research product:** multiple cohorts, replacements, CI and B/C schema validations delivered rigor but zero new quality outcomes. The FastAPI gate failed on source/test eligibility, **not** evidence-stage effectiveness.
+4. **Baseline confounding:** the attributed public V2 candidate differs in wall-time, tools, turns and prompt; comparing its public result with ours cannot isolate one cause. Per-task 8-minute caps must also be assessed against the **global 12-hour cap**; spending more on every task may reduce throughput.
+5. **No demonstrated benchmark overfitting in model parameters:** no scored quality tuning of the new stage was performed. The accurate diagnosis is **hypothesis lock-in, high research overhead, and risk of selection-driven evaluation overfitting**—not proof that a trained model overfit.
+6. **Research-direction lock-in:** neither new agent roles nor new LoRA nor 31B-only scaling should be default options just because prior protocols were frozen. All require a capability-level mechanism and a cheaper strong alternative.
+
+## External counterevidence (transfer is NOT guaranteed)
+
+- **Agentless**, Xia et al., *FSE 2025*, shows that a relatively simple localization → candidate repair → validation method can compete with complex autonomous agents; its original results use different base models and SWE-bench, **not our Gemma scorer**. https://conf.researchr.org/details/fse-2025/fse-2025-research-papers/85/Demystifying-LLM-based-Software-Engineering-Agents
+- **SWE-agent**, Yang et al., *NeurIPS 2024*, isolates the value of better agent–computer interfaces; the interface, not just the model, can change actual task outcomes. https://proceedings.nips.cc/paper_files/paper/2024/hash/5a7c947568c1b1328ccc5230172e1e7c-Abstract-Conference.html
+- **SWE-Bench Pro V2**, Scale, 2026, specifically reports benchmark instruction, baseline-vs-gold tests and clean-environment issues requiring remediation; this supports taking eligibility seriously **but not building ever more selection workflows** in lieu of agent research. https://labs.scale.com/leaderboard/swe_bench_pro_public_v2
+- **OpenAI, July 8, 2026** found substantial task validity problems in SWE-Bench Pro, so a single aggregate score should not be read as a pure measure of reasoning. This finding is about a *different* benchmark; the 30-case Gemma gold audit has its own concrete evidence. https://openai.com/index/separating-signal-from-noise-coding-evaluations/
+
+## Architecture-neutral competing bottleneck hypotheses
+
+These are hypotheses, not a claimed ordered ranking of causes.
+
+| Explanation | Why plausible | Key disconfirming observation |
+|---|---|---|
+| **H1: useful work per wall-time / context** | 12B 5-minute runs stalled before patch; V2 uses 8 rather than 5 minutes; official **12-hour total** creates a real allocation problem | More time under identical 31B policy yields no more correct progress, or reduces solved tasks per 12-hour budget |
+| **H2: semantic patch generation / candidate discrimination** | E4B often reaches edits but resolves little; a successful test exit does not guarantee issue resolution | High-quality independently checked candidate patches are routinely generated but agent merely fails to select or submit them |
+| **H3: issue localization / information selection** | Repeated reads and missing recognized pre-edit checks may waste context; graph/embedding tools exist | Correct file/function is already read early and supplied to the model but the fix remains wrong |
+| **H4: verification and repair control** | Five E4B cases submit after nonzero test commands with no edit; visible lifecycle weakness | Most unsuccessfully scored patches are already wrong before any meaningful test, or test infrastructure is confounded |
+| **H5: evaluation harness / distribution mismatch** | FastAPI gold 6/16 and corpus heavily Rich/FastAPI; no hidden 31B per-task feedback | Independent clean tests across repositories reproduce the same failure stage and ordering |
+
+We currently **cannot adjudicate H1–H4 as a primary bottleneck** from the aggregate official Kaggle score. They are not mutually exclusive.
+
+## Research decision and smallest discriminating next step
+
+**Immediate (no model/GPU required):**
+- Stop new evidence-stage/cohort/verifier engineering, and do not repurpose the pre-existing capacity-v0 holdout.
+- Do **not** re-submit V2; treat `58019162` as pending **until a new authenticated terminal status is actually observed**.
+- Preserve the original 31B single-root scored ZIP and the externally attributed V2 ZIP. They are two reference *systems*, not proof of one mechanism. Do not extrapolate a stronger 31B hidden-scorer conclusion from 17 inspected E4B cases.
+- Separate **task eligibility**, **agent process quality**, **semantic patch validity** and **Kaggle hidden score** in reports. Do not create another evaluation platform to do so.
+
+**First new inference experiment, only when legitimate private 31B runtime exists:**
+
+> **Does extra usable compute help the *same* single-root Gemma 4 31B solve problems, or just prolong unproductive tool loops?**
+
+Compare **exact same frozen 31B model, prompt, tools, and task setup**, varying only an operational per-task cap from **5 to 8 minutes**. Start on a few **already-inspected development** cases with verified gold-pass/no-op-fail controls (not frozen independent confirmation). Measure **first useful edit latency, correct/incorrect diff, targeted test result, resolved, total wall-time** and most importantly **resolved-per-12-hour global budget**. The purpose is **mechanism diagnosis**, not a performance claim or final tuning on those dev cases. One paired test only; no multi-arm architecture redesign, no gold hints to the agent, and no fresh post-score holdout selected in response to failures.
+
+- If extra compute yields meaningful additional correct patches *at acceptable global cost*, consider a **budget allocation/stop policy** hypothesis instead of adding agents.
+- If extra compute only adds rereads or wrong patches, pivot to **code understanding / candidate discrimination**; challenge the autonomous-agent scaffold against a simple staged localization/repair candidate, *provided the official declarative harness can implement it*. Agentless is a source of counter-hypotheses, **not** a method to copy.
+- If patches already appear semantically correct before failures, reopen **verification/test selection**, or, where warranted, **model adaptation**. No training/LoRA is authorized by this document.
+
+**Stop/pivot triggers:** no controlled 31B private runtime → no fabricated model experiment; B/C stage not actually run → no efficacy or failure claim; qualitative evidence limited to repeatedly inspected dev issues → no generalization claim; external V2 score alone → no method selection or leaderboard hill-climbing.
+
+## Minimal handoff for the next agent
+
+The useful next output is **one falsifiable causal insight with task-level evidence**, not another 200-line preflight, new task pool, or tweak copied from a public prompt. Keep `submission/`, previous experiment contracts, source archives, and existing Kaggle submissions unchanged. Research lane may be reopened only when new observations actually favor its mechanism.
