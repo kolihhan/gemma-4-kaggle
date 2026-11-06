@@ -1,5 +1,21 @@
 # Independent Research Reset — Gemma 4 agent (2026-11-06 MYT)
 
+## Official-score-only audit: precommitted global-budget counterfactual (2026-11-06)
+
+**User-selected execution channel:** Audit → official Kaggle code submission → authenticated score verification. Do not launch local model inference, train, run an independent issue evaluation or consume personal GPU. This explicitly supersedes the conditional local-GPU diagnostic above, **not** the prior no-leak and do-not-overfit rules.
+
+**Evidence reviewed before choosing intervention:** 4 existing official submissions all COMPLETE: E4B baseline `57879765` 0.03, Reliability `57921371` 0.03, 31B original `57983156` 0.08, exact attributed V2 ref `58019162` 0.17. Verified [Kaggle ledger audit, Action 42161771179](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42161771179). Upstream source V2 `submission.zip` pinned SHA256 `a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3`, Apache-2.0 source: [lynnsakurai V2](https://www.kaggle.com/code/lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue). The original V2 `timeout_seconds: 240` is a **single-command** timeout; `max_time_minutes: 8` is the separate **task-agent session** cap. These fields are NOT a configuration contradiction (harness reference `HARNESS_README.md` section 7.1).
+
+**Exact candidate before seeing its score:** retain the **same** externally sourced single-root Gemma 4 31B system: same exact source zip members, model, prompt, nine tools, sampling parameters, evaluation `timeout_seconds: 240`, `max_tool_calls: 28`, `max_turns: 80`. Change **only** `evaluation.max_time_minutes: 8 → 5`. No user-visible claim of originality, novel architecture or private holdout efficacy. Marker: `audit-globalbudget-cap5-v0:public-v2-derived`.
+
+**Mechanism hypothesis:** official 12-hour wallclock for ~120 hidden issues includes setup. Worst-case 120×8 = 960 agent-minutes, which exceeds 720 total; 120×5 = 600 agent-minutes, allowing 120 minutes for setup/other overhead. These are **worst-case caps**, not measured average execution times. This intervention sacrifices slow-case opportunity to preserve later-case coverage under the global cap. The author's claim that most resolved tasks averaged ~3 minutes is background from a different evaluation and not a guarantee. Source: competition official [overview](https://www.kaggle.com/competitions/gemma-4-developer-agent/overview).
+
+**Decision contract:** Submit once (if Kaggle one-per-UTC-day slot and credential gates permit) to score the one-variable public V2 derivative. No private/local scorer run, no GPU kernel, no training. Inspect official exact ref and terminal status. If Public >0.17, record as an **exploratory** gain consistent with (but not proving) global-budget coverage; if =0.17, no demonstrated lift; if <0.17, this cap may be too tight. **Any** outcome could reflect stochastic execution, host epoch differences or limited 58-issue public sample. Never infer per-issue mechanism or hidden distribution from one leaderboard number; do not run a grid of caps or another candidate based on this result. If submission unavailable, report the blocker rather than bypass it or resubmit a copy. Preserve both original scored reference and original canonical `submission/`.
+
+**STOP:** once candidate is officially submitted or a hard gate blocks it. The next *research* decision requires evidence beyond a single aggregate public score; do not call a cap sweep an innovation.
+
+---
+
 ## Follow-up evidence — Nov 6, 2026 (authenticated, read-only)
 
 **New official result:** Existing exact V2 reproduction ref `58019162` is **COMPLETE, Public 0.17, Private score not reported** as of **2026-11-06 04:08:31 UTC** (Actions [42160680339](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42160680339)). The author's claimed 0.18 was not our score; 0.17 is ours, and is a reproduction, **not original work**. Original 31B single-root 5-minute package ref `57983156` remains Public 0.08; these two runs change prompts/tool selections/budgets/turns and cannot identify a single causal variable. Both use pretrained 31B and no LoRA. Their 0.09 displayed-score difference is direct benchmark evidence of a stronger publicly shared **single-root** system, **not evidence for adding a sub-agent**.
