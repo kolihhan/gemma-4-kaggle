@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: gemma4-private-base-evidence-stage
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   stage:
@@ -86,9 +86,21 @@ jobs:
           (work / "incoming-key.pem").write_bytes(key.private_bytes(
               serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
           public = key.public_key().public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
-          print("GEMMA4_SEALED_V2=" + base64.b64encode(sealed).decode(), flush=True)
-          print("GEMMA4_STAGE_PUBLIC_KEY=" + base64.b64encode(public).decode(), flush=True)
+          (work / "handshake.json").write_text(json.dumps({
+              "sealed_v2": base64.b64encode(sealed).decode(),
+              "public_key": base64.b64encode(public).decode(),
+              "used_today": sum((r.get("date") or "").startswith(today) for r in rows),
+              "active": sum(any(s in (r.get("status") or "").upper() for s in ("PENDING", "RUNNING", "QUEUED")) for r in rows),
+              "references": visible,
+          }) + "\n", encoding="utf-8")
           PY
+      - name: Publish public key and encrypted source
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemma4-encrypted-handshake-${{ github.run_id }}
+          path: ${{ runner.temp }}/gemma4-retry/handshake.json
+          if-no-files-found: error
+          retention-days: 1
       - name: Receive the private notebook package
         run: |
           set -euo pipefail
