@@ -115,3 +115,29 @@ jobs:
           kaggle kernels files kolihhan/gemma4-audit-cap5-42162206978 2>&1 | head -60
           echo "KERNEL_FILES_QUERY_EXIT=${PIPESTATUS[0]}"
           echo "NO_NEW_KERNEL_NO_SUBMISSION=TRUE"
+
+      - name: Diagnose Kaggle private kernel namespace without another push
+        shell: bash
+        run: |
+          set +e
+          echo "=== previously verified V2 private kernel status ==="
+          kaggle kernels status kolihhan/gemma4-budgetfit-v2-reference-42008171687 2>&1 | tail -8
+          echo "KNOWN_KERNEL_EXIT=${PIPESTATUS[0]}"
+          echo "=== list own kernels and filter only audit / V2 references ==="
+          kaggle kernels list --mine -v > /tmp/mine.csv 2>/tmp/mine.err
+          rc=$?
+          echo "KERNEL_LIST_EXIT=$rc"
+          if test "$rc" = 0; then
+            python - <<'PY'
+          import csv,json
+          rows=list(csv.DictReader(open("/tmp/mine.csv",newline="",encoding="utf-8-sig")))
+          print("MY_KERNEL_LIST_HEADERS=",list(rows[0]) if rows else [])
+          for x in rows:
+              line=json.dumps(x,sort_keys=True)
+              if any(s in line.lower() for s in ("cap5","budgetfit","budget-fit","gemma-4-public-v2")):
+                  print("MATCHED_OWN_KERNEL=",line[:1300])
+          PY
+          else
+            tail -8 /tmp/mine.err
+          fi
+          echo "NO_KERNEL_PUSH_OR_SUBMISSION=TRUE"
