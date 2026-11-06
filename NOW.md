@@ -1,3 +1,19 @@
+# NOW — Independent Gemma 4 research reset (2026-11-06 MYT)
+
+**ACTIVE RESEARCH DIRECTION: REASSESS THE BOTTLENECK. Do not continue the evidence-before-mutation B/C lane or build more candidate-selection infrastructure by default.** This decision is documented in [Independent Research Reset](docs/research/independent-strategy-reset-2026-11-06.md) and is not a negative performance result for that candidate, which was never evaluated.
+
+**Verified score evidence:** E4B Reliability-v1 Public 0.03 (`57921371`), same-policy 31B Public 0.08 (`57983156`); the attributed external V2 reproduction (`58019162`) was PENDING **at its last authenticated check 2026-11-05**; do not claim it scored without checking a fresh terminal response. The V2 package changes 5→8 minutes, tools, policy and turns; cannot attribute improvement to an individual factor.
+
+**Research diagnosis:** Existing E4B 17-dev traces show poor solution reliability, and five tasks submitted after a nonzero test command without an edit, but they **do not demonstrate verification is the dominant reason 31B failed**. The original evidence-stage and 4+12 protocols stalled at eligibility, not at an actual model/causal test.
+
+**Latest eligibility check, already completed:** [gold CPU run 42066105011](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42066105011), 19/30 reference-patch pass (Rich 13/14; FastAPI 6/16); [no-op CPU run 42067120930](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42067120930), **19/19 no-op fails** among gold-passing tasks; [final readiness 42068107095](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42068107095) SUCCESS as engineering check but **NO_GO_INSUFFICIENT_ELIGIBLE_TASKS** (4 pilot + only 10 exploratory). None measures agent quality.
+
+**Next scientific decision, not another agent build:** distinguish capability/patch semantics, useful work per wall-time, localization, and harness reliability. The report proposes one conditional single-variable 31B **5-vs-8-minute dev diagnostic**, with the same model/config/tasks, global 12-hour budget normalization, and explicit interpretive limits. The external Agentless/SWE-agent research is counterevidence to automatically adding more agents, not a transplant recipe. No new model run is authorized here while private GPU quota blocks startup.
+
+**Scope:** no new training/LoRA, Kaggle submission, model inference, GPU, raw data mirror, repo visibility/security changes, `submission/` edits, or modifications to any existing frozen cohort. Keep prior negative results and original contracts for historical provenance. Do not call research protocols a score improvement.
+
+---
+
 # NOW — discriminating-evidence 4+12 CPU eligibility checkpoint (2026-11-06 MYT)
 
 **Research decision: NO-GO for balanced 4+12 exploratory A/B/C quality runs.** A separate, pre-outcome reduction from 4+24 reserved 4 pilot +12 exploratory IDs plus same-repo ordered replacements. [Exploratory contract](docs/research/discriminating-evidence-v0-exploratory-4plus12-2026-11-06.md), [frozen metadata-only manifest](docs/evaluation/discriminating-evidence-v0-exploratory-selection-2026-11-06.json). Neither contract certifies complete blindness.
