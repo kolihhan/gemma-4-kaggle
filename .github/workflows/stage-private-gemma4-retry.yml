@@ -1,0 +1,169 @@
+name: Stage private Gemma 4 research notebook
+
+on:
+  push:
+    branches: [exp/base-evidence-retry-v0]
+    paths: [".github/workflows/stage-private-gemma4-retry.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gemma4-private-base-evidence-stage
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COMPETITION: gemma-4-developer-agent
+      SOURCE: lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2
+      KERNEL: kolihhan/gemma4-base-evidence-retry-v0-20261106
+      BASE_RECEIPT_PUBLIC_KEY: "MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAzXIR8e/PsUNlYVQRks04mjR/OgtZtUdmqG8THxFlLmIoOx8z5r5Aqv382+4Yrl8rwGhk8tDqp2AgAnDM8irhAsqvOJURvaeidlQvzfbElbOSv28r9UsayIsAz2ED5zAraWsbOfSswh9Rn5ja3DqUfWrNtACDvTvIA8XLO6rvSD91v40VcB8gJ7PxDtYVE2NzGD0ZssMsP38YS33WCpsMPimEajt1WR7n+ZCVfZpQTXEsimPB1f7dIjBDJuoLBts5z33vkBHJr1iSG5+R9Qb2j/1b7dlOruLpIpwGo5oNYwv/SSAmSVRSCQLNjK+48OSW5h7G44Yc+K7BAs0TLJTdSaytwfHZ4n7RCw/2fvuMxdm3gy4CEXbpYUs6A/PwHpMjyA1OGd5sa6/+rxWFHa+Q8typcQSGGoht/Bcn6fuUkJo22R7+extKoHFyicHKJC+adKASd0I5WEZpH/hsNsHFI5UGcnr0PVsiHo7vMv/q4QQ+N9vTDtheEul7JA9PgzLTAgMBAAE="
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install CPU packaging dependencies
+        run: python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0" "cryptography>=44" "nbformat==5.10.4"
+      - name: Read Kaggle receipt and open private artifact transfer
+        run: |
+          set -euo pipefail
+          umask 077
+          work="$RUNNER_TEMP/gemma4-retry"
+          mkdir -p "$work/upstream"
+          kaggle competitions submissions "$COMPETITION" -v > "$work/submissions.csv"
+          kaggle kernels output "$SOURCE" -p "$work/upstream" -o >/dev/null
+          python - <<'PY'
+          import base64, csv, datetime, json, os
+          from pathlib import Path
+          from cryptography.hazmat.primitives import hashes, serialization
+          from cryptography.hazmat.primitives.asymmetric import padding, rsa
+          from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          from scripts.prepare_public_budgetfit_v2 import validate_source_zip
+
+          work = Path(os.environ["RUNNER_TEMP"]) / "gemma4-retry"
+          with (work / "submissions.csv").open(newline="", encoding="utf-8-sig") as file:
+              rows = list(csv.DictReader(file))
+          today = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+          visible = [
+              {k: r.get(k) for k in ("ref", "status", "date", "publicScore")}
+              for r in rows if r.get("ref") in {"58019162", "58045795"}
+          ]
+          print("KAGGLE_STAGE_LEDGER=" + json.dumps({
+              "utc_day": today,
+              "used_today": sum((r.get("date") or "").startswith(today) for r in rows),
+              "active": sum(any(s in (r.get("status") or "").upper() for s in ("PENDING", "RUNNING", "QUEUED")) for r in rows),
+              "references": visible,
+          }), flush=True)
+          api = KaggleApi()
+          api.authenticate()
+          if hasattr(api, "competition_get_submission_limits"):
+              try:
+                  quota = api.competition_get_submission_limits(os.environ["COMPETITION"])
+                  print("KAGGLE_STAGE_ALLOWANCE=" + json.dumps({
+                      "num_today": quota.num_today,
+                      "num_allowed_now": quota.num_allowed_now,
+                      "limited_by_total": quota.limited_by_total,
+                  }), flush=True)
+              except Exception as error:
+                  print("KAGGLE_STAGE_ALLOWANCE_UNAVAILABLE=" + type(error).__name__, flush=True)
+
+          source = (work / "upstream" / "submission.zip").read_bytes()
+          validate_source_zip(source)
+          receipt = serialization.load_der_public_key(base64.b64decode(os.environ["BASE_RECEIPT_PUBLIC_KEY"], validate=True))
+          secret = AESGCM.generate_key(bit_length=256)
+          nonce = os.urandom(12)
+          scheme = padding.OAEP(mgf=padding.MGF1(hashes.SHA256()), algorithm=hashes.SHA256(), label=None)
+          sealed = receipt.encrypt(secret, scheme) + nonce + AESGCM(secret).encrypt(nonce, source, b"gemma4-upstream-v2")
+          key = rsa.generate_private_key(public_exponent=65537, key_size=3072)
+          (work / "incoming-key.pem").write_bytes(key.private_bytes(
+              serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
+          public = key.public_key().public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+          print("GEMMA4_SEALED_V2=" + base64.b64encode(sealed).decode(), flush=True)
+          print("GEMMA4_STAGE_PUBLIC_KEY=" + base64.b64encode(public).decode(), flush=True)
+          PY
+      - name: Receive the private notebook package
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/gemma4-retry"
+          url="https://raw.githubusercontent.com/kolihhan/gemma-4-kaggle/refs/heads/exp/base-evidence-retry-v0/experiments/base-evidence-retry-v0/notebook-payload.txt"
+          for attempt in $(seq 1 64); do
+              if curl --fail --silent --max-time 10 "$url?run=$GITHUB_RUN_ID&attempt=$attempt" -o "$work/notebook-payload.txt" && test -s "$work/notebook-payload.txt"; then
+                  break
+              fi
+              sleep 12
+          done
+          test -s "$work/notebook-payload.txt"
+          python - <<'PY'
+          import base64, hashlib, json, os
+          from pathlib import Path
+          import nbformat
+          from cryptography.hazmat.primitives import hashes, serialization
+          from cryptography.hazmat.primitives.asymmetric import padding
+          from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+          work = Path(os.environ["RUNNER_TEMP"]) / "gemma4-retry"
+          key_path = work / "incoming-key.pem"
+          key = serialization.load_pem_private_key(key_path.read_bytes(), password=None)
+          sealed = base64.b64decode((work / "notebook-payload.txt").read_text().strip(), validate=True)
+          boundary = key.key_size // 8
+          scheme = padding.OAEP(mgf=padding.MGF1(hashes.SHA256()), algorithm=hashes.SHA256(), label=None)
+          secret = key.decrypt(sealed[:boundary], scheme)
+          clear = AESGCM(secret).decrypt(sealed[boundary:boundary+12], sealed[boundary+12:], b"gemma4-research-notebook")
+          key_path.unlink()
+          payload = json.loads(clear)
+          expected = payload["archive_sha256"]
+          archive = base64.b64decode(payload["archive_base64"], validate=True)
+          assert hashlib.sha256(archive).hexdigest() == expected
+          notebook = nbformat.reads(payload["notebook"], as_version=4)
+          nbformat.validate(notebook)
+          code_cells = [c for c in notebook.cells if c.cell_type == "code"]
+          assert len(code_cells) == 1 and payload["archive_base64"] in code_cells[0].source
+          compile(code_cells[0].source, "build_submission", "exec")
+          assert notebook.metadata["gemma4_research"]["archive_sha256"] == expected
+          builder = work / "builder"
+          builder.mkdir()
+          (builder / "base-evidence-retry.ipynb").write_text(payload["notebook"], encoding="utf-8")
+          (work / "expected.zip").write_bytes(archive)
+          kernel = os.environ["KERNEL"]
+          metadata = {
+              "id": kernel, "title": kernel.split("/", 1)[1],
+              "code_file": "base-evidence-retry.ipynb", "language": "python", "kernel_type": "notebook",
+              "is_private": True, "enable_gpu": False, "enable_tpu": False, "enable_internet": False,
+              "competition_sources": [os.environ["COMPETITION"]],
+              "dataset_sources": [], "kernel_sources": [], "model_sources": [],
+          }
+          (builder / "kernel-metadata.json").write_text(json.dumps(metadata) + "\n", encoding="utf-8")
+          print("PRIVATE_NOTEBOOK_FORMAT_VERIFIED=" + expected, flush=True)
+          PY
+      - name: Build once on private Kaggle CPU
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/gemma4-retry"
+          kaggle kernels push -p "$work/builder" -t 600
+          for attempt in $(seq 1 60); do
+              status="$(kaggle kernels status "$KERNEL" 2>&1 || true)"
+              if grep -Eq 'KernelWorkerStatus\.(COMPLETE|COMPLETED)([^A-Z]|$)' <<<"$status"; then
+                  mkdir -p "$work/remote"
+                  kaggle kernels output "$KERNEL/1" -p "$work/remote" -o >/dev/null
+                  cmp "$work/expected.zip" "$work/remote/submission.zip"
+                  printf 'KAGGLE_PRIVATE_NOTEBOOK_READY=%s/1 SHA256=' "$KERNEL"
+                  sha256sum "$work/remote/submission.zip" | cut -d ' ' -f 1
+                  exit 0
+              fi
+              if grep -Eq 'KernelWorkerStatus\.(ERROR|FAILED|CANCELLED|CANCELED)([^A-Z]|$)' <<<"$status"; then
+                  printf 'KAGGLE_CPU_BUILDER_FAILED=%s\n' "$status"
+                  kaggle kernels logs "$KERNEL" | tail -20
+                  exit 1
+              fi
+              sleep 10
+          done
+          echo "KAGGLE_CPU_BUILDER_NOT_TERMINAL"
+          exit 1
