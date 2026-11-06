@@ -104,3 +104,14 @@ jobs:
           print("AUDITED_V2_ZIP_SHA256=",digest)
           print("NO_LOCAL_MODEL_OR_BENCHMARK_RUN=TRUE")
           PY
+
+      - name: Inspect existing private CPU builder status without a new push
+        shell: bash
+        run: |
+          set +e
+          echo "=== EXACT KAGGLE KERNEL STATUS / EXISTING BUILD ONLY ==="
+          kaggle kernels status kolihhan/gemma4-audit-cap5-42162206978 2>&1
+          echo "KERNEL_STATUS_QUERY_EXIT=$?"
+          kaggle kernels files kolihhan/gemma4-audit-cap5-42162206978 2>&1 | head -60
+          echo "KERNEL_FILES_QUERY_EXIT=${PIPESTATUS[0]}"
+          echo "NO_NEW_KERNEL_NO_SUBMISSION=TRUE"
