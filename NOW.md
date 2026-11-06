@@ -1,3 +1,17 @@
+# NOW — mechanism-first research audit (2026-11-06 MYT)
+
+**ACTIVE DIRECTION: RESEARCH ONLY.** User explicitly corrected course: do not use Kaggle submissions, repeated status probes, prompt/budget tweaks, or deployment as a surrogate for independent research. **No Kaggle submit, GPU/TPU run, model inference, training, or `submission/` changes in this work.**
+
+**New independent source audit:** [Semantic Repair Gap — 2026-11-06](docs/research/semantic-repair-gap-audit-2026-11-06.md). It triangulates own 17-task E4B development evidence, scored 31B bundles, and the public Budget-Fit author's *different* exposed trace sample. Key limitation: 31B hidden task-level failures are not visible. The 0.08 → 0.17 displayed score is a multi-variable system contrast, **not proof that any component caused the gain**.
+
+**Mechanism question:** on issues where the agent already finds relevant source, can a repository-visible discriminating witness resolve *two plausible competing interpretations of an underspecified behavior* before editing? Distinguish explicit requirements (A), repository-recoverable gaps (B), and genuinely unrecoverable gaps (C). This is a **hypothesis, not a proven new technique**. Plain test-first, graph localization, regression-test selection and more subagents overlap known prior art and cannot be claimed as novel.
+
+**Next research action, before any implementation decision:** inspect a few *already inspected* development examples for actual source-visible A/B/C evidence (reference patches audit-only), then reject or refine this hypothesis. Do not invent case labels, train, re-evaluate models, or repurpose held-out sets. A pure prompt instruction to “verify more” is insufficient and was not selected.
+
+**Previous submission receipt, historical only:** `58045795` was accepted, with status PENDING at last authenticated check 2026-11-06 05:53 UTC; there is no new result in this research audit. No new submission should be driven by that result.
+
+---
+
 # NOW — Kaggle-only audit / official cap5 submission accepted (2026-11-06 12:44 MYT)
 
 **USER-SELECTED METHOD: Audit → official Kaggle code submission → read-only score verification. No self-run model/issue experiments.**
