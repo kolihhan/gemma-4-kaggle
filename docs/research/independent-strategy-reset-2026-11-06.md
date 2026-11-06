@@ -1,5 +1,13 @@
 # Independent Research Reset — Gemma 4 agent (2026-11-06 MYT)
 
+## Official-code submission receipt: budget-cap5 (2026-11-06)
+
+**Accepted, not scored yet:** exact Kaggle ref `58045795`; authenticated `SubmissionStatus.PENDING`, Public/Private fields blank at 2026-11-06 04:44:31 UTC. Official [submit-and-verify run 42164252901](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42164252901) SUCCESS. The private CPU builder source notebook (`kolihhan/gemma-4-public-v2-cap5-official-audit`) is COMPLETE, and its remote `submission.zip` is byte-identical to predeclared SHA256 `c9eeb05c2b5c3c9a48689a6afd22ed48334efccd685999539c60567c8ef76551`. Audited all original members; the **only** payload change from Apache-2.0 public V2 is `evaluation.max_time_minutes: 8 → 5`. No Kaggle local task benchmark, model execution, GPU usage or training; the official scorer will produce the eventual score.
+
+**One infrastructure discrepancy explained, not disguised as an agent failure:** [initial workflow 42162206978](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42162206978) pushed successfully but polled the wrong kernel ref due Kaggle title-derived slug; [read-only kernel discovery 42164107617](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42164107617) found the actual slug, and we **reused** the pre-existing CPU build for official code submission. Only one actual new Kaggle competition submission ref. Do not run another cap ablation or claim 0.17 was improved until `58045795` has a verified terminal score.
+
+---
+
 ## Official-score-only audit: precommitted global-budget counterfactual (2026-11-06)
 
 **User-selected execution channel:** Audit → official Kaggle code submission → authenticated score verification. Do not launch local model inference, train, run an independent issue evaluation or consume personal GPU. This explicitly supersedes the conditional local-GPU diagnostic above, **not** the prior no-leak and do-not-overfit rules.
