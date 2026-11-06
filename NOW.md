@@ -1,3 +1,24 @@
+# NOW — Two-call assertion selection audit (2026-11-07 MYT)
+
+**Decision.** Continue with one CPU packaging candidate for test selection. The existing conditional `base-evidence-retry-v0` schedule stays on its original plan. The 31B Budget-Fit V2 control `58019162` scored 0.17 Public at 8 minutes and the 5-minute variant `58045795` scored 0.15. [Frozen experiment state](https://github.com/kolihhan/gemma-4-kaggle/blob/fea90cd8233cbb49a713393e7071db091f9f8c7a/NOW.md#L1-L9)
+
+**Evidence.** Locked four failures in the public faithful 31B development records before opening the issue text or reference. These runs had thinking off. A bounded search and one narrow read found a testable requirement on FastAPI #13713 and Rich #3278. After locking the assertions, the same CPU probes were run on the base and on independent reference-patched copies.
+
+| Case | Result |
+| --- | --- |
+| FastAPI #13713 | The OpenAPI root field is absent on base and equals the supplied metadata on reference. The literal constructor spelling in the issue fails on both. The reference exposes `openapi_external_docs`. The predeclared root-only probe checks the output requirement and resolves the exposed slot by suffix. The historical run spent 37 calls paging the application file and recorded an empty patch. |
+| Rich #3278 | Base retained all 16 tested private escape sequences. The reference removed all 16 and preserved surrounding text. The historical run repeated malformed edits 71 times and hit 80 turns. |
+| FastAPI #15023 | Skip. The task lacks an expected change to a specific streaming example. The historical run made 35 searches and recorded an empty patch. Assertion unexecuted. |
+| Rich #3942 | Skip. The task lacks target elements and expected styles. The historical record names 15 malformed edit repeats. Assertion unexecuted. |
+
+[FastAPI development notes and call summaries](https://github.com/happyc0der/gemma-swe-agent/blob/88cfbc6dc9fdce17f90117e17c2ff8c365c7eb16/experiments/2026-10-14-faithful-v54-AB/notes.md#L25-L30) · [Rich development notes and call summaries](https://github.com/happyc0der/gemma-swe-agent/blob/88cfbc6dc9fdce17f90117e17c2ff8c365c7eb16/experiments/2026-10-21-faithful-bf-off-AB/notes.md#L24-L30) · [FastAPI base schema](https://github.com/fastapi/fastapi/blob/5c1f87c56387a96dbdddb2b1c4ec9ba48dcebc4e/fastapi/openapi/models.py#L423-L440) · [Rich base decoder](https://github.com/Textualize/rich/blob/4c5d305bb902ce97011666ada19e48d0b27b49e1/rich/ansi.py#L119-L165)
+
+**CPU packaging.** `gemma4-budgetfit-v2-two-call-assertion.ipynb` generated identical `submission.zip` files in two local IPython executions. SHA-256 `fc828ec9253fc520f5f22e85943d73543be4154d6fb63761f2be3bc2b2e93e8d`. The source was lynnsakurai's Apache-2.0 V2 archive `a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3`. Reversing the one test-selection replacement restored the exact original prompt. The other three archive members matched byte for byte, including model, tools, sampling, 8 minutes, 28 calls and 80 turns.
+
+**Scope of the result.** Two requirements were recoverable in an auditor's two-call replay. Historical summaries identify navigation and editing bottlenecks, with incomplete tool timelines. Model compliance, patch resolution, and transfer to the hidden set remain unmeasured. No training, model inference or submission was performed in the audit. An independent follow-up would hold budgets fixed and compare how often the agent picks a grounded, runnable check within two calls and whether it improves correct patches.
+
+---
+
 # NOW — Base evidence retry v0 (2026-11-06 MYT)
 
 **Ready for one conditional Kaggle submission.** The private CPU notebook `gemma4-base-evidence-retry-v0-20261106` v1 produced the pinned ZIP `1944471ce98386371ebe52a0d3e6a9cc211ff81803684eeaff5f344532234c1b`. A local CPU build matched that hash. The workflow is active and is scheduled for November 7 at 08:13 MYT. It verifies the notebook ZIP, checks for a prior receipt, and requires both an available slot and no active Kaggle entry on the account before submitting. Ten offline cases passed, including a pending entry, zero quota, a changed ZIP, and a missing response. [CPU build](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42202422197) · [Scheduled workflow](https://github.com/kolihhan/gemma-4-kaggle/actions/workflows/scheduled-gemma4-retry-nov07.yml)
