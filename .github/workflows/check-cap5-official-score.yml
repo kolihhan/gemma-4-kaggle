@@ -1,0 +1,44 @@
+name: Read official Kaggle cap5 score only
+on:
+  push:
+    branches: [research/strategy-reset-2026-11-06]
+    paths: [".github/workflows/check-cap5-official-score.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Read exact official submission 58045795 (no submit or inference)
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import datetime, json, subprocess
+          ref="58045795"
+          p=subprocess.run(
+              ["kaggle","competitions","submission",ref],
+              capture_output=True,text=True,timeout=90)
+          keys={"submission ref","status","public score","private score","description"}
+          fields={}
+          for line in p.stdout.splitlines():
+              k,sep,v=line.partition(":")
+              if sep and k.strip().lower() in keys:
+                  fields[k.strip().lower().replace(" ","_")]=v.strip()[:200]
+          if p.returncode or fields.get("submission_ref")!=ref:
+              print("SCORE_QUERY_UNAVAILABLE; exit=",p.returncode)
+              raise SystemExit(1)
+          print("CAP5_OFFICIAL_CHECK=",json.dumps({
+              "checked_utc":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "submission_ref":ref,"fields":fields,
+              "baseline_ref":"58019162","baseline_public_score":"0.17",
+              "new_submission":False,"model_run":False,
+          },sort_keys=True))
+          PY
