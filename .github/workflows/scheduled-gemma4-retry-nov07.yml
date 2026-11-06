@@ -1,0 +1,14 @@
+name: Send verified Gemma 4 notebook on November 7
+
+on:
+  schedule:
+    - cron: '13 0 7 11 *'
+
+permissions:
+  contents: read
+
+jobs:
+  send:
+    uses: kolihhan/gemma-4-kaggle/.github/workflows/submit-private-gemma4-retry.yml@99946948b15570938d3da11f51d1df04e764a05c
+    secrets:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
