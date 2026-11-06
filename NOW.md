@@ -1,6 +1,16 @@
+# NOW — Agent decision research pivot (2026-11-07 MYT)
+
+**Decision.** Archive the two-call assertion notebook as a CPU prototype. This supersedes the advancement decision below. The development cases showed that an auditor could construct two behavior checks. They supplied no independent evidence that the agent would choose a useful check or use its result to make a better decision.
+
+**Research question.** Does giving the agent evidence of what its own edit changed improve its choice to keep, revise or revert the patch? The agent chooses the check and the next action. The proposed intervention changes the evidence returned by the sandbox. A matched control runs the same agent-chosen check twice on the edited tree. The treatment runs it once on the base tree and once on the edited tree. Match the checkpoint, model, prompt and total budget. Score on issues fixed in advance outside development and use independent correctness checks. Retain tasks without an eligible check in the denominator.
+
+**Falsifier.** If informative paired observations occur but do not improve independent patch correctness at the same cost, set aside this feedback hypothesis and investigate edit generation and action selection. If informative observations are rare, the intervention has inadequate coverage. This is a research proposal. The frozen base-evidence retry retains its existing schedule.
+
+---
+
 # NOW — Two-call assertion selection audit (2026-11-07 MYT)
 
-**Decision.** Continue with one CPU packaging candidate for test selection. The existing conditional `base-evidence-retry-v0` schedule stays on its original plan. The 31B Budget-Fit V2 control `58019162` scored 0.17 Public at 8 minutes and the 5-minute variant `58045795` scored 0.15. [Frozen experiment state](https://github.com/kolihhan/gemma-4-kaggle/blob/fea90cd8233cbb49a713393e7071db091f9f8c7a/NOW.md#L1-L9)
+**Historical decision (superseded above).** Continue with one CPU packaging candidate for test selection. The existing conditional `base-evidence-retry-v0` schedule stays on its original plan. The 31B Budget-Fit V2 control `58019162` scored 0.17 Public at 8 minutes and the 5-minute variant `58045795` scored 0.15. [Frozen experiment state](https://github.com/kolihhan/gemma-4-kaggle/blob/fea90cd8233cbb49a713393e7071db091f9f8c7a/NOW.md#L1-L9)
 
 **Evidence.** Locked four failures in the public faithful 31B development records before opening the issue text or reference. These runs had thinking off. A bounded search and one narrow read found a testable requirement on FastAPI #13713 and Rich #3278. After locking the assertions, the same CPU probes were run on the base and on independent reference-patched copies.
 
