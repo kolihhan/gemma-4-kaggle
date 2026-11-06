@@ -1,3 +1,14 @@
+# NOW — Gemma 4 base-evidence retry notebook (2026-11-06 MYT)
+
+**Status: private Kaggle Notebook v1 built and verified. Official submission is scheduled for the next daily slot.**
+
+- Candidate: [gemma4-base-evidence-retry-v0-20261106](https://www.kaggle.com/code/kolihhan/gemma4-base-evidence-retry-v0-20261106), version 1. [Kaggle CPU build receipt](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42202422197) records COMPLETE and byte equality of its `submission.zip` with SHA-256 `1944471ce98386371ebe52a0d3e6a9cc211ff81803684eeaff5f344532234c1b`.
+- **Mechanism.** Exact Apache-2.0 Budget-Fit V2 baseline (our verified Public 0.17). After a relevant assertion failure and with time left, the parent can ask one same-model helper to diagnose the issue from original Git HEAD evidence. The helper has no tools and a fresh conversation. The parent retains its patch and decides the correction. This is a narrow handoff test of the research direction below. The model, main sampling, and evaluation limits match V2.
+- **Validation.** Three local build checks, archived official ADK 0.2.13 schema/include checks for both agents, and a matching Kaggle CPU archive. Behavioral quality, gate activation and Public score remain UNKNOWN.
+- **Eligibility.** Kaggle returned one submission today, zero allowed now and existing ref `58045795` PENDING at 18:25 MYT. [Date-scoped scheduler](https://github.com/kolihhan/gemma-4-kaggle/blob/63a86bf7a5c309495f934288214c1438334412c6/.github/workflows/scheduled-gemma4-retry-nov07.yml) is set for **2026-11-07 08:13 MYT**. It uses a pinned submission workflow to check the exact archive, current allowance, and active scoring, then make at most one official request. Use the official receipt to establish acceptance, and the Kaggle result to establish score.
+
+---
+
 # NOW — Independent Research Verdict (2026-11-06 MYT)
 
 **Research priority.** Test whether a fresh attempt can reuse repository observations that still hold on a clean checkout. Use the reproduced 31B Budget-Fit V2 as the practical comparator. The hypothesis concerns the information carried across a retry. The dominant bottleneck on the hidden set remains UNKNOWN.
