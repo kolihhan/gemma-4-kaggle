@@ -1,4 +1,5 @@
 name: Check official Kaggle budget-cap5 score only
+# Read-only refresh for submission 58045795 at user's request; no new submit.
 on:
   push:
     branches: [research/strategy-reset-2026-11-06]
