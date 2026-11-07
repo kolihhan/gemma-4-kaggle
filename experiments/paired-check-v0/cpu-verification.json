@@ -147,7 +147,16 @@
     "status_at_receipt": "SubmissionStatus.PENDING",
     "public_score_at_receipt": null,
     "source": "https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42344893898/job/128320398058",
-    "sha256": "1944471ce98386371ebe52a0d3e6a9cc211ff81803684eeaff5f344532234c1b"
+    "sha256": "1944471ce98386371ebe52a0d3e6a9cc211ff81803684eeaff5f344532234c1b",
+    "latest_read_only_check": {
+      "checked_utc": "2026-11-07T07:33:24.228179+00:00",
+      "status": "PENDING",
+      "public_score": null,
+      "private_score": null,
+      "source": "https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42351756224/job/128341200017",
+      "new_submission": false,
+      "model_run": false
+    }
   },
   "new_model_runs": 0,
   "new_submissions_for_this_candidate": 0,
