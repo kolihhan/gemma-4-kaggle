@@ -1,0 +1,25 @@
+name: Fresh authenticated Kaggle receipt 58081411
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/read-kaggle-58081411.yml"]
+permissions:
+  contents: read
+jobs:
+  receipt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -q "kaggle==2.2.5" "six==1.17.0"
+      - name: Read exact official authenticated submission
+        shell: bash
+        run: |
+          set -o pipefail
+          date -u +"CHECKED_UTC=%Y-%m-%dT%H:%M:%SZ"
+          kaggle competitions submission 58081411
+          echo "READ_ONLY=TRUE"
