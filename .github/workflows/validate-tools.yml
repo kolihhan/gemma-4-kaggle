@@ -29,7 +29,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Compile Python tools
-        run: python -m py_compile scripts/mirror_kaggle_to_release.py scripts/restore_full_dataset.py scripts/analyze_tasks.py kaggle/smoke_runtime.py kaggle/gold_control_runtime.py
+        run: python -m py_compile scripts/mirror_kaggle_to_release.py scripts/restore_full_dataset.py scripts/analyze_tasks.py kaggle/smoke_runtime.py kaggle/gold_control_runtime.py kaggle/gold_sample_runtime.py
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
       - name: Analyze real public task corpus
