@@ -1,3 +1,24 @@
+# NOW — Paired execution feedback CPU experiment (2026-11-07 MYT)
+
+**Decision.** Advance the narrower agent decision experiment. Show the base observation when the agent's own check reaches the relevant behavior and its trajectory lacks an equivalent base observation. This replay establishes when useful feedback is available. A matched 31B continuation is still required to measure its effect on decisions and independently correct patches.
+
+**Protocol and evidence.** Locked 19 archived GPT-5 mini / mini-swe-agent SWE-bench Verified tasks before opening the trajectories. In each of Flask, Requests, pytest and SymPy, took up to six task IDs ordered by SHA-256 of `gemma4-decision-cpu-v0:` followed by the task ID. None overlapped the local Kaggle development task index. No replacements. Used the first eligible recorded agent command after its last relevant source write and the terminal patch printed from `patch.txt`. The archive's submission field was empty, so the displayed patch was recovered from its tool reply and checked against the before and after Git blob IDs. Each command ran twice on base and twice on the edited tree in a local CPU sandbox. Older checkouts received a compatibility replay with the same command and dependencies on both sides. The reference patch was excluded from probe selection and replay. [Pinned trajectories](https://huggingface.co/datasets/tarsur385/swebench-verified-trajectories/tree/773748a7c1222e8a642a7059821498e14293562a/swebench_verified_raw/gpt-5-mini) · [Pinned task data](https://huggingface.co/datasets/SWE-bench/SWE-bench_Verified/blob/78f471b/data/test-00000-of-00001.parquet)
+
+| CPU result | Count of 19 | Issue IDs |
+| --- | ---: | --- |
+| Repeatable issue-relevant output change | 12 | Flask 5014. Requests 1142, 2931, 5414. pytest 5262, 7571, 10051. SymPy 11618, 24213, 24443, 24562, 24661. |
+| No observable change from the recorded command | 4 | Requests 1724, 2317. pytest 8399. SymPy 17318. |
+| Test blocked in setup | 1 | Requests 6028. The HTTP fixture was unavailable in the offline replay. |
+| No eligible recorded post-edit check | 2 | pytest 6202, 7205. |
+
+**What the feedback buys.** Eight of the 12 changed cases had identical exit codes on base and edit. Three of the 12 already had equivalent base observations in their original traces (Requests 5414 and SymPy 24443, 24562). The other nine would add a base observation relative to the recorded tool history under a compatible environment. Eleven changes moved the checked behavior toward the issue requirement, but three of those runs remained unresolved in the independent archive verdict (Requests 2931, pytest 10051, SymPy 24562). For example, the agent's Rational probe changed the requested value to 1/200, while the archived grader still recorded unresolved. The remaining change replaced an incorrect distance with an exception (SymPy 11618). Preserve behavior output and use independent grading to judge decisions.
+
+**Next falsification.** Start both arms at the same 31B V2 checkpoint after the agent chooses a check. Use the same test command, model, prompt and time allowance. The control gets edited-tree results and the treatment gets base plus edited-tree results. Measure whether the model's next action and final independent correctness improve on cases locked before inference. Count the tasks where no useful difference can be returned. If previously unseen relevant feedback fails to improve correctness at the same cost, deprioritize this mechanism. The 12-of-19 CPU rate is descriptive of this external sample.
+
+Protocol SHA-256 `f49e223e2009f14dcd3b4c9ec78f65b84e2ac53eb076c059548dd732061b5478`. Selected commands SHA-256 `c5bb7f771b0a6ecb7efb4a9a865628095c48fc962af19ed9624e389c413198e7`. This experiment used archived trajectories and CPU execution only.
+
+---
+
 # NOW — Agent decision research pivot (2026-11-07 MYT)
 
 **Decision.** Archive the two-call assertion notebook as a CPU prototype. This supersedes the advancement decision below. The development cases showed that an auditor could construct two behavior checks. They supplied no independent evidence that the agent would choose a useful check or use its result to make a better decision.
