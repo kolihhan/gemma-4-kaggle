@@ -1,0 +1,37 @@
+name: Candidate history resource check only
+on:
+  push:
+    branches: [research/candidate-history-diagnostic-20261107]
+    paths: [".github/workflows/candidate-history-resource-check.yml"]
+permissions:
+  contents: read
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Read quota and frozen receipt without launching or submitting
+        run: |
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import datetime, json, subprocess
+          stamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+          p = subprocess.run(["kaggle", "quota", "--format", "json"], capture_output=True, text=True, timeout=60)
+          if p.returncode:
+              print("CANDIDATE_HISTORY_QUOTA_UNAVAILABLE=" + str(p.returncode))
+          else:
+              print("CANDIDATE_HISTORY_QUOTA=" + json.dumps(json.loads(p.stdout), sort_keys=True))
+          p = subprocess.run(["kaggle", "competitions", "submission", "58081411"], capture_output=True, text=True, timeout=90)
+          fields = {}
+          for line in p.stdout.splitlines():
+              key, separator, value = line.partition(":")
+              if separator and key.strip().lower() in {"submission ref", "status", "public score", "private score"}:
+                  fields[key.strip().lower().replace(" ", "_")] = value.strip()
+          print("CANDIDATE_HISTORY_FROZEN_RECEIPT=" + json.dumps({"checked_utc": stamp, "fields": fields, "query_exit": p.returncode}))
+          print("NEW_INFERENCE=FALSE NEW_SUBMISSION=FALSE")
+          PY
