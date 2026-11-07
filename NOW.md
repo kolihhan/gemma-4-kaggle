@@ -1,3 +1,15 @@
+# NOW — Conditional recovery architecture research (2026-11-08 MYT)
+
+**Research deliverable, not a new candidate.** The Chinese [architecture report](docs/research/dual-agent-recovery-architecture-2026-11-08.zh-CN.md) selects one experimental design: a single source-writing/submitting Coder, versioned execution evidence, and an optional short fresh-context Recovery Reviewer. Exact scored 31B Budget-Fit V2 (Public 0.17) remains the fallback/control. Conditional official graph navigation is retained; a new embedding service, always-on Analyzer/Critic, and immediate training/RL are deferred with explicit pivot triggers.
+
+**Diagnosis and controls.** Current thinking-on 31B's dominant failure mix is unmeasured. Generation/feedback use and edit execution lead the hypotheses; existing E4B histories cannot establish candidate-selection loss. The frozen base-evidence retry already contains a fresh 31B helper, so that topology is not a new contribution. The report separates native-vs-managed bundle screening from a same-interface null ablation, and separates fresh context from role specialization using a fresh ordinary-Coder control. Hard repeated-action rules cover only fully observed source operations, not arbitrary shell state.
+
+**Fresh runtime verification.** Official wheelhouse metadata reports v31. Re-downloaded adk_submission 0.2.13, google_adk 1.36.1 and swegemma 0.2.11; all bytes match the inspected cached wheels. The non-LlmAgent-root compaction exception remains present. Package hashes, source facts, limitations, prior scored receipts and 27 primary/repository references are recorded in the report.
+
+**Next discriminating work, unexecuted.** Reuse candidate-history instrumentation with exact V2 on a prelocked, exposure-clean task denominator, grading immutable candidates only after the run. Then screen the managed single-role arm before testing any Reviewer. No new inference, GPU/TPU use, training, task/candidate grading, Kaggle submission, executor implementation or change to canonical submission/, frozen candidates, blind sets or existing experimental contracts occurred in this research turn. The latest account submission state was not refreshed; older PENDING receipts are not current-status claims.
+
+---
+
 # NOW — Candidate history CPU diagnostic implemented (2026-11-07 MYT)
 
 **Concrete progress.** A private-evaluation observer now captures immutable source patches at tool boundaries and grades copied candidates only after the run. The official ADK Runner and sandbox API path passed with scripted CPU responses; the agent-facing tool results stayed unchanged. Twenty-seven focused tests passed. CPU controls distinguished a retained passing candidate, an overwritten passing candidate, a partial repair and an edit that never changed source. These are instrument checks, not model-quality results. [Implementation and scope](experiments/candidate-history-v0/README.md) · [CPU receipts](experiments/candidate-history-v0/cpu-verification.json).
