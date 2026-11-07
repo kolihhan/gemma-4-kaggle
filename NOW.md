@@ -1,3 +1,13 @@
+# NOW — Candidate history CPU diagnostic implemented (2026-11-07 MYT)
+
+**Concrete progress.** A private-evaluation observer now captures immutable source patches at tool boundaries and grades copied candidates only after the run. The official ADK Runner and sandbox API path passed with scripted CPU responses; the agent-facing tool results stayed unchanged. Twenty-seven focused tests passed. CPU controls distinguished a retained passing candidate, an overwritten passing candidate, a partial repair and an edit that never changed source. These are instrument checks, not model-quality results. [Implementation and scope](experiments/candidate-history-v0/README.md) · [CPU receipts](experiments/candidate-history-v0/cpu-verification.json).
+
+**Existing-record result.** All 17 archived E4B development tasks were inventoried: 12 unresolved nonempty patches, one reported resolved, two empty patches with edit errors, two other empty patches. No complete independently graded intermediate history exists; the 16 unresolved cases cannot distinguish generation from selection. [Derived inventory and source hash](docs/evaluation/candidate-history-archive-inventory-2026-11-07.json). This does not establish our 31B's dominant failure class.
+
+**Resources and execution boundary.** Authenticated read-only check at 17:56 MYT returned 28.99 GPU hours, reset November 14; frozen ref 58081411 remains PENDING. [Status receipt](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42361825427/job/128371635965). Quota is available, but this round retained the original prohibition on model inference. No new inference, training, official submission or candidate change. Actual 31B diagnostic, Docker overhead and task-level candidate grading remain unexecuted. The next actual diagnostic must preserve model, sampling and eight-minute allowance, retain failures, and separate candidate availability from final selection using independent grading.
+
+---
+
 # NOW — Bottleneck reassessment (2026-11-07 MYT)
 
 **Priority revision.** The leading hypothesis is failure to turn available code/feedback into a correct, changed repair. Navigation efficiency remains a competing hypothesis. External 31B thinking-off records improved edit feedback and reduced repeats while staying at 14/33; a recovery-instruction screen showed little compliance and 7/33 versus baseline 9/33. These populations do not identify our thinking-on 31B hidden failure distribution. [Evidence, scope and updated decision](docs/research/flexon-budget-policy-review-2026-11-07.md#bottleneck-reassessment-after-the-comparator-review).

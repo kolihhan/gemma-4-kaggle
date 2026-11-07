@@ -1,0 +1,223 @@
+{
+  "checked_utc": "2026-11-07T10:11:28.381174+00:00",
+  "kind": "scripted CPU instrumentation verification, not a model-quality experiment",
+  "new_neural_model_runs": 0,
+  "training_runs": 0,
+  "new_competition_submissions": 0,
+  "focused_tests": {
+    "passed": 27,
+    "failed": 0,
+    "elapsed_seconds": 10.195
+  },
+  "official_adapter": {
+    "google_adk": "1.36.1",
+    "adk_eval_core": "0.1.0",
+    "runner": "official ADK Runner; scripted fixture; local subprocess sandbox adapter"
+  },
+  "scripted_cpu_controls": {
+    "retained": {
+      "scope": "independent check at recorded tool boundaries, not all possible repairs",
+      "grader_sha256": "ad206d6c2e46549af1cf1259e99dc21b9e3fb1a4ccb0333314d5c1f4712bb00f",
+      "history_complete": true,
+      "capture_seconds": 0.0369,
+      "failed_edit_calls": 0,
+      "grades": {
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855": {
+          "grade": "fail",
+          "return_code": 1,
+          "source_imports": [
+            "samplepkg"
+          ],
+          "timed_out": false
+        },
+        "c4a0346768d8a7a12b551cddc2d52c9a203c29544769967a65f2a21d94573d49": {
+          "grade": "pass",
+          "return_code": 0,
+          "source_imports": [
+            "samplepkg"
+          ],
+          "timed_out": false
+        }
+      },
+      "controls": {
+        "base": {
+          "grade": "fail",
+          "return_code": 1,
+          "source_imports": [
+            "samplepkg"
+          ],
+          "timed_out": false
+        },
+        "reference": {
+          "grade": "pass",
+          "return_code": 0,
+          "source_imports": [
+            "samplepkg"
+          ],
+          "timed_out": false
+        }
+      },
+      "passing_candidates": 1,
+      "final_grade": "pass",
+      "nonempty_candidates": 1,
+      "diagnosis": "retained_passing_candidate"
+    },
+    "discarded": {
+      "scope": "independent check at recorded tool boundaries, not all possible repairs",
+      "grader_sha256": "ad206d6c2e46549af1cf1259e99dc21b9e3fb1a4ccb0333314d5c1f4712bb00f",
+      "history_complete": true,
+      "capture_seconds": 0.0531,
+      "failed_edit_calls": 0,
+      "grades": {
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855": {
+          "grade": "fail",
+          "return_code": 1,
+          "source_imports": [
+            "samplepkg"
+          ],
+          "timed_out": false
+        },
+        "c4a0346768d8a7a12b551cddc2d52c9a203c29544769967a65f2a21d94573d49": {
+          "grade": "pass",
+          "return_code": 0,
+          "source_imports": [
+            "samplepkg"
+          ],
+          "timed_out": false
+        },
+        "80574b1320088c7ac9a009d567af977c194d2e891bd1099e7139c7fabe5c74bd": {
+          "grade": "fail",
+          "return_code": 1,
+          "source_imports": [
+            "samplepkg"
+          ],
+          "timed_out": false
+        }
+      },
+      "controls": {
+        "base": {
+          "grade": "fail",
+          "return_code": 1,
+          "source_imports": [
+            "samplepkg"
+          ],
+          "timed_out": false
+        },
+        "reference": {
+          "grade": "pass",
+          "return_code": 0,
+          "source_imports": [
+            "samplepkg"
+          ],
+          "timed_out": false
+        }
+      },
+      "passing_candidates": 1,
+      "final_grade": "fail",
+      "nonempty_candidates": 2,
+      "diagnosis": "discarded_passing_candidate"
+    },
+    "never_passed": {
+      "scope": "independent check at recorded tool boundaries, not all possible repairs",
+      "grader_sha256": "ad206d6c2e46549af1cf1259e99dc21b9e3fb1a4ccb0333314d5c1f4712bb00f",
+      "history_complete": true,
+      "capture_seconds": 0.0405,
+      "failed_edit_calls": 0,
+      "grades": {
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855": {
+          "grade": "fail",
+          "return_code": 1,
+          "source_imports": [
+            "samplepkg"
+          ],
+          "timed_out": false
+        },
+        "80574b1320088c7ac9a009d567af977c194d2e891bd1099e7139c7fabe5c74bd": {
+          "grade": "fail",
+          "return_code": 1,
+          "source_imports": [
+            "samplepkg"
+          ],
+          "timed_out": false
+        }
+      },
+      "controls": {
+        "base": {
+          "grade": "fail",
+          "return_code": 1,
+          "source_imports": [
+            "samplepkg"
+          ],
+          "timed_out": false
+        },
+        "reference": {
+          "grade": "pass",
+          "return_code": 0,
+          "source_imports": [
+            "samplepkg"
+          ],
+          "timed_out": false
+        }
+      },
+      "passing_candidates": 0,
+      "final_grade": "fail",
+      "nonempty_candidates": 1,
+      "diagnosis": "no_passing_candidate_observed"
+    },
+    "no_edit": {
+      "scope": "independent check at recorded tool boundaries, not all possible repairs",
+      "grader_sha256": "ad206d6c2e46549af1cf1259e99dc21b9e3fb1a4ccb0333314d5c1f4712bb00f",
+      "history_complete": true,
+      "capture_seconds": 0.0363,
+      "failed_edit_calls": 1,
+      "grades": {
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855": {
+          "grade": "fail",
+          "return_code": 1,
+          "source_imports": [
+            "samplepkg"
+          ],
+          "timed_out": false
+        }
+      },
+      "controls": {
+        "base": {
+          "grade": "fail",
+          "return_code": 1,
+          "source_imports": [
+            "samplepkg"
+          ],
+          "timed_out": false
+        },
+        "reference": {
+          "grade": "pass",
+          "return_code": 0,
+          "source_imports": [
+            "samplepkg"
+          ],
+          "timed_out": false
+        }
+      },
+      "passing_candidates": 0,
+      "final_grade": "fail",
+      "nonempty_candidates": 0,
+      "diagnosis": "no_materialized_source_patch"
+    }
+  },
+  "archived_e4b_results": "../../docs/evaluation/candidate-history-archive-inventory-2026-11-07.json",
+  "resource_check": {
+    "checked_utc": "2026-11-07T09:56:45.362146+00:00",
+    "gpu_remaining_hours": 28.99,
+    "gpu_reset_utc": "2026-11-14T00:00:00+00:00",
+    "frozen_submission": "58081411",
+    "frozen_status": "PENDING",
+    "source": "https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42361825427/job/128371635965",
+    "new_inference": false,
+    "new_submission": false
+  },
+  "unexecuted": [
+    "31B model experiment",
+    "live Docker capture overhead",
+    "independent grading of real 31B candidate history"
+  ]
+}

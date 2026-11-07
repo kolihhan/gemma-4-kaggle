@@ -1,0 +1,154 @@
+{
+  "archive_sha256": "635dea845453d36ebd5ce5dc55472abd85c635a0333bf4d1d30c3fccd516e16f",
+  "model": "gemma-4-e4b-it-qat-w4a16-ct",
+  "task_count": 17,
+  "counts": {
+    "unresolved_nonempty_patch": 12,
+    "no_patch_other": 2,
+    "reported_resolved_final": 1,
+    "no_patch_with_edit_error": 2
+  },
+  "full_boundary_histories_missing": 17,
+  "generation_vs_selection_unknown": 16,
+  "tasks": [
+    {
+      "task": "rich_3061",
+      "final_category": "unresolved_nonempty_patch",
+      "recorded_test_exit_code": 1,
+      "failed_edit_calls": 0,
+      "partial_diff_observations": 0,
+      "candidate_history_verdict": "unknown_missing_boundary_history_and_grades"
+    },
+    {
+      "task": "rich_3067",
+      "final_category": "no_patch_other",
+      "recorded_test_exit_code": -1,
+      "failed_edit_calls": 0,
+      "partial_diff_observations": 0,
+      "candidate_history_verdict": "unknown_missing_boundary_history_and_grades"
+    },
+    {
+      "task": "rich_3934",
+      "final_category": "unresolved_nonempty_patch",
+      "recorded_test_exit_code": 1,
+      "failed_edit_calls": 1,
+      "partial_diff_observations": 0,
+      "candidate_history_verdict": "unknown_missing_boundary_history_and_grades"
+    },
+    {
+      "task": "rich_3942",
+      "final_category": "unresolved_nonempty_patch",
+      "recorded_test_exit_code": 1,
+      "failed_edit_calls": 0,
+      "partial_diff_observations": 0,
+      "candidate_history_verdict": "unknown_missing_boundary_history_and_grades"
+    },
+    {
+      "task": "fastapi_13920",
+      "final_category": "unresolved_nonempty_patch",
+      "recorded_test_exit_code": 1,
+      "failed_edit_calls": 3,
+      "partial_diff_observations": 0,
+      "candidate_history_verdict": "unknown_missing_boundary_history_and_grades"
+    },
+    {
+      "task": "fastapi_14463",
+      "final_category": "unresolved_nonempty_patch",
+      "recorded_test_exit_code": 1,
+      "failed_edit_calls": 0,
+      "partial_diff_observations": 0,
+      "candidate_history_verdict": "unknown_missing_boundary_history_and_grades"
+    },
+    {
+      "task": "fastapi_14986",
+      "final_category": "unresolved_nonempty_patch",
+      "recorded_test_exit_code": 1,
+      "failed_edit_calls": 0,
+      "partial_diff_observations": 0,
+      "candidate_history_verdict": "unknown_missing_boundary_history_and_grades"
+    },
+    {
+      "task": "rich_3105",
+      "final_category": "no_patch_other",
+      "recorded_test_exit_code": -1,
+      "failed_edit_calls": 0,
+      "partial_diff_observations": 0,
+      "candidate_history_verdict": "unknown_missing_boundary_history_and_grades"
+    },
+    {
+      "task": "rich_4079",
+      "final_category": "unresolved_nonempty_patch",
+      "recorded_test_exit_code": 1,
+      "failed_edit_calls": 3,
+      "partial_diff_observations": 0,
+      "candidate_history_verdict": "unknown_missing_boundary_history_and_grades"
+    },
+    {
+      "task": "rich_3777",
+      "final_category": "unresolved_nonempty_patch",
+      "recorded_test_exit_code": 1,
+      "failed_edit_calls": 1,
+      "partial_diff_observations": 0,
+      "candidate_history_verdict": "unknown_missing_boundary_history_and_grades"
+    },
+    {
+      "task": "rich_3052",
+      "final_category": "unresolved_nonempty_patch",
+      "recorded_test_exit_code": 1,
+      "failed_edit_calls": 1,
+      "partial_diff_observations": 0,
+      "candidate_history_verdict": "unknown_missing_boundary_history_and_grades"
+    },
+    {
+      "task": "fastapi_5077",
+      "final_category": "unresolved_nonempty_patch",
+      "recorded_test_exit_code": 1,
+      "failed_edit_calls": 0,
+      "partial_diff_observations": 0,
+      "candidate_history_verdict": "unknown_missing_boundary_history_and_grades"
+    },
+    {
+      "task": "fastapi_9425",
+      "final_category": "reported_resolved_final",
+      "recorded_test_exit_code": 0,
+      "failed_edit_calls": 0,
+      "partial_diff_observations": 0,
+      "candidate_history_verdict": "reported_final_pass_history_unmeasured"
+    },
+    {
+      "task": "fastapi_14873",
+      "final_category": "no_patch_with_edit_error",
+      "recorded_test_exit_code": 1,
+      "failed_edit_calls": 3,
+      "partial_diff_observations": 0,
+      "candidate_history_verdict": "unknown_missing_boundary_history_and_grades"
+    },
+    {
+      "task": "fastapi_9555",
+      "final_category": "no_patch_with_edit_error",
+      "recorded_test_exit_code": -1,
+      "failed_edit_calls": 3,
+      "partial_diff_observations": 0,
+      "candidate_history_verdict": "unknown_missing_boundary_history_and_grades"
+    },
+    {
+      "task": "fastapi_15280",
+      "final_category": "unresolved_nonempty_patch",
+      "recorded_test_exit_code": 1,
+      "failed_edit_calls": 0,
+      "partial_diff_observations": 1,
+      "candidate_history_verdict": "unknown_missing_boundary_history_and_grades"
+    },
+    {
+      "task": "fastapi_14448",
+      "final_category": "unresolved_nonempty_patch",
+      "recorded_test_exit_code": 1,
+      "failed_edit_calls": 0,
+      "partial_diff_observations": 0,
+      "candidate_history_verdict": "unknown_missing_boundary_history_and_grades"
+    }
+  ],
+  "new_model_runs": 0,
+  "new_patch_grading_runs": 0,
+  "scope": "descriptive inventory of archived final outcomes; not a causal bottleneck diagnosis"
+}
