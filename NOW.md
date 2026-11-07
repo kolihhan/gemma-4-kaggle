@@ -1,3 +1,11 @@
+# NOW — Bottleneck reassessment (2026-11-07 MYT)
+
+**Priority revision.** The leading hypothesis is failure to turn available code/feedback into a correct, changed repair. Navigation efficiency remains a competing hypothesis. External 31B thinking-off records improved edit feedback and reduced repeats while staying at 14/33; a recovery-instruction screen showed little compliance and 7/33 versus baseline 9/33. These populations do not identify our thinking-on 31B hidden failure distribution. [Evidence, scope and updated decision](docs/research/flexon-budget-policy-review-2026-11-07.md#bottleneck-reassessment-after-the-comparator-review).
+
+**Next measurement.** In the existing same-budget continuation/retry comparison, independently record whether a correct candidate ever appeared, whether it survived into the final patch, and whether intended edits reached the source tree. This separates generation, selection and malformed execution instead of treating every failure as missing verification. Model execution and independent candidate grading remain unexecuted. No new feature, training, inference, submission or frozen-candidate change was performed.
+
+---
+
 # NOW — Flexon public V10 comparator review (2026-11-07 MYT)
 
 **Research finding.** Retrieved and CPU-rebuilt `flexonafft/gemma-4-budget-aware-coding-agent-v2`, explicitly pinned to Kaggle V10. The 3,713-byte local ZIP exactly matched its official output: SHA-256 `6ff73d104725cc31deadd18787f3f55e5ce534889cec82387e3b280637d34887`. Official compilation passed with an inference stub. Its agent, sampling and evaluation files are byte-identical to our 0.17 V2 control; only the root prompt differs. The public indexed page records 0.22 V10, which we have not independently reproduced or attributed to an individual behavior.

@@ -118,3 +118,58 @@ Retain the external artifact as a comparator; do not promote it solely from the
 highest displayed score or layer its whole prompt onto the paired-check action.
 The paired-check candidate's existing causal test remains required to establish
 that its additional observations improve decisions enough to pay their cost.
+
+
+## Bottleneck reassessment after the comparator review
+
+This supersedes treating the navigation-only experiment above as the immediate
+priority. A 0.17 result from our account and another account's 0.22 are not an
+observed five-point gain of our intervention. No original paired-check quality
+result exists yet. The smaller displayed gap cannot diagnose a model ceiling.
+
+**Leading hypothesis, not a demonstrated dominant cause:** after source and
+feedback are available, the agent fails to produce or execute an appropriately
+changed repair. Distinguish malformed execution, wrong repair generation, and
+rejecting/selecting an otherwise correct candidate. Additional observations only
+help if the agent can use them to change its next action.
+
+Three existing records constrain this diagnosis:
+
+1. In the external 31B, thinking-off 33-task series, v6.0 supplied current source
+   lines on failed edits and reduced exact repeats from 14% to 10%, but still
+   solved 14/33, tying v5.8. Fifteen of 33 failing scripts were followed by the
+   identical script. This supports the existence of a feedback-use problem,
+   without proving that it dominates our thinking-on 31B.
+   [Pinned v6.0 record](https://github.com/happyc0der/gemma-swe-agent/blob/88cfbc6dc9fdce17f90117e17c2ff8c365c7eb16/experiments/2026-10-20-faithful-v60-AB/notes.md).
+2. In that external thinking-off baseline's single-bullet edit-recovery screen,
+   the Python fallback followed only 6 of 236 erroring edit calls, in two tasks.
+   Solves were 7/33 versus baseline 9/33. These are dependent call opportunities
+   and one run per variant; the result is a negative screen of compliance, not
+   a general harmful-effect estimate.
+   [Pinned recovery screen](https://github.com/happyc0der/gemma-swe-agent/blob/88cfbc6dc9fdce17f90117e17c2ff8c365c7eb16/experiments/2026-10-24-faithful-bf-editfb-off-AB/notes.md).
+3. A different external Budget-Fit diagnostic pool reports file overlap with
+   reference fixes in 52 of 69 verification-failed attempts across 19 tasks.
+   This does not establish correct symbol/root-cause localization, but it rules
+   out treating every failed repair as merely failing to find a file.
+   [Primary report, section 10](https://pilkwangkim.github.io/posts/Gemma-4-Developer-Agent-Part-2-Measuring-an-Agent-While-Its-Evaluator-Moved/#10-what-the-agents-own-checks-do-not-establish).
+
+**Decision.** Stop extending navigation rules or adding feedback features as the
+presumed remedy. Retain the existing prototype for testing, and put correct
+repair generation and feedback-driven action changes ahead of further tool
+engineering in the hypothesis ranking. Requirement omissions and runtime/tool
+failures remain competing explanations; our hidden 31B failure mix is unknown.
+This is not evidence that fine-tuning, more agents, or more search is required.
+
+**Next discriminating measurement, unexecuted.** At a shared 31B checkpoint where
+relevant code has already been read, keep the issue, source, tools and total
+remaining budget fixed. In the existing continuation/retry comparison, retain
+candidate snapshots and independently grade candidate availability separately
+from the final patch. Do not add inference merely to generate an oracle statistic.
+If correct candidates rarely appear, prioritize repair generation. If correct
+candidates appear but are discarded or replaced, prioritize selection/stop
+control. If an intended edit never reaches the tree because requests are
+malformed, prioritize the execution interface. Compare final correctness with
+the same total cost; an oracle label is diagnostic evidence, not a deployable
+selector. Choose the evaluation tasks before seeing these outcomes and retain
+all failures. No model experiment, CPU patch grading, training or submission was
+executed for this reassessment.
