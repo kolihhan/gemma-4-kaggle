@@ -1,3 +1,13 @@
+# NOW — Flexon public V10 comparator review (2026-11-07 MYT)
+
+**Research finding.** Retrieved and CPU-rebuilt `flexonafft/gemma-4-budget-aware-coding-agent-v2`, explicitly pinned to Kaggle V10. The 3,713-byte local ZIP exactly matched its official output: SHA-256 `6ff73d104725cc31deadd18787f3f55e5ce534889cec82387e3b280637d34887`. Official compilation passed with an inference stub. Its agent, sampling and evaluation files are byte-identical to our 0.17 V2 control; only the root prompt differs. The public indexed page records 0.22 V10, which we have not independently reproduced or attributed to an individual behavior.
+
+**Decision.** Retain this as an external policy comparator and execution-efficiency hypothesis. Early editing and failed-match recovery are already in our V2. More explicit search/read batching and a total graph-tool ban are differences; their effect on 31B decisions remains unexecuted. No automatic scheduler or executable recovery controller is implemented in the external package. [Source identity, exact comparison, CPU checks, uncertainty and falsifier](docs/research/flexon-budget-policy-review-2026-11-07.md).
+
+**Effect on current work.** Keep the paired-check prototype and its matched control unchanged. Additional script/discovery/dual-execution cost must earn independent patch-quality gains; it has not yet done so. Our verified own best remains 0.17. This review performed no model inference, training, new submission or frozen-candidate change.
+
+---
+
 # NOW — Executable paired-check candidate (2026-11-07 MYT)
 
 **Decision.** Continue with an agent-callable source comparison action, built on the exact attributed 31B Budget-Fit V2. The agent selects its Python check and decides its next action. The Skill script returns that check on original/current source; a matched control returns current/current. The original model, root prompt, sampling, 8-minute allowance, 28-call configuration and 80 turns are unchanged. ADK adds Skill discovery and script tools in both arms.
