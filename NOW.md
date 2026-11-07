@@ -1,3 +1,17 @@
+# NOW — Executable paired-check candidate (2026-11-07 MYT)
+
+**Decision.** Continue with an agent-callable source comparison action, built on the exact attributed 31B Budget-Fit V2. The agent selects its Python check and decides its next action. The Skill script returns that check on original/current source; a matched control returns current/current. The original model, root prompt, sampling, 8-minute allowance, 28-call configuration and 80 turns are unchanged. ADK adds Skill discovery and script tools in both arms.
+
+**Verified CPU result.** Twenty tests passed, including the official compiler, skill activation and script-execution adapter, with inference configured to raise. The standalone notebook schema passed and fresh CPU executions generated deterministic ZIPs. Two previously inspected Flask/SymPy programs also returned the recorded source differences through the new runner. These checks establish execution and packaging, not agent selection or patch quality. [Mechanism, evidence, commands, limitations and falsifier](experiments/paired-check-v0/README.md) · [Exact hashes and CPU results](experiments/paired-check-v0/cpu-verification.json).
+
+**Artifacts.** One CPU notebook, `gemma4-paired-check-skill-v0.ipynb`, selects either arm. Treatment ZIP SHA-256 `df88261b4aa2a9f1337fb0f3860fd197266fae7ac16c7f38ba89ef7bfcbad729`; matched-control ZIP `0570da416031931d9cc7363d0a111a7c52e30dab1032138c4c54e8147f17236a`. Neither has been submitted. Canonical `submission/` and the frozen candidate are unchanged.
+
+**Frozen submission update.** The original scheduled workflow succeeded and submitted the unchanged base-evidence ZIP, official ref **58081411**. Its authenticated receipt at 05:58:06 UTC / 13:58 MYT recorded PENDING and no score. [Exact receipt](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42344893898/job/128320398058). A read-only check on this branch retrieves its newer status; it cannot submit or run inference.
+
+**Still unexecuted.** 31B action uptake, selection quality, next-action effects and independent patch correctness. A causal comparison must start at the same selected-check checkpoint and preserve the remaining budget, with tasks locked before inference and missing checks retained. A notebook screen is weaker end-to-end outcome evidence. If useful observations fail to improve correctness at matched cost, retire this mechanism rather than tune on the 19 inspected external traces. No training, new model inference or submission of this candidate was performed.
+
+---
+
 # NOW — Paired execution feedback CPU experiment (2026-11-07 MYT)
 
 **Decision.** Advance the narrower agent decision experiment. Show the base observation when the agent's own check reaches the relevant behavior and its trajectory lacks an equivalent base observation. This replay establishes when useful feedback is available. A matched 31B continuation is still required to measure its effect on decisions and independently correct patches.

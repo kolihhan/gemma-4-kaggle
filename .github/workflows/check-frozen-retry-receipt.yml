@@ -1,0 +1,38 @@
+name: Read frozen retry receipt only
+on:
+  push:
+    branches: [exp/paired-check-skill-v0]
+    paths: [".github/workflows/check-frozen-retry-receipt.yml"]
+permissions:
+  contents: read
+jobs:
+  receipt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Read submission 58081411 without submitting or running a model
+        run: |
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import datetime, json, subprocess
+          ref = "58081411"
+          result = subprocess.run(["kaggle", "competitions", "submission", ref],
+                                  capture_output=True, text=True, timeout=90)
+          fields = {}
+          wanted = {"submission ref", "status", "public score", "private score", "description"}
+          for line in result.stdout.splitlines():
+              key, separator, value = line.partition(":")
+              if separator and key.strip().lower() in wanted:
+                  fields[key.strip().lower().replace(" ", "_")] = value.strip()[:200]
+          if result.returncode or fields.get("submission_ref") != ref:
+              raise SystemExit("FROZEN_RECEIPT_QUERY_UNAVAILABLE")
+          print("FROZEN_RETRY_STATUS=" + json.dumps({
+              "checked_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "fields": fields, "new_submission": False, "model_run": False,
+          }, sort_keys=True))
+          PY

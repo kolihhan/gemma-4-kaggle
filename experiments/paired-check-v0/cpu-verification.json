@@ -1,0 +1,155 @@
+{
+  "checked_utc": "2026-11-07T07:32:04.124352+00:00",
+  "research_status": "CPU prototype; 31B decisions and independent patch quality unexecuted",
+  "source_archive_sha256": "a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3",
+  "arms": {
+    "paired": {
+      "sha256": "df88261b4aa2a9f1337fb0f3860fd197266fae7ac16c7f38ba89ef7bfcbad729",
+      "bytes": 7283,
+      "members": [
+        "agent.yaml",
+        "configs/sampling.yaml",
+        "eval_config.yaml",
+        "prompts/system.md",
+        "skills/repository-check/SKILL.md",
+        "skills/repository-check/scripts/compare.py"
+      ]
+    },
+    "repeat": {
+      "sha256": "0570da416031931d9cc7363d0a111a7c52e30dab1032138c4c54e8147f17236a",
+      "bytes": 7281,
+      "members": [
+        "agent.yaml",
+        "configs/sampling.yaml",
+        "eval_config.yaml",
+        "prompts/system.md",
+        "skills/repository-check/SKILL.md",
+        "skills/repository-check/scripts/compare.py"
+      ]
+    }
+  },
+  "notebook": {
+    "name": "gemma4-paired-check-skill-v0.ipynb",
+    "schema_validated_with": "nbformat 5.10.4",
+    "code_execution": "fresh Python process: paired twice and repeat once; deterministic matching ZIPs"
+  },
+  "tests": {
+    "passed": 20,
+    "failed": 0,
+    "elapsed_seconds": 3.933,
+    "modules": [
+      "tests.test_paired_check_skill",
+      "tests.test_paired_check_adk",
+      "tests.test_paired_check_notebook",
+      "tests.test_prepare_public_budgetfit_v2"
+    ]
+  },
+  "official_path": {
+    "compiler": "adk_submission 0.2.13",
+    "tools": "google-adk 1.36.1 LoadSkillTool + RunSkillScriptTool",
+    "executor": "adk_eval_core 0.1.0 AdkSandboxCodeExecutor",
+    "sandbox": "local subprocess adapter; no live Docker or Kaggle task",
+    "inference_model": "stub raises if invoked"
+  },
+  "official_wheels": {
+    "adk_eval_core-0.1.0-py3-none-any.whl": "e614e1b2fe8d886a634871e4c57f9887e1cc66e8c27300f8503a43c6e3ca82f3",
+    "adk_submission-0.2.13-py3-none-any.whl": "f156f0bd84580ccb9334726d114d7a5481f16d3a6e2887cc4d276ced0ef8d99d",
+    "google_adk-1.36.1-py3-none-any.whl": "1a2f6868c509e3151fb0de3575a7d18b45c338be86f420924dad74e7193631a0",
+    "swegemma-0.2.11-py3-none-any.whl": "9ad876581f3acde8ec3c369858f0834e2b9f41a3cffce3ca42f09cb090aea9d3"
+  },
+  "reused_engineering_probes": [
+    {
+      "task": "pallets__flask-5014",
+      "command_sha256": "87710ed0beb2f8ac6999942fac591bbc401da918f232ccd148cb8a8103fcfd42",
+      "purpose": "engineering reuse of two previously inspected probes; no new sample",
+      "result": {
+        "status": "compared",
+        "workspace_unchanged": true,
+        "runs": [
+          {
+            "label": "baseline",
+            "return_code": 0,
+            "stdout": "NO_ERROR_ON_EMPTY\nOK: bp\n",
+            "stderr": "",
+            "timed_out": false,
+            "elapsed_seconds": 0.415,
+            "source_imports": [
+              "flask",
+              "flask.app",
+              "flask.blueprints",
+              "flask.cli"
+            ],
+            "origin_conflicts": []
+          },
+          {
+            "label": "current",
+            "return_code": 0,
+            "stdout": "ERROR_ON_EMPTY: ValueError 'name' must not be empty.\nOK: bp\n",
+            "stderr": "",
+            "timed_out": false,
+            "elapsed_seconds": 0.415,
+            "source_imports": [
+              "flask",
+              "flask.app",
+              "flask.blueprints",
+              "flask.cli"
+            ],
+            "origin_conflicts": []
+          }
+        ]
+      }
+    },
+    {
+      "task": "sympy__sympy-24213",
+      "command_sha256": "d793b691afc3c8bca8d66a2ca873888bdcfeeb6ec40a1ceb48c5ca6f01172a3f",
+      "purpose": "engineering reuse of two previously inspected probes; no new sample",
+      "result": {
+        "status": "compared",
+        "workspace_unchanged": true,
+        "runs": [
+          {
+            "label": "baseline",
+            "return_code": 1,
+            "stdout": "calling _collect_factor_and_dimension\n",
+            "timed_out": false,
+            "elapsed_seconds": 1.969,
+            "source_imports": [
+              "sympy",
+              "sympy.algebras",
+              "sympy.algebras.quaternion",
+              "sympy.assumptions"
+            ],
+            "origin_conflicts": [],
+            "stderr_summary": "ValueError: dimension mismatch"
+          },
+          {
+            "label": "current",
+            "return_code": 0,
+            "stdout": "calling _collect_factor_and_dimension\nresult: (-47.0000000000000, Dimension(acceleration*time))\n",
+            "stderr": "",
+            "timed_out": false,
+            "elapsed_seconds": 2.019,
+            "source_imports": [
+              "sympy",
+              "sympy.algebras",
+              "sympy.algebras.quaternion",
+              "sympy.assumptions"
+            ],
+            "origin_conflicts": []
+          }
+        ]
+      }
+    }
+  ],
+  "frozen_candidate_receipt": {
+    "ref": "58081411",
+    "received_utc": "2026-11-07T05:58:06.1463338Z",
+    "status_at_receipt": "SubmissionStatus.PENDING",
+    "public_score_at_receipt": null,
+    "source": "https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42344893898/job/128320398058",
+    "sha256": "1944471ce98386371ebe52a0d3e6a9cc211ff81803684eeaff5f344532234c1b"
+  },
+  "new_model_runs": 0,
+  "new_submissions_for_this_candidate": 0,
+  "training_runs": 0
+}
