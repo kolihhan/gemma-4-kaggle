@@ -1,3 +1,11 @@
+# NOW — Frozen 31B recovery submission scored (2026-11-08 MYT)
+
+**Official authenticated terminal result:** submission ref `58081411`, description `base-evidence-retry-v0:1944471ce983`, status `COMPLETE`, Public **0.17**, Private blank, checked 2026-11-08 07:31:18 MYT (2026-11-07T23:31:18Z) through `kaggle competitions submission 58081411` in [authenticated Actions receipt](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42409716117/job/128563104702). This is a **terminal scored result**, not a pending receipt. The frozen fresh-context helper **did not improve** the exact V2 public baseline of 0.17 in this single aggregate comparison; it does not prove the helper never fired or identify task-level failures. Do not resubmit or relabel this as an improvement.
+
+**Research decision:** no justification for a second agent based on the score alone. Next intervention must test matched-budget fresh ordinary Coder vs recovery-specific Reviewer with identical current-diff/evidence handoff, and preserve the frozen helper as the third comparator. Keep native V2 tools, use candidate-history only as a private observer; don't replace the interface with managed Skill. Measure invocation/patch retention, total runtime, and independently graded resolved rate. No new Kaggle submission, training or frozen/canonical mutation authorized. The Recovery Decision implementation and CPU verification remain **not completed** at this checkpoint.
+
+---
+
 # NOW — Conditional recovery architecture research (2026-11-08 MYT)
 
 **Research deliverable, not a new candidate.** The Chinese [architecture report](docs/research/dual-agent-recovery-architecture-2026-11-08.zh-CN.md) selects one experimental design: a single source-writing/submitting Coder, versioned execution evidence, and an optional short fresh-context Recovery Reviewer. Exact scored 31B Budget-Fit V2 (Public 0.17) remains the fallback/control. Conditional official graph navigation is retained; a new embedding service, always-on Analyzer/Critic, and immediate training/RL are deferred with explicit pivot triggers.
