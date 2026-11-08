@@ -1,3 +1,13 @@
+# NOW — Matched Recovery Decision v0 packaged on CPU (2026-11-08 MYT)
+
+**Implementation progress:** built two candidate ZIPs from the exact byte-pinned external 31B Budget-Fit V2, preserving all nine native tools, original sampler, 8-minute/28-call/80-turn cap, and identical root call policy. The only difference between arms is a tool-free fresh helper instruction: ordinary Fresh Coder vs independent Recovery Reviewer. Root Coder alone edits/submits. The one-call conditional trigger is still a model instruction, **not an enforced automatic controller**.
+
+**Verified:** [CPU Actions run 42438857122](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42438857122) succeeded: 3 Python unit tests, real public V2 ZIP hash validation, deterministic construction of both candidate ZIPs, ZIP integrity and strict arm-difference inspection. Hashes and exact implementation: [experiment README](experiments/recovery-decision-v0/README.md). This is CPU packaging evidence, **not scorer compilation or task-quality evidence**.
+
+**Next gate:** no new submission or training. First CPU-compile both new ZIPs using the official ADK compiler with inference disabled; check AgentTool request/response and real budget semantics. Only then run a prelocked matched-budget comparison against V2, the scored frozen helper (ref 58081411 = 0.17), Fresh Coder and Recovery Reviewer using candidate-history as private observer. Measure actual invocation and final independent correctness; keep failures/overhead in denominator. Frozen candidate and canonical `submission/` unchanged.
+
+---
+
 # NOW — Frozen 31B recovery submission scored (2026-11-08 MYT)
 
 **Official authenticated terminal result:** submission ref `58081411`, description `base-evidence-retry-v0:1944471ce983`, status `COMPLETE`, Public **0.17**, Private blank, checked 2026-11-08 07:31:18 MYT (2026-11-07T23:31:18Z) through `kaggle competitions submission 58081411` in [authenticated Actions receipt](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42409716117/job/128563104702). This is a **terminal scored result**, not a pending receipt. The frozen fresh-context helper **did not improve** the exact V2 public baseline of 0.17 in this single aggregate comparison; it does not prove the helper never fired or identify task-level failures. Do not resubmit or relabel this as an improvement.
