@@ -1,3 +1,17 @@
+# NOW — Official Kaggle Recovery Reviewer v0 submitted (2026-11-08 MYT)
+
+**Official confirmed submission:** `58112753`, marker `recovery-reviewer-v0:430e64d2c9a6`, submission status `PENDING`, Public Score blank, created at **2026-11-08 03:03:39 UTC / 11:03 MYT**. The authenticated Kaggle API returned `{"ref":58112753}`, then a fresh authenticated submissions listing independently matched the same ref and description. [Successful official Actions run](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42440992059) / [job logs](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42440992059/job/128609982568). This is a real accepted official competition submission, **not yet a scored result**. Do not submit it again while pending.
+
+**Exact candidate:** `recovery_reviewer` 31B variant, SHA-256 `430e64d2c9a60a737f197a5372afa33c4813526239828b71c5971eda283a743e`, built from attributed byte-pinned Budget-Fit V2. Preserves nine native tools, sampling and eight-minute/28-call/80-turn budget; adds optional short tool-free fresh-context Recovery Reviewer as an `AgentTool`. Root Coder alone edits and submits. Fresh Coder arm is a CPU control only, **not submitted**; baseline account Public 0.17 and previously scored frozen base-evidence helper Public 0.17.
+
+**Gates passed:** 7 GitHub CPU unit tests; official wheel versions (`adk-submission==0.2.13`, `google-adk==1.36.1`, `adk-eval-core==0.1.0`); official `validate_directory` and `compile_submission` for BOTH matched roles using an inference-forbidden model stub; private Kaggle CPU Notebook generated an archive identical to expected SHA; authenticated quota `allowed_now=1`, `num_today=0` just before submission; official submit + receipt. A first private CPU notebook failed due missing `kernelspec`; corrected metadata using a fresh private notebook slug, without changing candidate ZIP. [First failed check](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42440733975); [read-only error trace](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42440915276); [successful fixed run](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42440992059).
+
+**Scientific limitations:** official score pending; no real trajectory-level 31B evidence; helper uptake, independent correctness, gains/regressions, total 12-hour feasibility and Fresh Coder advantage are unmeasured. Do NOT infer recovery is effective from packaging or success of submission API. No training, extra submissions, frozen candidate changes, or canonical `submission/` changes.
+
+**Next:** read official authenticated final status and score for `58112753`. If complete, compare Public 0.17 only as an aggregate signal; no score-based repeated prompt tuning. If pending, do not resubmit. Decide whether independent trajectory experiment is justified before claiming recovery-role benefit.
+
+---
+
 # NOW — Matched Recovery Decision v0 packaged on CPU (2026-11-08 MYT)
 
 **Implementation progress:** built two candidate ZIPs from the exact byte-pinned external 31B Budget-Fit V2, preserving all nine native tools, original sampler, 8-minute/28-call/80-turn cap, and identical root call policy. The only difference between arms is a tool-free fresh helper instruction: ordinary Fresh Coder vs independent Recovery Reviewer. Root Coder alone edits/submits. The one-call conditional trigger is still a model instruction, **not an enforced automatic controller**.
