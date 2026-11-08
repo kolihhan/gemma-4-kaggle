@@ -22,7 +22,7 @@ from scripts.prepare_public_budgetfit_v2 import validate_source_zip
 
 COMPETITION = "gemma-4-developer-agent"
 SOURCE = "lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2"
-KERNEL = "kolihhan/gemma4-recovery-reviewer-v0-20261108"
+KERNEL = "kolihhan/gemma4-recovery-reviewer-v0-fixed-20261108"
 ARM = "recovery_reviewer"
 EXPECTED = "430e64d2c9a60a737f197a5372afa33c4813526239828b71c5971eda283a743e"
 MARKER = "recovery-reviewer-v0:430e64d2c9a6"
@@ -166,6 +166,7 @@ def preflight() -> None:
         ),
         nbformat.v4.new_code_cell(cell),
     ])
+    notebook.metadata["kernelspec"] = {"display_name": "Python 3", "language": "python", "name": "python3"}
     nbformat.validate(notebook)
     directory = ROOT / "kernel"
     directory.mkdir()
