@@ -62,6 +62,8 @@ class RecoveryDecisionBuilderTests(unittest.TestCase):
                       a["sub_agents/recovery-adviser.yaml"])
         self.assertIn("tools: []", a["sub_agents/recovery-adviser.yaml"])
         self.assertIn("include_contents: none", a["sub_agents/recovery-adviser.yaml"])
+        self.assertIn("instruction: !include ../prompts/recovery-adviser.md",
+                      a["sub_agents/recovery-adviser.yaml"])
         self.assertIn("thinking_budget: 256", a["sub_agents/recovery-adviser.yaml"])
 
     def test_build_is_deterministic_and_checks_comparison(self):
