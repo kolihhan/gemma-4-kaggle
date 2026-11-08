@@ -67,7 +67,7 @@ ADVISER_YAML = f"""agent_class: LlmAgent
 name: {ROLE}
 model: {MODEL}
 description: Provide one evidence-grounded recovery action if the repair has stalled.
-instruction: !include prompts/recovery-adviser.md
+instruction: !include ../prompts/recovery-adviser.md
 include_contents: none
 tools: []
 generate_content_config:
