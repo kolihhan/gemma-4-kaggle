@@ -1,0 +1,32 @@
+name: Read failed Recovery CPU notebook logs
+
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/diagnose-recovery-cpu-kernel.yml"]
+
+permissions:
+  contents: read
+jobs:
+  diagnosis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL: kolihhan/gemma4-recovery-reviewer-v0-20261108
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Read existing private Kaggle CPU kernel failure only
+        run: |
+          set -uo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          kaggle kernels status "$KERNEL"
+          echo ---CPU_KERNEL_LOGS_START---
+          kaggle kernels logs "$KERNEL" 2>&1 | tail -90
+          echo ---CPU_KERNEL_LOGS_END---
+          mkdir -p /tmp/recovery-kernel-output
+          kaggle kernels output "$KERNEL/1" -p /tmp/recovery-kernel-output -o 2>&1 | tail -25
+          find /tmp/recovery-kernel-output -maxdepth 1 -type f -printf 'OUTPUT_FILE %f %s bytes\n'
+          echo READ_ONLY_NO_NEW_KERNEL_NO_SUBMISSION
