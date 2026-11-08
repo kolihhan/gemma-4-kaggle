@@ -11,7 +11,10 @@ permissions:
 jobs:
   cpu:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      SOURCE_REF: lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -21,3 +24,36 @@ jobs:
         run: python -m py_compile scripts/build_recovery_decision_candidate.py tests/test_recovery_decision_builder.py
       - name: Verify matched roles, source integrity and original tools
         run: python -m unittest -v tests.test_recovery_decision_builder
+      - name: Fetch byte-pinned public V2 ZIP (no inference)
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p /tmp/gemma-recovery/source
+          kaggle kernels output "$SOURCE_REF" -p /tmp/gemma-recovery/source -o >/dev/null
+          test -s /tmp/gemma-recovery/source/submission.zip
+      - name: Build both candidate archives from real pinned V2
+        run: |
+          set -euo pipefail
+          python -m scripts.build_recovery_decision_candidate \
+            --source-zip /tmp/gemma-recovery/source/submission.zip \
+            --out-dir /tmp/gemma-recovery/candidates
+          python - <<'PY'
+          import io, pathlib, zipfile
+          from scripts.prepare_public_budgetfit_v2 import validate_source_zip
+          from scripts.build_recovery_decision_candidate import ARMS
+          root = pathlib.Path("/tmp/gemma-recovery")
+          pinned = validate_source_zip((root / "source/submission.zip").read_bytes())
+          result = {}
+          for arm in ARMS:
+              with zipfile.ZipFile(root / "candidates" / f"{arm}.zip") as z:
+                  assert z.testzip() is None
+                  result[arm] = {p: z.read(p) for p in z.namelist()}
+              for name in ("eval_config.yaml", "configs/sampling.yaml"):
+                  assert result[arm][name].decode() == pinned[name]
+              assert b"include ../prompts/recovery-adviser.md" in result[arm]["sub_agents/recovery-adviser.yaml"]
+              assert result[arm]["agent.yaml"].count(b"- agent_tool:") == 1
+          changed = {name for name in result[ARMS[0]] if result[ARMS[0]][name] != result[ARMS[1]][name]}
+          assert changed == {"prompts/recovery-adviser.md"}, changed
+          print("REAL_V2_MATCHED_CPU_ARCHIVES=PASS")
+          print("NO_MODEL_NO_TRAINING_NO_SUBMISSION=TRUE")
+          PY
