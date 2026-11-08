@@ -1,0 +1,39 @@
+name: Read authenticated Recovery Reviewer 58112753 status
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/read-recovery-58112753-status.yml"]
+permissions:
+  contents: read
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Query official Kaggle submission 58112753, read only
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import datetime,json,subprocess
+          ref="58112753"
+          r=subprocess.run(["kaggle","competitions","submission",ref],
+                           capture_output=True,text=True,timeout=90)
+          want={"submission ref","status","public score","private score","description"}
+          found={}
+          for row in r.stdout.splitlines():
+              key,sep,value=row.partition(":")
+              if sep and key.strip().lower() in want:
+                  found[key.strip().lower().replace(" ","_")]=value.strip()[:200]
+          if r.returncode!=0 or found.get("submission_ref")!=ref:
+              raise SystemExit("RECOVERY_AUTHENTICATED_QUERY_FAILED exit="+str(r.returncode))
+          print("RECOVERY_AUTHENTICATED_STATUS="+json.dumps({
+              "checked_utc":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "ref":ref,"fields":found,"no_new_submission":True,
+          },sort_keys=True),flush=True)
+          PY
