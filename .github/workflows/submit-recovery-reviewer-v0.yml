@@ -1,3 +1,4 @@
+# Retrigger after fixing Kaggle papermill kernelspec; new private kernel slug is pinned in the submit script.
 name: Official Recovery Reviewer v0 Kaggle submission
 
 on:
