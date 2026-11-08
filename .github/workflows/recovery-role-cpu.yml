@@ -1,0 +1,23 @@
+name: Recovery role CPU contract
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths:
+      - "scripts/build_recovery_decision_candidate.py"
+      - "tests/test_recovery_decision_builder.py"
+      - ".github/workflows/recovery-role-cpu.yml"
+permissions:
+  contents: read
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile builder without model dependencies
+        run: python -m py_compile scripts/build_recovery_decision_candidate.py tests/test_recovery_decision_builder.py
+      - name: Verify matched roles, source integrity and original tools
+        run: python -m unittest -v tests.test_recovery_decision_builder
