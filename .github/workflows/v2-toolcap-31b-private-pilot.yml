@@ -3,7 +3,11 @@ name: V2 28 vs 60 Tool Call - Private Paired 31B Pilot
 on:
   push:
     branches: [research/dual-agent-recovery-v0-20261108]
-    paths: [".github/workflows/v2-toolcap-31b-private-pilot.yml"]
+    paths:
+      - ".github/workflows/v2-toolcap-31b-private-pilot.yml"
+      - "scripts/render_v2_toolcap_31b_pilot.py"
+      - "tests/test_render_v2_toolcap_31b_pilot.py"
+      - "experiments/v2-toolcap-31b/manifest.json"
 
 permissions:
   contents: read
