@@ -1,0 +1,60 @@
+name: Contract Impact Architecture CPU Gate
+
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths:
+      - "experiments/architecture-contract-impact-v0/**"
+      - "scripts/build_contract_impact_candidate.py"
+      - "tests/test_contract_impact_architecture.py"
+      - "tests/test_contract_impact_adk.py"
+      - ".github/workflows/contract-impact-architecture-cpu.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install official compiler without model weights
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p /tmp/architecture-wheels
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel" -p /tmp/architecture-wheels --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check /tmp/architecture-wheels/*.whl
+      - name: CPU unit and syntax checks
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/build_contract_impact_candidate.py             experiments/architecture-contract-impact-v0/skill/scripts/contract.py             tests/test_contract_impact_architecture.py tests/test_contract_impact_adk.py
+          python -m unittest -v tests.test_contract_impact_architecture
+      - name: Build from exact pinned V2 and test official ADK Skill
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/architecture-source /tmp/architecture-out
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p /tmp/architecture-source -o >/dev/null
+          test -s /tmp/architecture-source/submission.zip
+          python -m scripts.build_contract_impact_candidate             --source-zip /tmp/architecture-source/submission.zip             --output /tmp/architecture-out/contract-impact.zip
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+          path=Path("/tmp/architecture-out/contract-impact.zip")
+          with zipfile.ZipFile(path) as archive:
+              assert archive.testzip() is None
+              archive.extractall("/tmp/architecture-out/candidate")
+              print("CPU_CANDIDATE_MEMBERS=", sorted(archive.namelist()))
+          PY
+          CONTRACT_IMPACT_CANDIDATE_DIR=/tmp/architecture-out/candidate             python -m unittest -v tests.test_contract_impact_adk
+          echo "CPU_ARCHITECTURE_GATE=PASS NO_MODEL_NO_TRAINING_NO_SUBMISSION=TRUE"
