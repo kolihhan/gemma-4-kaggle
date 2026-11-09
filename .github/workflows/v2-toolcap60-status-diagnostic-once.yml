@@ -1,0 +1,56 @@
+name: Read Kaggle V2 Toolcap60 31B status without new inference
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/v2-toolcap60-status-diagnostic-once.yml"]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-toolcap-31b-42609260933
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Read authenticated existing kernel state and safe summary only
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import subprocess,json,re,os,datetime
+          p=subprocess.run(["kaggle","kernels","status",os.environ["KERNEL_REF"]],capture_output=True,text=True,timeout=100)
+          output=p.stdout+" "+p.stderr
+          match=re.search(r"KernelWorkerStatus\.([A-Z_]+)",output)
+          result={"checked_utc":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                  "kernel_ref":os.environ["KERNEL_REF"],
+                  "status":match.group(1) if match else "UNKNOWN",
+                  "cli_returncode":p.returncode,"new_inference":False,
+                  "new_competition_submission":False}
+          print("TOOLCAP60_AUTHENTICATED_STATUS="+json.dumps(result,sort_keys=True))
+          if p.returncode or not match:raise SystemExit("STATUS_UNVERIFIED")
+          if match.group(1) not in {"COMPLETE","COMPLETED"}:raise SystemExit(0)
+          PY
+          mkdir -p /tmp/viable-toolcap-check
+          kaggle kernels output "$KERNEL_REF" -p /tmp/viable-toolcap-check -o >/dev/null
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("/tmp/viable-toolcap-check/v2_60_calls_paired_31b_results.json")
+          if not p.is_file():
+              print("TOOLCAP60_SUMMARY=UNAVAILABLE_AFTER_COMPLETE")
+              raise SystemExit(0)
+          result=json.loads(p.read_text())
+          records=result.get("records",[])
+          safe={
+            "status":result.get("status"),"version":result.get("version"),"requested":result.get("requested"),
+            "arms":result.get("arms"),
+            "records":[{k:x.get(k) for k in ("instance_id","arm","status","resolved","tool_calls","duration_seconds","has_patch","error_type")} for x in records],
+            "error_type":result.get("error_type"),
+          }
+          print("TOOLCAP60_SAFE_SUMMARY="+json.dumps(safe,sort_keys=True))
+          print("RAW_PATCHES_OR_TRACES_PUBLISHED=FALSE")
+          PY
