@@ -1,3 +1,15 @@
+# NOW — Official Kaggle Toolcap60 submission ACCEPTED, ref 58164176 (2026-11-09 20:35 MYT)
+
+**Authenticated official Kaggle receipt:** [Explicit one-shot official workflow 42617788829](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42617788829) **SUCCESS**. Official code submission API returned `ref=58164176`; authenticated `competitions submissions -v` immediately confirmed `SubmissionStatus.PENDING`, description `v2-toolcap60-v1-20261109`, timestamp `2026-11-09 12:34:58.570000 UTC`, Public Score blank. **This is a real newly accepted official submission; it has NOT been scored yet.** Previous best confirmed Public remains **0.17**.
+
+**Exact submitted bytes:** verified full private CPU Kaggle builder ZIP round-trip against SHA-256 `e05753aed22f360bfdc74942c0b1b432bc1aca8eeb0741804eb023f9714018f6`; official `adk-submission 0.2.13` compiler and `swegemma 0.2.11` directory/limit validation passed. Model `gemma-4-31b-it-qat-w4a16-ct`, V2 source baseline prompt/sampling/native tools unchanged, only `max_tool_calls` 28→60; task time stays 8 minutes and turn cap 80. No new training. The private CPU builder is `kolihhan/gemma4-v2-toolcap60-v1-20261109`.
+
+**Why submitted without private pilot:** authenticated read-only Kaggle API [42617516719](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42617516719) established the already launched private 31B `kolihhan/gemma4-toolcap-31b-42609260933` was `QUEUED` at 12:30:11 UTC. The user's explicit request was for a new official submission, and the queue could not provide timely evidence. This is an *exploratory* official score check, not an evidence-supported claim of a stronger agent. Old [private pilot action 42609260933](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42609260933) and [earlier gated submit action 42610991463](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42610991463) may still be running/polling; their idempotent submission marker check must prevent duplicates if they resume. **Do not launch another official Toolcap60 submission.**
+
+**Next verified action:** read the new submission's authenticated status and Public Score; if below 0.17 or errored, retain the failed result without tuning from the same public feedback. Design and separately evaluate real Solver V3 generation/repair/verification architecture; Toolcap60 is a budget experiment, not that redesign.
+
+---
+
 # NOW — Direct official submission route unblocked from queued private GPU (2026-11-09 20:32 MYT)
 
 **Confirmed blocker:** authenticated read-only Kaggle CLI [Action 42617516719](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42617516719) reported `KernelWorkerStatus.QUEUED` at **2026-11-09 12:30:11 UTC** for `kolihhan/gemma4-toolcap-31b-42609260933`. The earlier GitHub pilot Action was polling but no model inference or derived score had started for this kernel by that check. Do not call queued model evaluation a successful runtime benchmark.
