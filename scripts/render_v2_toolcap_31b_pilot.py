@@ -38,7 +38,7 @@ def replace_section(source: str, start: str, end: str, new: str, label: str) -> 
 
 
 def validate_manifest(manifest: dict) -> None:
-    if manifest.get("version") != "v2-tool-cap-31b-paired-pilot-v1":
+    if manifest.get("version") != "v2-toolcap-31b-paired-pilot-v1":
         raise ValueError("preregistered manifest version drift")
     if manifest.get("repositories") != ["fastapi", "rich"]:
         raise ValueError("repository sample changed")
@@ -116,7 +116,7 @@ def render_runtime(template: str, source_zip: bytes, manifest: dict) -> str:
     selector = '''def load_holdout_ids(public_tasks) -> list[str]:
     import hashlib
     plan = json.loads(HOLDOUT_MANIFEST_JSON)
-    if plan["version"] != "v2-tool-cap-31b-paired-pilot-v1":
+    if plan["version"] != "v2-toolcap-31b-paired-pilot-v1":
         raise ValueError("unexpected pilot manifest")
     ignored = set(plan["exclusions"])
     ids = []
@@ -234,7 +234,7 @@ def render_runtime(template: str, source_zip: bytes, manifest: dict) -> str:
                 # Only safe, derived task-level metrics, no patches/solutions/traces.
                 print("PAIRED_TASK_METRIC", json.dumps(record, sort_keys=True), flush=True)
                 SUMMARY_PATH.write_text(
-                    json.dumps({"version": "v2-tool-cap-31b-paired-pilot-v1",
+                    json.dumps({"version": "v2-toolcap-31b-paired-pilot-v1",
                                 "status": "partial", "records": records,
                                 "requested": len(holdout_ids) * 2},
                                indent=2, sort_keys=True), encoding="utf-8")
@@ -250,7 +250,7 @@ def render_runtime(template: str, source_zip: bytes, manifest: dict) -> str:
                                      for r in arm_records), 3),
             }
         output = {
-            "version": "v2-tool-cap-31b-paired-pilot-v1",
+            "version": "v2-toolcap-31b-paired-pilot-v1",
             "model": MODEL_NAME,
             "status": "completed",
             "requested": len(holdout_ids) * 2,
@@ -269,7 +269,7 @@ def render_runtime(template: str, source_zip: bytes, manifest: dict) -> str:
     text = replace_section(text, "        records: list[dict[str, object]] = []",
                            "    finally:", evaluation, "paired task loop")
     text = replace_one(text, '"version": "verifier-lora-v0",\n                "model": MODEL_NAME,\n                "status": "error"',
-                       '"version": "v2-tool-cap-31b-paired-pilot-v1",\n'
+                       '"version": "v2-toolcap-31b-paired-pilot-v1",\n'
                        '                "model": MODEL_NAME,\n                "status": "error"',
                        "top-level failure schema")
     compile(text, KERNEL_FILE, "exec")
