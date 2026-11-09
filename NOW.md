@@ -1,3 +1,15 @@
+# NOW — Architecture Lane A executable CPU prototype verified (2026-11-09 MYT)
+
+**Changed research policy:** full architecture and training/representation pivots are permitted by user direction; patch-level tweaks are not compulsory. The original 31B Budget-Fit V2 Public **0.17** remains the *comparison control*, not a mandatory architectural base. Recovery Reviewer v0 official ref **58112753 COMPLETE Public 0.13** remains rejected for promotion. Score delta is not a causal diagnosis of dual agents.
+
+**Concrete implementation:** Lane A, **Contract & Impact → Solver → Verification**, is now an independently buildable architecture under `experiments/architecture-contract-impact-v0/`. It completely replaces the root workflow prompt and introduces a real read-only **contract-impact ADK Skill** recording declared explicit requirements, unknown information, impacted edit paths, model-reported test evidence and actual git changes. Its status is deliberately NOT an independent correctness oracle. The original nine native tools, model **gemma-4-31b-it-qat-w4a16-ct**, original sampling, 8-minute/28-native-call/80-turn configuration, and source-license attribution remain. The tool does not add a second LLM agent or training. `scripts/build_contract_impact_candidate.py` generates a deterministic ZIP without mutating `submission/` or frozen candidates.
+
+**Verified in [Actions 42551996131](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42551996131):** 9 focused CPU tests + 1 real official ADK compiler/Skill invocation CPU test passed; byte-pinned real-source package ZIP SHA-256 `4858587c922ae275417199d8c11c00abce2249e42992657e134ba8d6dc2df975`. Scripted test detects partial multi-file impact without altering source. No model inference, training, private task evaluation or Kaggle submission; **no competitive performance claim**.
+
+**Next decision:** Lane A is engineering-valid, **not quality-validated**. Compare against exact V2 on preregistered clean same-budget 31B cases with independent final issue correctness, actual Skill uptake, coverage errors and overhead; retain noninvocations and failures. Reopen B (branch/select), C (Coder adaptation via clean SFT/LoRA/RL if separately authorized), or D (true specialist multi-agent) whenever their predicted failure mechanism has stronger evidence. See [architecture reset](docs/design/architecture-search-reset-2026-11-09.md) and [candidate contract](experiments/architecture-contract-impact-v0/README.md). The candidate has **not** been submitted; approval is required before any new official submission.
+
+---
+
 # NOW — Architecture search REOPENED (2026-11-09 MYT)
 
 **Research direction corrected:** Small prompt or patch-level improvements are **not** a mandatory progression. The user explicitly permits full redesign of agent architecture, tool interfaces, topology, search and training when supported by evidence. Exact V2 is a scored **control/fallback (Public 0.17)**, not a fixed architectural foundation. Recovery Reviewer v0 ref 58112753 scored **0.13**, so that specific candidate remains rejected for promotion; one aggregate score cannot condemn all multi-agent designs.
