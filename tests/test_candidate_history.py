@@ -119,5 +119,66 @@ class CandidateHistoryTests(unittest.TestCase):
             grade_history(self.repo, self.root / "history", CHECK, self.gold)
 
 
+    def test_final_passing_tree_is_not_evidence_of_actual_submission(self):
+        self.change(GOOD)
+        report = self.grade()
+        self.assertEqual(report["diagnosis"], "retained_passing_candidate")
+        self.assertEqual(report["diagnosis_scope"], "terminal_tree_only")
+        self.assertEqual(report["submit_observation"], "not_observed")
+        self.assertEqual(report["submit_selection_diagnosis"], "unknown")
+
+    def test_submit_attempt_is_graded_at_request_not_at_final_tree(self):
+        self.change(GOOD)
+        self.history.observe("submit_patch", phase="attempt")
+        self.history.observe("submit_patch", phase="result")
+        self.change(PARTIAL)
+        report = self.grade()
+        self.assertEqual(report["final_grade"], "fail")
+        self.assertEqual(report["submit_attempt_grade"], "pass")
+        self.assertEqual(report["submit_attempts"], 1)
+        self.assertEqual(report["submit_observation"], "tool_returned_without_reported_error")
+        self.assertEqual(report["submit_selection_diagnosis"],
+                         "independent_check_pass_at_submit_request")
+
+    def test_passing_candidate_lost_before_submit_is_visible(self):
+        self.change(GOOD)
+        self.change(PARTIAL)
+        self.history.observe("submit_patch", phase="attempt")
+        self.history.observe("submit_patch", phase="result")
+        report = self.grade()
+        self.assertEqual(report["submit_attempt_grade"], "fail")
+        self.assertEqual(report["submit_selection_diagnosis"],
+                         "passing_candidate_lost_before_submit_request")
+
+    def test_failed_or_unconfirmed_submit_never_claims_selected_candidate(self):
+        self.change(GOOD)
+        self.history.observe("submit_patch", phase="attempt")
+        self.history.observe("submit_patch", phase="error", tool_failed=True)
+        report = self.grade()
+        self.assertEqual(report["submit_attempt_grade"], "pass")
+        self.assertEqual(report["submit_observation"], "tool_reported_failure")
+        self.assertEqual(report["submit_selection_diagnosis"], "unknown")
+
+    def test_missing_submit_response_is_not_assumed_success(self):
+        self.change(GOOD)
+        self.history.observe("submit_patch", phase="attempt")
+        report = self.grade()
+        self.assertEqual(report["submit_observation"], "attempt_without_observed_response")
+        self.assertEqual(report["submit_selection_diagnosis"], "unknown")
+
+    def test_multiple_submit_attempts_are_ambiguous(self):
+        self.change(GOOD)
+        self.history.observe("submit_patch", phase="attempt")
+        self.history.observe("submit_patch", phase="result")
+        self.change(PARTIAL)
+        self.history.observe("submit_patch", phase="attempt")
+        self.history.observe("submit_patch", phase="result")
+        report = self.grade()
+        self.assertEqual(report["submit_attempts"], 2)
+        self.assertEqual(report["submit_observation"], "ambiguous_multiple_attempts")
+        self.assertEqual(report["submit_selection_diagnosis"], "unknown")
+
+
+
 if __name__ == "__main__":
     unittest.main()
