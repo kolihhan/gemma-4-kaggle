@@ -35,6 +35,32 @@ not supply a complete sequence of source snapshots and independent grades.
 
 [Machine-readable archive inventory](../../docs/evaluation/candidate-history-archive-inventory-2026-11-07.json).
 
+## 2026-11-09 — Submission-boundary correction (CPU-verified)
+
+**Why this matters:** the terminal workspace patch is not necessarily the patch at a
+\`submit_patch\` request. Treating them as the same silently contaminates the
+generation-vs-selection diagnosis.
+
+The private-only observer now captures the source **immediately before**
+\`submit_patch\`, records its returned/error callback separately, and still
+captures the terminal tree. \`grade_history\` reports:
+
+- \`diagnosis\` with \`diagnosis_scope=terminal_tree_only\` for backwards compatibility;
+- \`submit_attempts\`, \`submit_attempt_revision\`, \`submit_attempt_grade\`;
+- \`submit_observation\` and \`submit_selection_diagnosis\`, conservatively unknown
+  for no request, an unconfirmed request, failed tool call or multiple requests.
+
+A returned tool result is **not proof Kaggle accepted a submitted patch**.
+A passing grade is evidence for the registered independent check only, not
+necessarily the full issue. Candidate History remains an evaluation-side plugin,
+never a submitted agent capability.
+
+[33 passing tests in official ADK CPU Actions](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42550027757)
+cover a correct candidate lost before submission, a correct submitted-attempt
+candidate followed by a failing terminal tree, failed/missing/multiple submit
+callbacks, and the unchanged agent-facing tool response. This adds **no** real
+Gemma 31B model-quality evidence.
+
 ## Executable mechanism
 
 `scripts/candidate_history.py` observes the source immediately before the run,
