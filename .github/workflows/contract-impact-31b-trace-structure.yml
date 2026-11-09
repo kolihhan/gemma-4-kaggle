@@ -142,6 +142,38 @@ jobs:
                   'model_token_totals':dict(tokens),
                   'caveat':'tool name mention is not verified invocation',
               },sort_keys=True))
+          # Terminal check: harmless ADK event metadata and exact invocation tokens.
+          import re
+          for arm in ('baseline_v2','contract_impact'):
+              traces=[p for p in files if p.suffix=='.json' and
+                      arm in p.relative_to(root).as_posix() and
+                      p.name!='contract_impact_paired_31b_results.json']
+              event_type_counts=collections.Counter()
+              author_counts=collections.Counter()
+              exact=collections.Counter()
+              for p in traces:
+                  obj=json.loads(p.read_text())
+                  for step in obj['steps']:
+                      meta=step.get('extra') or {}
+                      for name,counts,key in [('event_type',event_type_counts,'event_type'),
+                                              ('author',author_counts,'author')]:
+                          val=meta.get(key)
+                          if isinstance(val,str) and re.fullmatch(r'[a-zA-Z][a-zA-Z0-9_ .:/-]{0,64}',val):
+                              counts[val]+=1
+                          else:
+                              counts['REDACTED_NONSTANDARD']+=1
+                      msg=step.get('message') or ''
+                      for name in ('load_skill','run_skill_script','contract-impact',
+                                   'skills/contract-impact','FunctionCall','function_call',
+                                   'tool_call','submit_patch','edit_file'):
+                          if name in msg:exact[name]+=1
+              print('TRACE_INVOCATION_CHECK='+json.dumps({
+                  'arm':arm,'trace_count':len(traces),
+                  'event_type_counts':dict(event_type_counts),
+                  'event_author_counts':dict(author_counts),
+                  'approved_exact_marker_step_counts':dict(exact),
+                  'marker_count_is_not_proof_of_tool_call':True,
+              },sort_keys=True))
           print('NO_RAW_TRACE_CONTENT_PRINTED=TRUE')
           print('NO_NEW_INFERENCE_OR_COMPETITION_SUBMISSION=TRUE')
           PY
