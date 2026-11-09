@@ -61,6 +61,38 @@ jobs:
                   except Exception as e:
                       info['parse_error_type']=type(e).__name__
               print('TRACE_SCHEMA='+json.dumps(info,sort_keys=True))
+          # Inspect structure of the actual evaluator steps, not their contents.
+          for arm in ('baseline_v2','contract_impact'):
+              traces=[p for p in files if p.suffix=='.json'
+                      and arm in p.relative_to(root).as_posix()
+                      and p.name!='contract_impact_paired_31b_results.json']
+              print('TRACE_ARM_TRACE_COUNT='+arm+':'+str(len(traces)))
+              for p in traces[:2]:
+                  obj=json.loads(p.read_text())
+                  final=obj.get('final_metrics',{})
+                  print('TRACE_FINAL_METRIC_KEYS='+arm+':'+json.dumps(
+                      sorted(final) if isinstance(final,dict) else ['not_dict']))
+                  events=obj.get('steps',[])
+                  shapes=collections.Counter()
+                  by_source=collections.Counter()
+                  nested=collections.Counter()
+                  for item in events:
+                      source=item.get('source')
+                      by_source[str(source) if str(source) in
+                                {'agent','tool','user','assistant','model','system','function'} else 'other']+=1
+                      for tag in ('extra','message'):
+                          val=item.get(tag)
+                          shapes[(tag,type(val).__name__)]+=1
+                          if isinstance(val,dict):
+                              nested[(tag,tuple(sorted(val.keys())))]+=1
+                          elif isinstance(val,list) and val and isinstance(val[0],dict):
+                              nested[(tag,tuple(sorted(val[0].keys())))]+=1
+                  print('TRACE_STEP_SHAPES='+arm+':'+json.dumps({
+                      str(k):v for k,v in shapes.items()},sort_keys=True))
+                  print('TRACE_STEP_SOURCE_COUNTS='+arm+':'+json.dumps(
+                      dict(by_source),sort_keys=True))
+                  print('TRACE_STEP_DICT_KEY_PATTERNS='+arm+':'+json.dumps({
+                      str(k):v for k,v in nested.items()},sort_keys=True)[:8000])
           print('NO_RAW_TRACE_CONTENT_PRINTED=TRUE')
           print('NO_NEW_INFERENCE_OR_COMPETITION_SUBMISSION=TRUE')
           PY
