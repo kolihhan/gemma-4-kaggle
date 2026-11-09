@@ -1,0 +1,81 @@
+name: Read private paired 31B task diagnostics
+
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/contract-impact-31b-diagnostics-readonly.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  read_derived:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-contractpair-31b-42576094444
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download existing private kernel output (no inference)
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p /tmp/gemma31b-diagnostics
+          kaggle kernels output "$KERNEL_REF" -p /tmp/gemma31b-diagnostics -o >/dev/null
+          test -s /tmp/gemma31b-diagnostics/contract_impact_paired_31b_results.json
+          echo "PRIVATE_EXISTING_OUTPUT_RETRIEVED=YES"
+      - name: Summarize task-level metrics and evidence gaps without raw data
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          base=Path('/tmp/gemma31b-diagnostics')
+          info=json.loads((base/'contract_impact_paired_31b_results.json').read_text())
+          assert info.get('version')=='contract-impact-31b-paired-pilot-v1'
+          assert info.get('status')=='completed' and len(info.get('records',[]))==8
+          known={'baseline_v2','contract_impact'}
+          rows=info['records']
+          assert {x['arm'] for x in rows}==known
+          print('31B_PAIRED_MODEL='+str(info.get('model')))
+          print('31B_PAIRED_TASKS='+json.dumps(info.get('instance_ids')))
+          totals={}
+          for arm in sorted(known):
+              arm_rows=[x for x in rows if x['arm']==arm]
+              totals[arm]={
+                  'resolved':sum(bool(x.get('resolved')) for x in arm_rows),
+                  'completed':sum(x.get('status')=='completed' for x in arm_rows),
+                  'nonempty_patches':sum(bool(x.get('has_patch')) for x in arm_rows),
+                  'empty_patches':sum(not bool(x.get('has_patch')) for x in arm_rows),
+                  'tool_calls':sum(int(x.get('tool_calls') or 0) for x in arm_rows),
+                  'seconds':round(sum(float(x.get('duration_seconds') or 0) for x in arm_rows),2),
+                  'error_types':sorted({x['error_type'] for x in arm_rows if x.get('error_type')}),
+                  'test_exit_codes':sorted({str(x['test_exit_code']) for x in arm_rows}),
+              }
+          print('31B_PAIRED_DERIVED_TOTALS='+json.dumps(totals,sort_keys=True))
+          for task in info['instance_ids']:
+              pair={x['arm']:x for x in rows if x['instance_id']==task}
+              assert set(pair)==known
+              print('31B_PAIRED_CASE='+json.dumps({
+                  'task_id':task,
+                  'arms':{arm:{
+                      'status':x.get('status'),
+                      'resolved':x.get('resolved'),
+                      'has_patch':x.get('has_patch'),
+                      'patch_chars':x.get('patch_chars'),
+                      'tool_calls':x.get('tool_calls'),
+                      'duration_seconds':x.get('duration_seconds'),
+                      'test_exit_code':x.get('test_exit_code'),
+                      'error_type':x.get('error_type'),
+                  } for arm,x in sorted(pair.items())}},sort_keys=True))
+          # Enumerate *only* private output filename patterns and counts; no contents.
+          allfiles=[p.relative_to(base).as_posix() for p in base.rglob('*') if p.is_file()]
+          print('31B_PRIVATE_OUTPUT_FILE_COUNT='+str(len(allfiles)))
+          print('31B_PRIVATE_EVALUATOR_TRACES_PRESENT='+str(any(
+              'trace' in name or 'trajectory' in name for name in allfiles)).lower())
+          print('31B_RAW_COMPETITION_DATA_EXPORTED=NO')
+          print('31B_NEW_INFERENCE=NO 31B_NEW_SUBMISSION=NO')
+          PY
