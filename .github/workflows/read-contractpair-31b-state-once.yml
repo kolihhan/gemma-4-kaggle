@@ -1,0 +1,41 @@
+name: Read private Contract Impact 31B pilot kernel state
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/read-contractpair-31b-state-once.yml"]
+permissions:
+  contents: read
+jobs:
+  read_status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-contractpair-31b-42576094444
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Read official private Kaggle kernel status only
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import os,subprocess,re,datetime,json
+          ref=os.environ["KERNEL_REF"]
+          out=subprocess.run(["kaggle","kernels","status",ref],
+                             text=True,capture_output=True,timeout=90)
+          match=re.search(r"KernelWorkerStatus\.([A-Z_]+)",
+                          out.stdout+" "+out.stderr)
+          state=match.group(1) if match else "UNPARSEABLE"
+          print("PRIVATE_31B_PILOT_STATE="+json.dumps({
+              "checked_utc":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "kernel_ref":ref,
+              "api_status":state,
+              "query_exit_code":out.returncode,
+              "new_kernel_started_by_probe":False,
+              "new_submission_created":False,
+          },sort_keys=True))
+          if out.returncode or state=="UNPARSEABLE":
+              raise SystemExit("READ_ONLY_KAGGLE_STATUS_UNVERIFIED")
+          PY
