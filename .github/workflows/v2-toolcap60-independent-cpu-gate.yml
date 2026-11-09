@@ -1,0 +1,67 @@
+name: V2 Toolcap60 official independent CPU validation
+
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths:
+      - ".github/workflows/v2-toolcap60-independent-cpu-gate.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  official_limits:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: CPU unit and import checks
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_build_v2_toolcap_submission tests.test_gate_v2_toolcap60_official tests.test_prepare_public_budgetfit_v2
+          python -m py_compile scripts/submit_v2_toolcap60_official_once.py
+      - name: Install currently pinned official wheels
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0" "nbformat==5.10.4"
+          mkdir -p /tmp/gemma4-official-toolcap60-wheels
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel" -p /tmp/gemma4-official-toolcap60-wheels --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check /tmp/gemma4-official-toolcap60-wheels/*.whl
+          python - <<'PY'
+          import importlib.metadata
+          for pkg, version in (
+              ("adk-submission","0.2.13"), ("google-adk","1.36.1"),
+              ("adk-eval-core","0.1.0"), ("swegemma","0.2.11"),
+          ):
+              got=importlib.metadata.version(pkg)
+              assert got==version,(pkg,got)
+              print("OFFICIAL_CPU_PACKAGE_VERIFIED",pkg,got)
+          PY
+      - name: Byte-pinned real source, official limits, actual ADK compile
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_v2_toolcap60_official_once preflight
+          test -s /tmp/gemma4-v2-toolcap60-submit/submission.zip
+          python - <<'PY'
+          import hashlib,zipfile,yaml
+          from pathlib import Path
+          p=Path("/tmp/gemma4-v2-toolcap60-submit/submission.zip")
+          with zipfile.ZipFile(p) as z:
+              assert set(z.namelist())=={"agent.yaml","prompts/system.md","configs/sampling.yaml","eval_config.yaml"}
+              d=yaml.safe_load(z.read("eval_config.yaml"))["evaluation"]
+              assert d["max_tool_calls"]==60
+              assert d["max_time_minutes"]==8
+              assert d["max_turns"]==80
+              print("TOOLCAP60_REAL_ZIP_SHA256="+hashlib.sha256(p.read_bytes()).hexdigest())
+              print("OFFICIAL_60_CALL_LIMIT_COMPILE_GATE=PASS")
+              print("CPU_ONLY_NO_MODEL_NO_GPU_NO_SUBMISSION=TRUE")
+          PY
