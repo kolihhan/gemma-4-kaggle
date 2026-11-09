@@ -38,16 +38,16 @@ not supply a complete sequence of source snapshots and independent grades.
 ## 2026-11-09 — Submission-boundary correction (CPU-verified)
 
 **Why this matters:** the terminal workspace patch is not necessarily the patch at a
-\`submit_patch\` request. Treating them as the same silently contaminates the
+`submit_patch` request. Treating them as the same silently contaminates the
 generation-vs-selection diagnosis.
 
 The private-only observer now captures the source **immediately before**
-\`submit_patch\`, records its returned/error callback separately, and still
-captures the terminal tree. \`grade_history\` reports:
+`submit_patch`, records its returned/error callback separately, and still
+captures the terminal tree. `grade_history` reports:
 
-- \`diagnosis\` with \`diagnosis_scope=terminal_tree_only\` for backwards compatibility;
-- \`submit_attempts\`, \`submit_attempt_revision\`, \`submit_attempt_grade\`;
-- \`submit_observation\` and \`submit_selection_diagnosis\`, conservatively unknown
+- `diagnosis` with `diagnosis_scope=terminal_tree_only` for backwards compatibility;
+- `submit_attempts`, `submit_attempt_revision`, `submit_attempt_grade`;
+- `submit_observation` and `submit_selection_diagnosis`, conservatively unknown
   for no request, an unconfirmed request, failed tool call or multiple requests.
 
 A returned tool result is **not proof Kaggle accepted a submitted patch**.
