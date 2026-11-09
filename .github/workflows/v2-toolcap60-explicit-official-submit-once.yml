@@ -1,0 +1,67 @@
+name: Explicit one-shot official V2 Toolcap60 Kaggle submission
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/v2-toolcap60-explicit-official-submit-once.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: gemma4-toolcap60-explicit-official-submit-one-time
+  cancel-in-progress: false
+jobs:
+  official_submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate candidate and explicit exploratory objective
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/build_v2_toolcap_submission.py scripts/submit_v2_toolcap60_official_once.py
+          python -m unittest -v tests.test_build_v2_toolcap_submission tests.test_prepare_public_budgetfit_v2
+          echo "USER_REQUESTED_NEW_OFFICIAL_SUBMISSION=TRUE"
+          echo "KAGGLE_PRIVATE_31B_QUEUE_UNBLOCKED_BY_OFFICIAL_EXPLORATORY_SUBMISSION=TRUE"
+          echo "CANDIDATE_PROVEN_STRONGER=FALSE"
+      - name: Authenticate Kaggle; verify available official slot and prior receipt
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check             "kaggle==2.2.5" "six==1.17.0" "nbformat==5.10.4"
+          python -m scripts.submit_v2_toolcap60_official_once quota
+      - name: Install pinned official ADK and swegemma compiler wheels
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gemma4-official-toolcap60-wheels
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel"               -p /tmp/gemma4-official-toolcap60-wheels --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check /tmp/gemma4-official-toolcap60-wheels/*.whl
+          python - <<'PY'
+          import importlib.metadata
+          for pkg,v in (("adk-submission","0.2.13"),("google-adk","1.36.1"),
+                        ("adk-eval-core","0.1.0"),("swegemma","0.2.11")):
+              assert importlib.metadata.version(pkg)==v
+              print("OFFICIAL_COMPILER_VERSION",pkg,v)
+          PY
+      - name: Verify actual source-zip SHA, official limits and compiler, stage private CPU notebook
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_v2_toolcap60_official_once preflight
+          python - <<'PY'
+          from pathlib import Path
+          expected="e05753aed22f360bfdc74942c0b1b432bc1aca8eeb0741804eb023f9714018f6"
+          actual=Path("/tmp/gemma4-v2-toolcap60-submit/candidate.sha256").read_text().strip()
+          assert actual==expected,(actual,expected)
+          print("OFFICIAL_CANDIDATE_SHA_PIN_VERIFIED="+actual)
+          PY
+      - name: Upload private CPU notebook, verify remote archive, submit one official entry
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_v2_toolcap60_official_once submit
+          echo "OFFICIAL_SUBMISSION_FUNCTION_TERMINAL=TRUE"
