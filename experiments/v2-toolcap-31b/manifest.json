@@ -1,0 +1,57 @@
+{
+  "version": "v2-tool-cap-31b-paired-pilot-v1",
+  "date": "2026-11-09",
+  "hypothesis": "At fixed 8-minute task time, V2 can solve more tasks if the hard 28-native-tool-call cap is relaxed to 60; in the previous disjoint 4-task pilot V2 reached 28 calls on 3 of 4 tasks.",
+  "arms": [
+    "baseline_v2_28",
+    "v2_60_calls"
+  ],
+  "time_minutes_each": 8,
+  "max_tool_calls": {
+    "baseline_v2_28": 28,
+    "v2_60_calls": 60
+  },
+  "other_model_config": "byte-identical V2 model, sampling, prompt, native tools, max_turns=80; same worker, alternating arm order",
+  "repositories": [
+    "fastapi",
+    "rich"
+  ],
+  "per_repo": 2,
+  "salt": "v2-toolcap-31b-20261109-frozen-85417",
+  "exclusions": [
+    "fastapi_13920",
+    "fastapi_14448",
+    "fastapi_14463",
+    "fastapi_14873",
+    "fastapi_14986",
+    "fastapi_5077",
+    "fastapi_9425",
+    "fastapi_9555",
+    "fastapi_15280",
+    "rich_3052",
+    "rich_3061",
+    "rich_3067",
+    "rich_3105",
+    "rich_3278",
+    "rich_3777",
+    "rich_3934",
+    "rich_3942",
+    "rich_4079",
+    "fastapi_15661",
+    "fastapi_14303",
+    "rich_3180",
+    "rich_3064"
+  ],
+  "evaluation_count": 8,
+  "primary_metric": "Independent swegemma issue resolution, paired 4 public development tasks",
+  "secondary_metrics": [
+    "nonempty patch",
+    "tool calls",
+    "elapsed seconds",
+    "test exit code",
+    "actual cap hits",
+    "total prompt/completion tokens"
+  ],
+  "promotion_gate": "Do not claim generalization or promote on a single 4-task development pilot. If a treatment rescue occurs, confirm with disjoint tasks and failure analysis before official Kaggle submission.",
+  "privacy": "No new public raw competition data; private Kaggle kernel; no training or leaderboard submission"
+}
