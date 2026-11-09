@@ -1,3 +1,11 @@
+# Update — 31B private paired pilot finished (2026-11-09)
+
+**No quality improvement demonstrated.** Exact 31B V2 and the full-prompt-rewrite + optional Contract & Impact Skill each resolved **0/4** on the preregistered four-task public-development pilot. New arm made fewer calls (78 vs 107) and produced fewer nonempty final patches (3 vs 4), without resolving any task. **Do not promote this candidate or claim the Skill mechanism was observed.** Neither the available traces nor private logs captured typed proof of Skill calls; the exact Skill invocation markers did not appear. [Full measured decision and evidence](31b-paired-pilot-decision-2026-11-09.md) · [private Kaggle run](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42576094444).
+
+The following original CPU implementation and protocol description remains as **historical pre-inference context**; it is not the current research decision.
+
+---
+
 # Contract & Impact — executable architecture candidate (2026-11-09)
 
 **State: CPU package and official ADK Skill execution verified. NO 31B inference or Kaggle score.** This is a full root workflow rewrite plus a deterministic Skill, not a Recovery Reviewer prompt edit. The exact V2 ZIP remains a frozen external comparison baseline and supplies only the same model/native tools/sampling/eval-budget source for the new builder.
