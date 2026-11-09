@@ -1,0 +1,49 @@
+name: Inspect official evaluator observer integration point
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/inspect-swegemma-observer-hook.yml"]
+permissions:
+  contents: read
+jobs:
+  read_only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Inspect source without executing the evaluator
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p /tmp/swegemma-wheel
+          kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f swegemma-0.2.11-py3-none-any.whl -p /tmp/swegemma-wheel --unzip >/dev/null
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+          z=zipfile.ZipFile(next(Path("/tmp/swegemma-wheel").glob("swegemma*.whl")))
+          print("MODULES")
+          for path in z.namelist():
+              if path.startswith("swegemma/") and path.endswith(".py") and (
+                      "evaluate" in path or "runner" in path or "config" in path):
+                  print(path)
+          for path in z.namelist():
+              if not path.startswith("swegemma/") or not path.endswith(".py"):
+                  continue
+              lines=z.read(path).decode("utf-8").splitlines()
+              keys=("plugins=", "plugins:", "Runner(", "App(", "compile_submission(",
+                    "evaluate_task(", "def _evaluate", "class Evaluator",
+                    "create_session(", "on_tool_error_callback")
+              hits=[i for i,line in enumerate(lines) if any(k in line for k in keys)]
+              if not hits: continue
+              print("SOURCE",path,"TOTAL_LINES",len(lines))
+              indices=set()
+              for n in hits:
+                  indices.update(range(max(0,n-5),min(len(lines),n+10)))
+              for n in sorted(indices):
+                  print(f"{n+1:04}: {lines[n][:200]}")
+          print("READ_ONLY_NO_MODEL_NO_SUBMISSION")
+          PY
