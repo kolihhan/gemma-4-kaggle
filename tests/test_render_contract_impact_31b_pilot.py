@@ -36,7 +36,7 @@ class PilotRendererTests(unittest.TestCase):
         self.assertIn('Evaluator(EvalConfig(**base_kwargs))', runtime)
         self.assertIn('Evaluator(EvalConfig(**alternative_kwargs))', runtime)
         self.assertIn("result = run_maybe_async(", runtime)
-        self.assertIn("alternate_kwargs" not in runtime, (False,))
+        self.assertNotIn("alternate_kwargs", runtime)
         self.assertIn('"status": "partial"', runtime)
         self.assertIn("private-results", runtime)
         self.assertNotIn("competitions submit", runtime)
