@@ -83,9 +83,9 @@ def render_runtime(template: str, source_zip: bytes, manifest: dict) -> str:
                        f'MODEL_NAME = "{MODEL}"', "31B model")
     text = replace_one(text, 'AGENT_DIR = WORKING_DIR / "submission"',
                        'AGENT_DIR = WORKING_DIR / "submission-v2"\n'
-                       'TREATMENT_DIR = WORKING_DIR / "submission-contract-impact"', "arm dirs")
+                       'TREATMENT_DIR = WORKING_DIR / "submission-v2-60"', "arm dirs")
     text = replace_one(text, 'RESULTS_DIR = WORKING_DIR / "verifier-baseline-results"',
-                       'RESULTS_DIR = WORKING_DIR / "contract-impact-private-results"', "results dir")
+                       'RESULTS_DIR = WORKING_DIR / "v2-toolcap-private-results"', "results dir")
     text = replace_one(text, 'SUMMARY_PATH = WORKING_DIR / "verifier_baseline_results.json"',
                        'SUMMARY_PATH = WORKING_DIR / "v2_60_calls_paired_31b_results.json"', "summary file")
 
