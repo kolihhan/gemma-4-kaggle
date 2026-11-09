@@ -1,3 +1,15 @@
+# NOW — 31B paired private pilot LAUNCHED (2026-11-09 14:56 MYT)
+
+**Real inference underway, no claimed quality result:** The independently preregistered Contract & Impact vs exact V2 31B comparison has passed the real GPU quota gate and the **private Kaggle kernel push gate** in [GitHub Actions 42576094444](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42576094444). GitHub step `Launch private paired 31B inference` concluded success; subsequent `Poll same private kernel` is in progress at verification. Kernel ref `kolihhan/gemma4-contractpair-31b-42576094444`. **No Kaggle competition submission**, no weights training, and no new Public Score yet.
+
+**Frozen evaluation contract:** [31B pilot manifest](experiments/architecture-contract-impact-v0/31b-pilot-manifest.json) locks 2 deterministic salt-ranked eligible public development tasks from FastAPI and 2 from Rich, excluding 18 previously examined cases. Each task runs exact byte-pinned V2 and the Contract & Impact architectural candidate with the **same gemma-4-31b-it-qat-w4a16-ct service, sampling, 8-minute/28-native-call/80-turn budget and independent swegemma grading**. Arm order alternates per task; evaluator outputs use separate directories. This is a **4-task exploratory pilot**, not an untouched strong confirmation sample or hidden Kaggle leaderboard measurement. Actual Skill uptake and overhead are yet unmeasured.
+
+**Verified before GPU:** [CPU preflight 42575786043](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42575786043) passed **5/5 structural tests**, downloaded the exact V2 source ZIP with SHA-256 `a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3`, rendered and compiled both arms into one private 31B evaluator runtime. Derived per-task metrics only will be collected; raw competition data and patches are not published to GitHub. A separate [authenticated quota read](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42361825427) showed **19.51 GPU hours remaining** before launch. The new run independently passed a refreshed quota check.
+
+**Decision not yet possible:** no resolved numerator, per-task traces, wall-time comparison or resource-feasibility verdict is available until the private kernel reaches a terminal state and the results JSON is inspected. Do not promote or dismiss this candidate on CPU checks alone. Frozen ZIPs and canonical `submission/` remain untouched.
+
+---
+
 # NOW — Architecture Lane A executable CPU prototype verified (2026-11-09 MYT)
 
 **Changed research policy:** full architecture and training/representation pivots are permitted by user direction; patch-level tweaks are not compulsory. The original 31B Budget-Fit V2 Public **0.17** remains the *comparison control*, not a mandatory architectural base. Recovery Reviewer v0 official ref **58112753 COMPLETE Public 0.13** remains rejected for promotion. Score delta is not a causal diagnosis of dual agents.
