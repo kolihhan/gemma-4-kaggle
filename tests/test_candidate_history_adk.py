@@ -29,11 +29,12 @@ class ScriptedCPUModel(BaseLlm):
             for part in content.parts or []:
                 if part.function_response:
                     self._observations.append(part.function_response.response)
-        programs = (GOOD, PARTIAL)
-        if self._index < len(programs):
-            part = types.Part(function_call=types.FunctionCall(
-                name="edit_file", args={"content": programs[self._index]},
-            ))
+        actions = (("edit_file", {"content": GOOD}),
+                   ("submit_patch", {}),
+                   ("edit_file", {"content": PARTIAL}))
+        if self._index < len(actions):
+            name, args = actions[self._index]
+            part = types.Part(function_call=types.FunctionCall(name=name, args=args))
         else:
             part = types.Part(text="Done")
         self._index += 1
@@ -65,7 +66,11 @@ class CandidateHistoryAdkTests(unittest.TestCase):
                 """Replace the fixture source."""
                 (workspace / "samplepkg.py").write_text(content)
                 return {"status": "ok"}
-            agent = LlmAgent(name="fixture", model=model, instruction="CPU fixture", tools=[edit_file])
+            def submit_patch() -> dict:
+                """Report a completed submit request in the scripted CPU fixture."""
+                return {"status": "ok"}
+            agent = LlmAgent(name="fixture", model=model, instruction="CPU fixture",
+                             tools=[edit_file, submit_patch])
             async def run():
                 service = InMemorySessionService()
                 session = await service.create_session(app_name="cpu", user_id="fixture")
@@ -84,6 +89,11 @@ class CandidateHistoryAdkTests(unittest.TestCase):
             report = grade_history(workspace, root / "history", CHECK, gold)
             self.assertEqual(report["diagnosis"], "discarded_passing_candidate")
             self.assertEqual(report["nonempty_candidates"], 2)
+            self.assertEqual(report["submit_attempts"], 1)
+            self.assertEqual(report["submit_attempt_grade"], "pass")
+            self.assertEqual(report["submit_observation"], "tool_returned_without_reported_error")
+            self.assertEqual(report["submit_selection_diagnosis"],
+                             "independent_check_pass_at_submit_request")
 
 
 if __name__ == "__main__":
