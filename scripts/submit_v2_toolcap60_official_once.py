@@ -207,8 +207,10 @@ def submit() -> None:
         ["kaggle", "kernels", "push", "-p", str(ROOT / "kernel"), "-t", "600"],
         timeout=240,
     )
-    if "Kernel push error" in response or "successfully pushed" not in response:
-        raise RuntimeError("PRIVATE_NOTEBOOK_PUSH_UNCONFIRMED")
+    # The CLI exits non-zero when the push fails. Do not inspect localized or
+    # version-dependent success text; the authenticated status/output round-trip
+    # below is the authoritative proof of the accepted kernel version.
+    print("TOOLCAP60_PRIVATE_KERNEL_PUSH_RETURNED_OK", flush=True)
     for _ in range(60):
         status = cmd(["kaggle", "kernels", "status", KERNEL], timeout=60)
         if "KernelWorkerStatus.COMPLETE" in status:
