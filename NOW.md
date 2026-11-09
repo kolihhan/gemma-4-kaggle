@@ -1,3 +1,13 @@
+# NOW — Direct official submission route unblocked from queued private GPU (2026-11-09 20:32 MYT)
+
+**Confirmed blocker:** authenticated read-only Kaggle CLI [Action 42617516719](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42617516719) reported `KernelWorkerStatus.QUEUED` at **2026-11-09 12:30:11 UTC** for `kolihhan/gemma4-toolcap-31b-42609260933`. The earlier GitHub pilot Action was polling but no model inference or derived score had started for this kernel by that check. Do not call queued model evaluation a successful runtime benchmark.
+
+**User-authorized exploratory official submission:** the user explicitly requested a new Kaggle submission and said go. Instead of indefinitely blocking on the private GPU queue, [one-shot Action 42617788829](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42617788829) was launched using `scripts/submit_v2_toolcap60_official_once.py` and the already officially compiled candidate ZIP SHA-256 `e05753aed22f360bfdc74942c0b1b432bc1aca8eeb0741804eb023f9714018f6`. Tests and authenticated quota/preexisting-receipt checks passed. It verifies the official ADK/limits, publishes a **private CPU** builder Notebook, round-trips the exact ZIP from Kaggle output, and attempts the **single official** `competition_submit_code` call under idempotency marker `v2-toolcap60-v1-20261109`. At last check the Action was installing official compiler wheels. **No verified new submission ref or score yet.**
+
+**Research status:** this deliberately relaxes the earlier *private-pilot-before-submission* gate for the one specific candidate because the user prioritized a new official submission despite GPU queue backlog. It does **not** establish improved solution capability. The unchanged V2 Public reference still scored 0.17; this toolcap candidate differs only in `max_tool_calls: 28 → 60`, with 8 minutes and 80 turns unchanged. Do not call it Solver V3. If the old evidence-gated workflow subsequently resumes, `check_slot()` and the unique description marker must prevent another duplicate official submission. Do not re-run either workflow to bypass quota.
+
+---
+
 # NOW — V2 Toolcap60 officially compiles; awaiting private 31B outcome (2026-11-09)
 
 **Verified compiler gate:** [Independent official CPU Actions 42612471382](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42612471382) **SUCCESS**. The byte-pinned V2 source was downloaded; candidate ZIP passed official `swegemma 0.2.11` limits, `adk-submission 0.2.13`, `google-adk 1.36.1` compiler. The 60-tool-call setting is accepted while 8-minute time and 80 turns remain unchanged. Candidate ZIP SHA-256 `e05753aed22f360bfdc74942c0b1b432bc1aca8eeb0741804eb023f9714018f6`. No model execution or competition submission in this CPU verifier.
