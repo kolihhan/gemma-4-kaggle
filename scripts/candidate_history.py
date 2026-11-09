@@ -85,9 +85,11 @@ class History:
             data["complete"] = False
             self.path.write_text(json.dumps(data, indent=2))
 
-    def observe(self, tool, tool_failed=False):
+    def observe(self, tool, tool_failed=False, *, phase=None):
         data = json.loads(self.path.read_text())
         event = {"tool": tool, "tool_failed": bool(tool_failed)}
+        if phase is not None:
+            event["phase"] = phase
         start = time.monotonic()
         try:
             patch = self.read_patch()
@@ -118,6 +120,12 @@ def adk_plugin(history):
         def __init__(self):
             super().__init__(name="candidate_history_observer")
 
+        async def before_tool_callback(self, *, tool, tool_args, tool_context):
+            # Record the actual tree at the submit request, before the tool can exit.
+            if tool.name == "submit_patch":
+                history.observe(tool.name, phase="attempt")
+            return None
+
         async def after_tool_callback(self, *, tool, tool_args, tool_context, result):
             parsed = result
             if isinstance(parsed, str):
@@ -126,14 +134,61 @@ def adk_plugin(history):
                 except json.JSONDecodeError:
                     parsed = {}
             failed = isinstance(parsed, dict) and parsed.get("status") in {"error", "timeout"}
-            history.observe(tool.name, tool_failed=failed)
+            history.observe(tool.name, tool_failed=failed,
+                            phase="result" if tool.name == "submit_patch" else None)
             return None
 
         async def on_tool_error_callback(self, *, tool, tool_args, tool_context, error):
-            history.observe(tool.name, tool_failed=True)
+            history.observe(tool.name, tool_failed=True,
+                            phase="error" if tool.name == "submit_patch" else None)
             return None
     return CandidateHistoryPlugin()
 
+
+
+def summarize_submit_attempts(events, grades):
+    """Describe observed submit requests, not unobserved Kaggle acceptance.
+
+    The pre-tool revision is what the agent *attempted* to submit; the final
+    workspace may change later. A returned result is not official acceptance.
+    """
+    attempts = [(i, event) for i, event in enumerate(events)
+                if event["tool"] == "submit_patch" and event.get("phase") == "attempt"]
+    summary = {
+        "submit_attempts": len(attempts),
+        "submit_observation": "not_observed",
+        "submit_attempt_grade": "unknown",
+        "submit_attempt_revision": None,
+        "submit_selection_diagnosis": "unknown",
+    }
+    if len(attempts) > 1:
+        summary["submit_observation"] = "ambiguous_multiple_attempts"
+        return summary
+    if not attempts:
+        return summary
+
+    index, attempt = attempts[0]
+    revision = attempt.get("revision")
+    summary["submit_attempt_revision"] = revision
+    summary["submit_attempt_grade"] = grades.get(revision, {}).get("grade", "blocked")
+    # Do not pair a later submit result with the wrong request.
+    responses = [e for e in events[index + 1:]
+                 if e["tool"] == "submit_patch" and e.get("phase") in {"result", "error"}]
+    if not responses:
+        summary["submit_observation"] = "attempt_without_observed_response"
+        return summary
+    response = responses[0]
+    if response["tool_failed"] or response["phase"] == "error":
+        summary["submit_observation"] = "tool_reported_failure"
+        return summary
+
+    summary["submit_observation"] = "tool_returned_without_reported_error"
+    if summary["submit_attempt_grade"] == "pass":
+        summary["submit_selection_diagnosis"] = "independent_check_pass_at_submit_request"
+    elif (summary["submit_attempt_grade"] == "fail"
+          and any(value["grade"] == "pass" for value in grades.values())):
+        summary["submit_selection_diagnosis"] = "passing_candidate_lost_before_submit_request"
+    return summary
 
 def grade_history(workspace, directory, check, gold_patch, timeout=10):
     workspace, directory = Path(workspace).resolve(), Path(directory).resolve()
@@ -187,6 +242,7 @@ def grade_history(workspace, directory, check, gold_patch, timeout=10):
     final_grade = grades.get(final, {}).get("grade", "blocked")
     report.update(passing_candidates=len(passing), final_grade=final_grade,
                   nonempty_candidates=sum(bool(n) for n in data["revisions"].values()))
+    report.update(summarize_submit_attempts(data["events"], grades))
     if final_grade == "pass":
         diagnosis = "retained_passing_candidate"
     elif passing and final_grade == "fail":
@@ -199,7 +255,8 @@ def grade_history(workspace, directory, check, gold_patch, timeout=10):
         diagnosis = "no_materialized_source_patch"
     else:
         diagnosis = "no_passing_candidate_observed"
-    return {**report, "diagnosis": diagnosis}
+    # Existing diagnosis describes the terminal tree, not proof of submission.
+    return {**report, "diagnosis": diagnosis, "diagnosis_scope": "terminal_tree_only"}
 
 
 def main():
