@@ -1,3 +1,15 @@
+# NOW — Goal-aligned Gemma 4 strategy RESET (2026-11-10)
+
+**North star:** genuinely stronger *offline software-engineering issue repair*, independently resolved tasks per total competition compute; Kaggle is the external validation endpoint, not a prompt/leaderboard optimization loop. Read the complete [goal-aligned replan](docs/design/goal-aligned-replan-2026-11-10.md).
+
+**Strategy decision:** retire Toolcap60 parameter sweeps and prompt-only Reviewer extensions. Current `experiments/solver-v3/README.md` (checkpoint-first concept) is **not a locked build specification**. First separate semantic candidate generation / meaningful verification feedback from demonstrable loss of an already-correct patch. Pursue one **executed** evidence-grounded semantic-repair candidate only when supported by the bounded diagnostic; B (branch/select), C (clean coder adaptation), and D (specialists) remain explicit alternative pivots. CPU checks establish legality/mechanics, **not quality**.
+
+**Immediate executable research deliverable:** one bounded, evidence-linked F1–F9 diagnosis from **already exposed** development/31B traces (do not rerun known denominators), then implement **one** official-compatible 31B candidate with actual ADK tool/event verification and a frozen disjoint matched-budget correctness test. If Kaggle GPU remains QUEUED, do only source-level/CPU work, no duplicated private kernels. Do not train locally without explicit authorization, publish raw Competition Data, or tune to Public LB.
+
+**Competition status (most recent authenticated result in prior update):** official submission `58164176` **PENDING** with no score at the last recorded Nov 9 check; previous scored reference **0.17** (externally attributed Budget-Fit V2). No verified original model improvement. Avoid duplicate submissions. Public repo README now distinguishes historical `submission/` E4B baseline from actual externally built 31B scored artifacts. Paper track optional, not an active target.
+
+---
+
 # NOW — Latest authenticated Kaggle score check (2026-11-09 23:46 MYT)
 
 **Submission 58164176 remains PENDING, Public Score still blank** at 2026-11-09 15:46:40 UTC, confirmed through authenticated `kaggle competitions submissions -v` in [read-only GitHub Action 42648039124](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42648039124). Historical best scored Public remains **0.17**. Do not claim the new 60-call candidate wins or fails until the actual official result.
