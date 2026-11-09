@@ -1,3 +1,11 @@
+# NOW — V2 Toolcap60 officially compiles; awaiting private 31B outcome (2026-11-09)
+
+**Verified compiler gate:** [Independent official CPU Actions 42612471382](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42612471382) **SUCCESS**. The byte-pinned V2 source was downloaded; candidate ZIP passed official `swegemma 0.2.11` limits, `adk-submission 0.2.13`, `google-adk 1.36.1` compiler. The 60-tool-call setting is accepted while 8-minute time and 80 turns remain unchanged. Candidate ZIP SHA-256 `e05753aed22f360bfdc74942c0b1b432bc1aca8eeb0741804eb023f9714018f6`. No model execution or competition submission in this CPU verifier.
+
+**Still running:** [private 31B paired experiment 42609260933](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42609260933) and [evidence-gated official submission workflow 42610991463](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42610991463). Both were running at latest verification. The official workflow passed CPU and authenticated slot prechecks but has not created an authenticated Kaggle submission reference. It must consume terminal independent outcome and stop if its evidence gate fails. Do not duplicate or bypass the active workflow.
+
+---
+
 # NOW — Official Kaggle candidate gated and staged; 60-call 31B proof still RUNNING (2026-11-09)
 
 **Explicit user goal:** obtain a new, stronger official Gemma 4 submission, with substantive architecture reform rather than another prompt-only Reviewer. Do **not** conflate candidate staging with official acceptance.
