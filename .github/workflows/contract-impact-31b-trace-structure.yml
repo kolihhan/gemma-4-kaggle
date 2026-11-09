@@ -174,6 +174,21 @@ jobs:
                   'approved_exact_marker_step_counts':dict(exact),
                   'marker_count_is_not_proof_of_tool_call':True,
               },sort_keys=True))
+          # Inspect private per-task .log files for exact skill/tool names; never print logs.
+          for arm in ('baseline_v2','contract_impact'):
+              logs=[p for p in files if p.suffix=='.log' and
+                    arm in p.relative_to(root).as_posix()]
+              counted=collections.Counter()
+              for p in logs:
+                  msg=p.read_text(errors='replace')
+                  for token in ('load_skill','run_skill_script','contract-impact','skill_name',
+                                'ToolContext','run_command','edit_file','submit_patch'):
+                      counted[token+'_total_occurrences']+=msg.count(token)
+                      counted[token+'_files_with_marker']+=int(token in msg)
+              print('TRACE_PRIVATE_LOG_TOOL_MARKERS='+json.dumps({
+                  'arm':arm,'log_count':len(logs),'counts':dict(counted),
+                  'caveat':'text marker only, not proof of invocation/absence',
+              },sort_keys=True))
           print('NO_RAW_TRACE_CONTENT_PRINTED=TRUE')
           print('NO_NEW_INFERENCE_OR_COMPETITION_SUBMISSION=TRUE')
           PY
