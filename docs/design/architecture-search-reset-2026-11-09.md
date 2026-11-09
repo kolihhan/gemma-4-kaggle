@@ -62,3 +62,9 @@ Finalization — precise materialized diff, budget check, submit
 - **No transfer or prohibitive overhead** → reject corresponding class, preserve V2 only as fallback, and test the next strongest architecture rather than adding prompt patches.
 
 **State:** research search space and decision contract revised. No new architecture code, 31B execution, GPU inference, training, or Kaggle submission yet. The architecture **choice** is provisional and cannot be described as a measured breakthrough.
+
+## Implementation update — CPU gate passed (same date)
+
+The provisional Lane A is now an executable isolated CPU candidate, described in [Contract & Impact README](../../experiments/architecture-contract-impact-v0/README.md). Official CPU [Actions 42551996131](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42551996131) passed **9 unit tests plus 1 official ADK invocation test**. Candidate ZIP SHA-256: `4858587c922ae275417199d8c11c00abce2249e42992657e134ba8d6dc2df975`. The builder fully rewrites the root workflow and includes a deterministic read-only contract/impact Skill; model, sampling, native tools and evaluation budget remain fixed relative to pinned V2.
+
+The original **State** paragraph above is a historical design checkpoint and is superseded **only** regarding code implementation. No real 31B inference, performance evidence, training, or Kaggle submission followed. This is a structural prototype, **not** promotion of Lane A or rejection of B/C/D. Next criterion remains a clean, same-budget model experiment demonstrating correct issue resolution, not just structural coverage.
