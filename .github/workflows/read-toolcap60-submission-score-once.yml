@@ -1,0 +1,46 @@
+name: Read official Kaggle Toolcap60 submission score once
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/read-toolcap60-submission-score-once.yml"]
+permissions:
+  contents: read
+jobs:
+  read_official_receipt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Authenticated read-only competition status and stalled GPU kernel
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import csv, io, json, subprocess, datetime, re
+          stamp=datetime.datetime.now(datetime.timezone.utc).isoformat()
+          proc=subprocess.run(["kaggle","competitions","submissions",
+              "gemma-4-developer-agent","-v"], text=True, capture_output=True,timeout=120)
+          if proc.returncode:raise SystemExit("KAGGLE_SUBMISSION_QUERY_FAILED:"+str(proc.returncode))
+          rows=list(csv.DictReader(io.StringIO(proc.stdout.lstrip("\ufeff"))))
+          desired=[r for r in rows if str(r.get("ref"))=="58164176"]
+          if len(desired)!=1:raise SystemExit("EXPECTED_SUBMISSION_58164176_NOT_UNIQUE")
+          receipt={k:desired[0].get(k) for k in ("ref","status","date","publicScore","privateScore","description")}
+          print("TOOLCAP60_LATEST_OFFICIAL_RECEIPT="+json.dumps({"checked_utc":stamp,**receipt},sort_keys=True),flush=True)
+          numbers=[]
+          for row in rows:
+              if row.get("status","").upper().endswith("COMPLETE") and row.get("publicScore"):
+                  try:numbers.append(float(row["publicScore"]))
+                  except (ValueError,TypeError):pass
+          print("KAGGLE_HISTORICAL_BEST_SCORED_PUBLIC="+str(max(numbers) if numbers else "NONE"),flush=True)
+          for ref in ("kolihhan/gemma4-toolcap-31b-42609260933",):
+              p=subprocess.run(["kaggle","kernels","status",ref],text=True,capture_output=True,timeout=90)
+              match=re.search(r"KernelWorkerStatus\.([A-Z_]+)",p.stdout+" "+p.stderr)
+              print("TOOLCAP60_PRIVATE_KERNEL_STATE="+json.dumps({"ref":ref,
+                "status":match.group(1) if match else "UNVERIFIED",
+                "query_exit_code":p.returncode},sort_keys=True),flush=True)
+          print("NEW_MODEL_INFERENCE=FALSE NEW_SUBMISSION=FALSE",flush=True)
+          PY
