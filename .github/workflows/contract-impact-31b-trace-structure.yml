@@ -93,6 +93,55 @@ jobs:
                       dict(by_source),sort_keys=True))
                   print('TRACE_STEP_DICT_KEY_PATTERNS='+arm+':'+json.dumps({
                       str(k):v for k,v in nested.items()},sort_keys=True)[:8000])
+          # Count actual event types and approved tool-token appearances by arm.
+          allowed_tools=(
+              'read_file','edit_file','write_file','run_command','submit_patch',
+              'get_status','get_code_neighbors','search_similar_code',
+              'get_code_subgraph','load_skill','run_skill_script','agent_tool')
+          for arm in ('baseline_v2','contract_impact'):
+              traces=[p for p in files if p.suffix=='.json'
+                      and arm in p.relative_to(root).as_posix()
+                      and p.name!='contract_impact_paired_31b_results.json']
+              types=collections.Counter()
+              authors=collections.Counter()
+              mentions=collections.Counter()
+              json_messages=0
+              tokens=collections.Counter()
+              for p in traces:
+                  obj=json.loads(p.read_text())
+                  final=obj.get('final_metrics',{})
+                  for k in ('total_prompt_tokens','total_completion_tokens','total_cached_tokens'):
+                      v=final.get(k,0)
+                      if isinstance(v,(int,float)):
+                          tokens[k]+=v
+                  for step in obj.get('steps',[]):
+                      extra=step.get('extra') or {}
+                      typ=str(extra.get('event_type','other'))
+                      types[typ if typ in {'text','tool_call','tool_response','model','message',
+                                           'function_call','function_response','agent',
+                                           'llm_response','agent_response','event','tool',
+                                           'tool_result','unknown'} else 'other']+=1
+                      author=str(extra.get('author','other'))
+                      authors[author if author in {'agent','user','system','tool','model',
+                                                  'assistant','swe_coder'} else 'other']+=1
+                      message=step.get('message')
+                      if not isinstance(message,str):continue
+                      try:
+                          json.loads(message)
+                          json_messages+=1
+                      except (TypeError,ValueError):
+                          pass
+                      for name in allowed_tools:
+                          import re
+                          if re.search(r'(?<![a-zA-Z0-9_])'+re.escape(name)+r'(?![a-zA-Z0-9_])',message):
+                              mentions[name]+=1
+              print('TRACE_TOOL_UPTAKE_EVIDENCE='+json.dumps({
+                  'arm':arm,'events':dict(types),'authors':dict(authors),
+                  'known_tool_name_mention_steps':dict(mentions),
+                  'json_parsable_step_messages':json_messages,
+                  'model_token_totals':dict(tokens),
+                  'caveat':'tool name mention is not verified invocation',
+              },sort_keys=True))
           print('NO_RAW_TRACE_CONTENT_PRINTED=TRUE')
           print('NO_NEW_INFERENCE_OR_COMPETITION_SUBMISSION=TRUE')
           PY
