@@ -1,0 +1,40 @@
+{
+  "version": "contract-impact-31b-paired-pilot-v1",
+  "preregistered_on": "2026-11-09",
+  "eligibility": "public development competition tasks only; task IDs selected by immutable salted SHA-256, before any model outcomes; no reference patch used",
+  "salt": "contract-impact-31b-pilot-20261109-freeze-7d36",
+  "per_repo": 2,
+  "repositories": [
+    "fastapi",
+    "rich"
+  ],
+  "exclude_instance_ids": [
+    "fastapi_13920",
+    "fastapi_14448",
+    "fastapi_14463",
+    "fastapi_14873",
+    "fastapi_14986",
+    "fastapi_5077",
+    "fastapi_9425",
+    "fastapi_9555",
+    "fastapi_15280",
+    "rich_3052",
+    "rich_3061",
+    "rich_3067",
+    "rich_3105",
+    "rich_3278",
+    "rich_3777",
+    "rich_3934",
+    "rich_3942",
+    "rich_4079"
+  ],
+  "arms": [
+    "baseline_v2",
+    "contract_impact"
+  ],
+  "order": "alternate first arm by 1-based task index",
+  "success_metric": "independent swegemma evaluate_task resolved per-arm, paired task",
+  "safety": "private Kaggle kernel; no training and no official Kaggle competition submission; raw patches/tasks not exported as public artifacts",
+  "selection_note": "salted SHA256 ascending per repo; original task contents kept inside Kaggle; known already-inspected E4B IDs excluded, not a guaranteed independent holdout of all historical work",
+  "max_pilot_evaluations": 8
+}
