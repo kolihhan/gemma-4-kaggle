@@ -1,3 +1,17 @@
+# NOW — Official Kaggle candidate gated and staged; 60-call 31B proof still RUNNING (2026-11-09)
+
+**Explicit user goal:** obtain a new, stronger official Gemma 4 submission, with substantive architecture reform rather than another prompt-only Reviewer. Do **not** conflate candidate staging with official acceptance.
+
+**Current official candidate path:** [one-shot workflow 42610991463](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42610991463) is **IN PROGRESS**. Its CPU unit checks passed; authenticated Kaggle submission slot check passed. It is currently **waiting on the existing private 31B matched experiment** [42609260933](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42609260933), which has been launched and remains in Kaggle kernel status polling. There is **NO new authenticated official submission ref yet**. The workflow will not start any extra local-model training/inference for that gate. CPU builder `scripts/build_v2_toolcap_submission.py` changes only the V2 tool cap 28→60; prompt, native tools, model, sampling, task time 8 minutes and turns 80 stay unchanged. This is an **exploratory budget candidate**, not an end-to-end architecture breakthrough and not shown stronger yet.
+
+**Fail-closed submission requirements:** `scripts/gate_v2_toolcap60_official.py` requires 8 completed, independently scored evaluations across four previously untested tasks; treatment non-regression on task resolved count; observable actual usage of additional calls or a rescue; total elapsed ≤125% of control. The official workflow then requires official wheelhouse/ADK CPU validation, exact pinned source ZIP equality except one field, successful private CPU Kaggle notebook round-trip SHA verification, an available official quota slot, and final authenticated submission receipt. If these gates fail, **there is no official submission**, by design. Prior authenticated best is Public **0.17**. Do not claim another Public score or new submission ref without an actual receipt.
+
+**Substantial next refactor:** [Solver V3 contract](experiments/solver-v3/README.md) explicitly targets *root-cause repair generation vs candidate loss* through a single-writer model, deterministic versioned patch state, test-feedback-guided selection and validated ADK tool invocation. It is a research design, **not implemented nor submitted**. The previously rejected Contract & Impact optional Skill and Reviewer v0 are not promoted. A genuine V3 must demonstrate end-to-end independent correctness under matched global compute, not merely CPU package validity.
+
+**Current evidence / caveats:** earlier 4-task V2 vs Contract Impact private 31B pilot resolved 0/4 vs 0/4; V2 made nonempty patches 4/4 yet did not solve issues. Tool-cap explanation is plausible because 3/4 V2 tasks reached 28, but is not proven. Separate V2 28-vs-60 test is resolving it. No training, no modification to canonical `submission/` or frozen scored control artifacts. The official Kaggle competition supports a 12-hour aggregate scoring budget. Recheck the experiment and the official pipeline receipts before claiming a stronger new submission.
+
+---
+
 # NOW — V2 tool-call ceiling hypothesis under REAL 31B test (2026-11-09 MYT)
 
 **Competitive goal:** deliver an independently stronger SWE coding agent, not another CPU-valid architecture or prompt-only wrapper. Our best authenticated Kaggle Public Score remains **0.17**, so **no gain is claimed yet**.
