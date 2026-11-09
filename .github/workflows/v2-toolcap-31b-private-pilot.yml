@@ -1,0 +1,191 @@
+name: V2 28 vs 60 Tool Call - Private Paired 31B Pilot
+
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/v2-toolcap-31b-private-pilot.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gemma4-private-v2-toolcap-paired-31b-v1
+  cancel-in-progress: false
+
+jobs:
+  paired_31b:
+    runs-on: ubuntu-latest
+    timeout-minutes: 185
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-toolcap-31b-${{ github.run_id }}
+      KERNEL_DIR: /tmp/gemma4-toolcap-31b-kernel
+      SOURCE_DIR: /tmp/gemma4-toolcap-31b-source
+      PRIVATE_OUTPUT: /tmp/gemma4-toolcap-private-output
+      SAFE_OUTPUT: /tmp/gemma4-toolcap-safe
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Preregistered 31B contract, zero inference preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/render_v2_toolcap_31b_pilot.py
+          python -m unittest -v tests.test_render_v2_toolcap_31b_pilot
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          m=json.loads(Path('experiments/v2-toolcap-31b/manifest.json').read_text())
+          assert m['per_repo']==2 and m['repositories']==['fastapi','rich']
+          assert m['arms']==['baseline_v2_28','v2_60_calls']
+          assert m['evaluation_count']==8
+          print('PREREG_TOOLCAP_TASKS=4 EVALUATIONS=8')
+          print('LEADERBOARD_SUBMISSION=FALSE')
+          PY
+
+      - name: Pinned Kaggle CLI, authenticate and verify GPU balance
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import json,subprocess
+          p=subprocess.run(["kaggle","quota","--format","json"],
+                           capture_output=True,text=True,timeout=90,check=True)
+          quota=json.loads(p.stdout)
+          entry=next(x for x in quota if x['resource']=='GPU')
+          remaining=float(entry['remaining'].rstrip('h'))
+          print("GPU_REMAINING_HOURS",remaining)
+          if remaining < 4.0:
+              raise SystemExit("GPU_QUOTA_BELOW_PRELOCKED_PILOT_GATE")
+          print("GPU_QUOTA_GATE=PASS")
+          PY
+
+      - name: Render new unique private kernel from exact V2 baseline
+        run: |
+          set -euo pipefail
+          mkdir -p "$SOURCE_DIR" "$SAFE_OUTPUT"
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 \
+            -p "$SOURCE_DIR" -o >/dev/null
+          test -s "$SOURCE_DIR/submission.zip"
+          python -m scripts.render_v2_60_calls_31b_pilot \
+            --source-zip "$SOURCE_DIR/submission.zip" --out "$KERNEL_DIR" \
+            --kernel-ref "$KERNEL_REF"
+          python -m py_compile "$KERNEL_DIR/v2_toolcap_paired_31b_runtime.py"
+          python -m json.tool "$KERNEL_DIR/kernel-metadata.json" >/dev/null
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          meta=json.loads((Path(os.environ['KERNEL_DIR'])/"kernel-metadata.json").read_text())
+          assert meta['is_private'] is True
+          assert meta['enable_gpu'] is True
+          assert meta['enable_internet'] is False
+          assert meta['competition_sources']==['gemma-4-developer-agent']
+          assert meta['model_sources']==['google/gemma-4/Other/gemma-4-31b-it-qat-w4a16-ct/2']
+          print("PRIVATE_31B_KERNEL_RESOURCE_CONTRACT=PASS")
+          PY
+
+      - name: Launch private paired 31B inference (no competition submit)
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          kaggle kernels push -p "$KERNEL_DIR" --accelerator NvidiaL4 -t 7200 \
+            > /tmp/gemma4-toolcap-push.log 2>&1
+          code=$?
+          set -e
+          python scripts/check_capacity_31b_push_v0.py \
+            --log /tmp/gemma4-toolcap-push.log --client-exit-code "$code"
+          echo "PRIVATE_KERNEL_SUBMITTED=$KERNEL_REF"
+          echo "NO_KAGGLE_COMPETITION_SUBMISSION=TRUE"
+
+      - name: Poll same private kernel for both paired arms
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 360); do
+            result="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            printf '[%03d] %s\n' "$attempt" "$result"
+            lower="$(printf '%s' "$result" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal="complete"; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal="error"; break; fi
+            sleep 30
+          done
+          test -n "$terminal" || terminal="timeout"
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$terminal" > /tmp/gemma4-toolcap-terminal
+          echo "TOOLCAP_31B_KERNEL_TERMINAL=$terminal"
+
+      - name: Retrieve metrics only; never upload raw competition traces
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          mkdir -p "$PRIVATE_OUTPUT" "$SAFE_OUTPUT"
+          kaggle kernels output "$KERNEL_REF" -p "$PRIVATE_OUTPUT" -o \
+            > /tmp/gemma4-toolcap-download.log 2>&1
+          if [ -s "$PRIVATE_OUTPUT/v2_60_calls_paired_31b_results.json" ]; then
+            python - <<'PY'
+          import json,os
+          from pathlib import Path
+          source=Path(os.environ['PRIVATE_OUTPUT'])/'v2_60_calls_paired_31b_results.json'
+          target=Path(os.environ['SAFE_OUTPUT'])/'paired_31b_metrics.json'
+          j=json.loads(source.read_text())
+          sanitized={
+              'version':j.get('version'),'status':j.get('status'),
+              'model':j.get('model'),'requested':j.get('requested'),
+              'instance_ids':j.get('instance_ids'),
+              'arms':j.get('arms'),
+              'records':[{
+                  key:row.get(key) for key in (
+                    'instance_id','arm','status','resolved','test_exit_code',
+                    'patch_chars','has_patch','tool_calls','duration_seconds','error_type')
+                  } for row in j.get('records',[])],
+              'visible_gpus':j.get('visible_gpus'),
+              'tensor_parallel_size':j.get('tensor_parallel_size'),
+          }
+          target.write_text(json.dumps(sanitized,indent=2,sort_keys=True)+'\n')
+          print('TOOLCAP_31B_METRICS='+json.dumps({
+              k:v for k,v in sanitized.items() if k not in {'records'}},sort_keys=True))
+          print('TOOLCAP_31B_RECORD_COUNT='+str(len(sanitized['records'])))
+          PY
+          else
+            echo "TOOLCAP_31B_METRICS_NOT_YET_AVAILABLE=TRUE"
+          fi
+          echo "NO_RAW_PATCH_TRACE_OR_COMPETITION_DATA_UPLOADED=TRUE"
+
+      - name: Upload safe derived metrics only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemma4-toolcap-31b-metrics-${{ github.run_id }}
+          path: /tmp/gemma4-toolcap-safe/paired_31b_metrics.json
+          if-no-files-found: warn
+          retention-days: 21
+
+      - name: Verify paired benchmark reached measurable terminal state
+        run: |
+          set -euo pipefail
+          test "$(cat /tmp/gemma4-toolcap-terminal)" = complete
+          test -s "$SAFE_OUTPUT/paired_31b_metrics.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          j=json.loads((Path(os.environ['SAFE_OUTPUT'])/'paired_31b_metrics.json').read_text())
+          assert j['status']=='completed'
+          assert j['model']=='gemma-4-31b-it-qat-w4a16-ct'
+          assert len(j['instance_ids'])==4 and len(set(j['instance_ids']))==4
+          assert len(j['records'])==8
+          assert set(j['arms'])=={'baseline_v2_28','v2_60_calls'}
+          for arm in j['arms'].values():
+              assert arm['requested']==4
+          print('TOOLCAP_31B_TERMINAL_COMPARISON=PASS')
+          print('TOOLCAP_31B_RESOLVED='+json.dumps({
+              k:v['resolved'] for k,v in j['arms'].items()},sort_keys=True))
+          PY
