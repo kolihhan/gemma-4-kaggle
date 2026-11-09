@@ -1,3 +1,13 @@
+# NOW — Latest authenticated Kaggle score check (2026-11-09 23:46 MYT)
+
+**Submission 58164176 remains PENDING, Public Score still blank** at 2026-11-09 15:46:40 UTC, confirmed through authenticated `kaggle competitions submissions -v` in [read-only GitHub Action 42648039124](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42648039124). Historical best scored Public remains **0.17**. Do not claim the new 60-call candidate wins or fails until the actual official result.
+
+**No private 31B benchmark result:** the same authenticated Action still reports private Kernel `kolihhan/gemma4-toolcap-31b-42609260933` = `QUEUED`. The private pilot orchestrator [42609260933](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42609260933) failed after 360 polls and timeout without scoring; the older evidence-gated submit orchestrator [42610991463](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42610991463) likewise stopped after waiting for the queued Kernel. These **GitHub Actions failures were queue/polling timeouts, not evidence of bad solver quality**. The separate direct official submission [42617788829](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42617788829) succeeded and has authoritative ref **58164176**. Avoid retrying either older workflow because the official candidate is already accepted.
+
+**Research continuation:** Stop 60-call parameter tuning. Do not launch duplicate official submission. Focus next implementation on executable Solver V3 with **one writer, actual snapshot/restore of candidate patches, diagnostic test feedback, and valid final submission**; verify official ADK/tool-registry support before introducing any new tool interface or claiming such a topology exists. Disjoint, independently graded patch correctness must drive promotion, not completed CI, token efficiency, or number of native calls. The V3 architecture [contract](experiments/solver-v3/README.md) is still a proposal, not a working contender.
+
+---
+
 # NOW — Official Kaggle Toolcap60 submission ACCEPTED, ref 58164176 (2026-11-09 20:35 MYT)
 
 **Authenticated official Kaggle receipt:** [Explicit one-shot official workflow 42617788829](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42617788829) **SUCCESS**. Official code submission API returned `ref=58164176`; authenticated `competitions submissions -v` immediately confirmed `SubmissionStatus.PENDING`, description `v2-toolcap60-v1-20261109`, timestamp `2026-11-09 12:34:58.570000 UTC`, Public Score blank. **This is a real newly accepted official submission; it has NOT been scored yet.** Previous best confirmed Public remains **0.17**.
