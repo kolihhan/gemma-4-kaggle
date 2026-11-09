@@ -1,5 +1,5 @@
 {
-  "version": "v2-tool-cap-31b-paired-pilot-v1",
+  "version": "v2-toolcap-31b-paired-pilot-v1",
   "date": "2026-11-09",
   "hypothesis": "At fixed 8-minute task time, V2 can solve more tasks if the hard 28-native-tool-call cap is relaxed to 60; in the previous disjoint 4-task pilot V2 reached 28 calls on 3 of 4 tasks.",
   "arms": [
