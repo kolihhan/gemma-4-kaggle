@@ -76,7 +76,7 @@ jobs:
           kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 \
             -p "$SOURCE_DIR" -o >/dev/null
           test -s "$SOURCE_DIR/submission.zip"
-          python -m scripts.render_v2_60_calls_31b_pilot \
+          python -m scripts.render_v2_toolcap_31b_pilot \
             --source-zip "$SOURCE_DIR/submission.zip" --out "$KERNEL_DIR" \
             --kernel-ref "$KERNEL_REF"
           python -m py_compile "$KERNEL_DIR/v2_toolcap_paired_31b_runtime.py"
