@@ -1,0 +1,68 @@
+name: Contract Impact 31B Paired Pilot CPU Preflight
+
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths:
+      - "scripts/render_contract_impact_31b_pilot.py"
+      - "tests/test_render_contract_impact_31b_pilot.py"
+      - "experiments/architecture-contract-impact-v0/31b-pilot-manifest.json"
+      - ".github/workflows/contract-impact-31b-pilot-cpu.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      BUILD_DIR: /tmp/gemma4-contract-pair-preflight
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Syntax and deterministic sampling tests (no model)
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/render_contract_impact_31b_pilot.py tests/test_render_contract_impact_31b_pilot.py
+          python -m unittest -v tests.test_render_contract_impact_31b_pilot
+      - name: Read exact source ZIP, compile real Kaggle pilot source
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p /tmp/gemma4-contract-pair-source
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 \
+            -p /tmp/gemma4-contract-pair-source -o >/dev/null
+          test -s /tmp/gemma4-contract-pair-source/submission.zip
+          python -m scripts.render_contract_impact_31b_pilot \
+            --source-zip /tmp/gemma4-contract-pair-source/submission.zip \
+            --out "$BUILD_DIR" \
+            --kernel-ref kolihhan/gemma4-contractpair-cpu-check
+          python -m py_compile "$BUILD_DIR/contract_impact_paired_31b_runtime.py"
+          python -m json.tool "$BUILD_DIR/kernel-metadata.json" >/dev/null
+          python - <<'PY'
+          import ast,base64,json,os,hashlib
+          from pathlib import Path
+          file=Path(os.environ['BUILD_DIR'])/'contract_impact_paired_31b_runtime.py'
+          src=file.read_text()
+          tree=ast.parse(src)
+          assn=next(x for x in tree.body if isinstance(x,ast.Assign)
+                    and any(isinstance(y,ast.Name) and y.id=='SUBMISSION_PAYLOAD_B64'
+                            for y in x.targets))
+          data=json.loads(base64.b64decode(ast.literal_eval(assn.value)))
+          assert set(data)=={'baseline_v2','contract_impact'}
+          for key in ('eval_config.yaml','configs/sampling.yaml'):
+              assert data['baseline_v2'][key]==data['contract_impact'][key]
+          assert 'skills/contract-impact/scripts/contract.py' in data['contract_impact']
+          assert len(data['baseline_v2'])==4
+          assert len(data['contract_impact'])==6
+          print('PAIRED_PAYLOAD_DIFFERENT_PROMPTS_AND_SKILL=TRUE')
+          print('PAIRED_RESOURCE_CONFIGS_IDENTICAL=TRUE')
+          print('RUNTIME_SHA256='+hashlib.sha256(src.encode()).hexdigest())
+          print('NO_GPU_NO_TRAINING_NO_SUBMISSION=TRUE')
+          PY
