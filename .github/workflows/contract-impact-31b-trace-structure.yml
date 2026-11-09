@@ -1,0 +1,66 @@
+name: Read private 31B trace structure without raw content
+
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/contract-impact-31b-trace-structure.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-contractpair-31b-42576094444
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download existing private kernel output
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p /tmp/gemma4-private-traces
+          kaggle kernels output "$KERNEL_REF" -p /tmp/gemma4-private-traces -o >/dev/null
+      - name: Describe trace schema only (never print record values)
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,collections,hashlib
+          from pathlib import Path
+          root=Path('/tmp/gemma4-private-traces')
+          files=[x for x in root.rglob('*') if x.is_file()]
+          print('TRACE_STRUCTURE_FILE_COUNT='+str(len(files)))
+          for i,path in enumerate(sorted(files)):
+              relative=path.relative_to(root).as_posix()
+              arm='baseline_v2' if 'baseline_v2' in relative else (
+                  'contract_impact' if 'contract_impact' in relative else 'other')
+              if relative.endswith('contract_impact_paired_31b_results.json'):
+                  continue
+              name=hashlib.sha256(relative.encode()).hexdigest()[:10]
+              info={'file_index':i,'path_hash':name,'arm':arm,'suffix':path.suffix,'bytes':path.stat().st_size}
+              if path.suffix in {'.json','.jsonl'}:
+                  try:
+                      if path.suffix=='.json':
+                          data=json.loads(path.read_text(errors='replace'))
+                      else:
+                          data=[json.loads(x) for x in path.read_text(errors='replace').splitlines()[:15] if x.strip()]
+                      info['top_type']=type(data).__name__
+                      if isinstance(data,dict):
+                          info['top_keys']=sorted(str(k)[:60] for k in data)[:80]
+                          for key,val in data.items():
+                              if isinstance(val,list):
+                                  info['list_'+str(key)[:32]+'_size']=len(val)
+                                  if val and isinstance(val[0],dict):
+                                      info['list_'+str(key)[:32]+'_first_keys']=sorted(val[0])[:50]
+                      elif isinstance(data,list):
+                          info['count']=len(data)
+                          if data and isinstance(data[0],dict):
+                              info['first_keys']=sorted(data[0])[:50]
+                  except Exception as e:
+                      info['parse_error_type']=type(e).__name__
+              print('TRACE_SCHEMA='+json.dumps(info,sort_keys=True))
+          print('NO_RAW_TRACE_CONTENT_PRINTED=TRUE')
+          print('NO_NEW_INFERENCE_OR_COMPETITION_SUBMISSION=TRUE')
+          PY
