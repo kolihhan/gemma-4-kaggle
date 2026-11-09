@@ -1,8 +1,14 @@
 # Gemma 4 Developer Agent — competition workspace
 
-Private working repository for **Google – The Gemma 4 Developer Agent Competition**.
+**Public** research and engineering workspace for **Google – The Gemma 4 Developer Agent Competition**.
 
-This repo is not just a dataset mirror. It is the source of truth for competition facts, the current experiment, the candidate submission, evaluation evidence, and the private full-data mirror.
+**North star:** build a genuinely stronger, independently verifiable offline software-engineering agent, measured by correctly resolved repository issues **per total evaluation compute**. A valid Kaggle submission is the end-to-end validation deliverable—not the research method.
+
+**Current research plan:** [Goal-aligned replan (2026-11-10)](docs/design/goal-aligned-replan-2026-11-10.md). Prioritize real patch correctness and distinct evidence-backed mechanisms over prompt tuning, extra reviewers, more tool calls, or repeated leaderboard submissions.
+
+**Artifact distinction:** `submission/` currently contains a historical **E4B diagnostic baseline**, **not** the latest scored 31B archive. The best previously scored Public result is **0.17** from an attributed external Budget-Fit V2 reproduction. The later 60-call 31B submission `58164176` was **PENDING** at the last authenticated check. Actual candidate archives are constructed from pinned, verifiable sources by experiment-specific builders; do not assume the in-tree E4B YAML was used for those 31B submissions. Consult [NOW.md](NOW.md) for newer verified results.
+
+**Public-data warning:** this repo is currently PUBLIC. Legacy full-dataset mirrors are historical exposure debt, not a permitted pipeline for new competition data; follow [PUBLIC_VISIBILITY.md](PUBLIC_VISIBILITY.md) and hydrate competition resources at runtime.
 
 ## Start here
 
@@ -10,7 +16,7 @@ This repo is not just a dataset mirror. It is the source of truth for competitio
 2. `NOW.md` — current decision, verified state, blockers, and next experiment.
 3. `docs/research/competition-recon-2026-10-31.md` — current competition fact check, including the stale bundled model-list warning.
 4. `docs/design/e4b-baseline-v0.md` — approved minimal baseline design.
-5. `submission/` — the **only canonical candidate submission**.
+5. `submission/` — historical E4B baseline; scored 31B candidates are pinned external-source builds. See the current plan and `NOW.md` before promotion.
 6. `docs/evaluation/` — public-corpus profile and failure taxonomy.
 
 ## Current baseline
@@ -47,7 +53,7 @@ See `docs/evaluation/public-corpus-summary.md` for the verified distribution and
 
 ## Full competition data
 
-The repository is private because Kaggle Competition Data must not be redistributed publicly.
+**Historical state only:** this repository used to be private when the legacy mirror was created; it is now **public**. Do not create or publish new raw Competition Data mirrors. For current permitted data handling, follow `PUBLIC_VISIBILITY.md`.
 
 The official `download-all` archive was mirrored on 2026-10-31 to private GitHub Release `kaggle-data-2026-10-31` as **13 checksummed parts**:
 
