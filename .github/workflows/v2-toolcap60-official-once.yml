@@ -1,0 +1,116 @@
+name: Official V2 Toolcap60 exploratory Kaggle submission once
+
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/v2-toolcap60-official-once.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gemma4-v2-toolcap60-official-20261109
+  cancel-in-progress: false
+
+jobs:
+  submit_if_evidence_gate_passes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 200
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      PILOT_REF: kolihhan/gemma4-toolcap-31b-42609260933
+      PILOT_DIR: /tmp/gemma4-v2-toolcap60-pilot-output
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: CPU tests and reproduce fixed manifest
+        run: |
+          set -euo pipefail
+          python -m py_compile \
+            scripts/build_v2_toolcap_submission.py \
+            scripts/gate_v2_toolcap60_official.py \
+            scripts/submit_v2_toolcap60_official_once.py
+          python -m unittest -v \
+            tests.test_build_v2_toolcap_submission \
+            tests.test_gate_v2_toolcap60_official \
+            tests.test_prepare_public_budgetfit_v2 \
+            tests.test_render_v2_toolcap_31b_pilot
+          echo "OFFICIAL_PIPELINE_CPU_UNIT_GATES_PASS=TRUE"
+
+      - name: Authenticate Kaggle and check submission slot early
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check \
+            "kaggle==2.2.5" "six==1.17.0" "nbformat==5.10.4"
+          python -m scripts.submit_v2_toolcap60_official_once quota
+
+      - name: Wait for already launched private 31B trial, NO new inference
+        run: |
+          set -euo pipefail
+          terminal=""
+          for iteration in $(seq 1 270); do
+            result="$(kaggle kernels status "$PILOT_REF" 2>&1 || true)"
+            echo "EXISTING_31B_PRIVATE_PILOT_CHECK[$iteration] $result"
+            if grep -q "KernelWorkerStatus.COMPLETE" <<< "$result"; then
+              terminal="COMPLETE"
+              break
+            fi
+            if grep -Eq "KernelWorkerStatus.ERROR|KernelWorkerStatus.FAILED|KernelWorkerStatus.CANCELLED" <<< "$result"; then
+              echo "EXISTING_PILOT_FAILED_NO_OFFICIAL_SUBMISSION"
+              exit 3
+            fi
+            sleep 30
+          done
+          test "$terminal" = "COMPLETE" || { echo "PRIVATE_PILOT_NOT_TERMINAL"; exit 4; }
+          mkdir -p "$PILOT_DIR"
+          kaggle kernels output "$PILOT_REF" -p "$PILOT_DIR" -o >/dev/null
+          test -s "$PILOT_DIR/v2_60_calls_paired_31b_results.json"
+          echo "EXISTING_PILOT_OUTPUT_RETRIEVED=TRUE"
+          echo "NEW_GPU_INFERENCE=FALSE"
+
+      - name: Apply exact pre-registered evidence gate
+        run: |
+          set -euo pipefail
+          python -m scripts.gate_v2_toolcap60_official \
+            --metrics "$PILOT_DIR/v2_60_calls_paired_31b_results.json" \
+            --manifest experiments/v2-toolcap-31b/manifest.json
+          echo "PRE_SUBMISSION_EXPERIMENT_GATE=PASS"
+          echo "NOT_A_CLAIM_OF_GENERALIZATION=TRUE"
+
+      - name: Install official current ADK and swegemma CPU compiler wheels
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gemma4-official-toolcap60-wheels
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse \
+              -f "$wheel" -p /tmp/gemma4-official-toolcap60-wheels --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check \
+            /tmp/gemma4-official-toolcap60-wheels/*.whl
+          python - <<'PY'
+          import importlib.metadata
+          for package,version in (
+              ("adk-submission","0.2.13"),
+              ("google-adk","1.36.1"),
+              ("adk-eval-core","0.1.0"),
+              ("swegemma","0.2.11"),
+          ):
+              actual=importlib.metadata.version(package)
+              assert actual==version,(package,actual)
+              print("OFFICIAL_CPU_WHEEL_VERIFIED",package,actual)
+          PY
+
+      - name: Validate 60-call official limits, ADK compile, and private CPU notebook
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_v2_toolcap60_official_once preflight
+
+      - name: Submit one authenticated official Kaggle candidate
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_v2_toolcap60_official_once submit
