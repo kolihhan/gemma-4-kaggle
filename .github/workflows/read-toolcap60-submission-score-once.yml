@@ -1,4 +1,4 @@
-name: Read official Kaggle Toolcap60 submission score once
+name: Read current Gemma 4 official Kaggle submission ledger
 on:
   push:
     branches: [research/dual-agent-recovery-v0-20261108]
@@ -6,7 +6,7 @@ on:
 permissions:
   contents: read
 jobs:
-  read_official_receipt:
+  read_official_receipts:
     runs-on: ubuntu-latest
     timeout-minutes: 9
     env:
@@ -15,32 +15,38 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Authenticated read-only competition status and stalled GPU kernel
+      - name: Authenticated read-only status of existing scored and recent official submissions
         run: |
           set -euo pipefail
           python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
           python - <<'PY'
-          import csv, io, json, subprocess, datetime, re
-          stamp=datetime.datetime.now(datetime.timezone.utc).isoformat()
-          proc=subprocess.run(["kaggle","competitions","submissions",
-              "gemma-4-developer-agent","-v"], text=True, capture_output=True,timeout=120)
-          if proc.returncode:raise SystemExit("KAGGLE_SUBMISSION_QUERY_FAILED:"+str(proc.returncode))
-          rows=list(csv.DictReader(io.StringIO(proc.stdout.lstrip("\ufeff"))))
-          desired=[r for r in rows if str(r.get("ref"))=="58164176"]
-          if len(desired)!=1:raise SystemExit("EXPECTED_SUBMISSION_58164176_NOT_UNIQUE")
-          receipt={k:desired[0].get(k) for k in ("ref","status","date","publicScore","privateScore","description")}
-          print("TOOLCAP60_LATEST_OFFICIAL_RECEIPT="+json.dumps({"checked_utc":stamp,**receipt},sort_keys=True),flush=True)
-          numbers=[]
+          import csv, io, json, subprocess, datetime
+          now=datetime.datetime.now(datetime.timezone.utc).isoformat()
+          p=subprocess.run(["kaggle","competitions","submissions",
+                            "gemma-4-developer-agent","-v"],capture_output=True,text=True,timeout=120)
+          if p.returncode:
+              raise SystemExit("AUTHENTICATED_KAGGLE_LEDGER_UNAVAILABLE")
+          rows=list(csv.DictReader(io.StringIO(p.stdout.lstrip("\ufeff"))))
+          refs=("58183466","58164176","58019162","58045795","58112753")
+          for ref in refs:
+              match=[row for row in rows if str(row.get("ref"))==ref]
+              if len(match)!=1:
+                  print("EXISTING_KAGGLE_REF_UNVERIFIED="+ref,flush=True)
+                  continue
+              receipt={key:match[0].get(key) for key in (
+                  "ref","status","date","publicScore","privateScore","description")}
+              print("GEMMA4_AUTHENTICATED_OFFICIAL_RECEIPT="+json.dumps(
+                  {"checked_utc":now,**receipt},sort_keys=True),flush=True)
+          scored=[]
           for row in rows:
               if row.get("status","").upper().endswith("COMPLETE") and row.get("publicScore"):
-                  try:numbers.append(float(row["publicScore"]))
-                  except (ValueError,TypeError):pass
-          print("KAGGLE_HISTORICAL_BEST_SCORED_PUBLIC="+str(max(numbers) if numbers else "NONE"),flush=True)
-          for ref in ("kolihhan/gemma4-toolcap-31b-42609260933",):
-              p=subprocess.run(["kaggle","kernels","status",ref],text=True,capture_output=True,timeout=90)
-              match=re.search(r"KernelWorkerStatus\.([A-Z_]+)",p.stdout+" "+p.stderr)
-              print("TOOLCAP60_PRIVATE_KERNEL_STATE="+json.dumps({"ref":ref,
-                "status":match.group(1) if match else "UNVERIFIED",
-                "query_exit_code":p.returncode},sort_keys=True),flush=True)
-          print("NEW_MODEL_INFERENCE=FALSE NEW_SUBMISSION=FALSE",flush=True)
+                  try:scored.append((float(row["publicScore"]),str(row["ref"])))
+                  except (TypeError,ValueError):pass
+          if scored:
+              score,ref=max(scored)
+              print("GEMMA4_BEST_SCORED_PUBLIC="+json.dumps(
+                  {"ref":ref,"score":score},sort_keys=True),flush=True)
+          else:
+              print("GEMMA4_BEST_SCORED_PUBLIC=UNKNOWN",flush=True)
+          print("READ_ONLY_NO_GPU_NO_SUBMISSION=TRUE",flush=True)
           PY
