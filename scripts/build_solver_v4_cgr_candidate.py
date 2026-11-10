@@ -53,7 +53,8 @@ submit_patch, and preserve remaining time. No loops of generated tests.
 
 
 def payload(source_zip: bytes) -> dict[str, str]:
-    files = v3.payload(source_zip)
+    # Copy base payload before mutating: construction must be pure and repeatable.
+    files = dict(v3.payload(source_zip))
     if MEMBER in files:
         raise ValueError("counterexample script already packaged")
     script = SOURCE.read_text(encoding="utf-8")
