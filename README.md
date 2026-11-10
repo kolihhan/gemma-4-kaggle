@@ -1,14 +1,16 @@
-# Gemma 4 Developer Agent — competition workspace
+# Gemma 4 — Stronger SWE Agent, Kaggle Competition
 
-**Public** research and engineering workspace for **Google – The Gemma 4 Developer Agent Competition**.
+This **public** repository is a research and execution workspace for Google's **Gemma 4 Developer Agent Competition**.
 
-**North star:** build a genuinely stronger, independently verifiable offline software-engineering agent, measured by correctly resolved repository issues **per total evaluation compute**. A valid Kaggle submission is the end-to-end validation deliverable—not the research method.
+**Actual mission:** design and deliver a *stronger offline software-engineering coding agent* that resolves more unseen GitHub issues, completes Kaggle's **12-hour aggregate agent budget**, and earns a verified official score. **CPU compilation, GitHub Actions success and submission acceptance are not solver-quality results.** We own the next substantial architecture improvement; no speculative self-managed training or endless leaderboard tuning.
 
-**Current research plan:** [Goal-aligned replan (2026-11-10)](docs/design/goal-aligned-replan-2026-11-10.md). Prioritize real patch correctness and distinct evidence-backed mechanisms over prompt tuning, extra reviewers, more tool calls, or repeated leaderboard submissions.
+**Read first:** [Current PI execution plan](docs/design/goal-aligned-replan-2026-11-10.md) → [NOW](NOW.md) → [Repo instructions](AGENTS.md). Only one new primary solver candidate and one idempotent official submission per candidate.
 
-**Artifact distinction:** `submission/` currently contains a historical **E4B diagnostic baseline**, **not** the latest scored 31B archive. The best previously scored Public result is **0.17** from an attributed external Budget-Fit V2 reproduction. The later 60-call 31B submission `58164176` was **PENDING** at the last authenticated check. Actual candidate archives are constructed from pinned, verifiable sources by experiment-specific builders; do not assume the in-tree E4B YAML was used for those 31B submissions. Consult [NOW.md](NOW.md) for newer verified results.
+**Current provenance (authenticated 2026-11-10 02:55 UTC):** Best scored public reference **0.17** from an attributed, third-party Budget-Fit V2 31B reproduction (ref **58019162**). Toolcap60 8-minute **58164176** produced an unscored Notebook Timeout; bounded 5-minute recovery **58183466** remains **PENDING** at that check. Neither is an original V3-quality improvement. See [timeout analysis](docs/evaluation/toolcap60-notebook-timeout-recovery-2026-11-10.md).
 
-**Public-data warning:** this repo is currently PUBLIC. Legacy full-dataset mirrors are historical exposure debt, not a permitted pipeline for new competition data; follow [PUBLIC_VISIBILITY.md](PUBLIC_VISIBILITY.md) and hydrate competition resources at runtime.
+**Real architecture:** Competition issue + offline repo → Gemma 4 ADK coder → code evidence → materialized patch → diagnostic test/repair → submit_patch → independent PASS/FAIL. GitHub scripts/Actions and Kaggle CPU notebooks are only the build, validation and submission **control plane**. The historical **submission/** tree is E4B and is **not** the currently scored 31B artifact; experiments/solver-v3/ is the future candidate lane and is **not yet implemented**.
+
+**Public-data safety:** follow [PUBLIC_VISIBILITY.md](PUBLIC_VISIBILITY.md). Historical full Kaggle data mirrors are legacy exposure debt. Do not add raw competition files, reference patches, private task traces or credentials to this public repo. Hydrate private competition resources at run time.
 
 ## Start here
 
@@ -16,10 +18,10 @@
 2. `NOW.md` — current decision, verified state, blockers, and next experiment.
 3. `docs/research/competition-recon-2026-10-31.md` — current competition fact check, including the stale bundled model-list warning.
 4. `docs/design/e4b-baseline-v0.md` — approved minimal baseline design.
-5. `submission/` — historical E4B baseline; scored 31B candidates are pinned external-source builds. See the current plan and `NOW.md` before promotion.
+5. `submission/` — historical E4B diagnostic baseline, not the current 31B competition ZIP. See the PI plan for deliberate candidate promotion.
 6. `docs/evaluation/` — public-corpus profile and failure taxonomy.
 
-## Current baseline
+## Historical E4B diagnostic baseline (not the current competitive system)
 
 Baseline v0 is deliberately simple:
 
@@ -65,7 +67,7 @@ The initial mirror's Kaggle CLI file-inventory command was paginated, so its fir
 
 ### Restore everything locally
 
-Authenticate `gh` for this private repository, or set `GH_TOKEN` / `GITHUB_TOKEN`, then run:
+Historical restore instruction (not a new data-mirroring workflow): authenticate an appropriately authorized GitHub client, then run:
 
 ```bash
 python scripts/restore_full_dataset.py --extract-to data --delete-zip-after-extract
