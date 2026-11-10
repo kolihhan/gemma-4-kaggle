@@ -40,3 +40,5 @@ jobs:
 # v3r: run green gate against executable bundled skill and compiler
 
 # v3r: rerun after actual pytest-regression witness fixes
+
+# v3r: verify official load_skill -> run_skill_script protocol
