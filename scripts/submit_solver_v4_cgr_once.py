@@ -132,6 +132,16 @@ def preflight() -> None:
     print("V4_CGR_PRIVATE_CPU_BUILDER_READY="+KERNEL,flush=True)
 
 
+def verified_kernel_version(response) -> int:
+    """Trust the version acknowledged by the Kaggle push, never a guessed /1."""
+    version = getattr(response, "version_number", None)
+    reference = getattr(response, "ref", None)
+    if reference != KERNEL or type(version) is not int or version < 1:
+        raise RuntimeError("KAGGLE_PUSH_VERSION_UNCONFIRMED")
+    return version
+
+
+
 def submit() -> None:
     local=(ROOT/"submission.zip").read_bytes()
     digest=(ROOT/"candidate.sha256").read_text().strip()
@@ -139,11 +149,15 @@ def submit() -> None:
         raise RuntimeError("FROZEN_CANDIDATE_BYTES_MODIFIED")
     if not check_slot():
         return
-    cmd(["kaggle","kernels","push","-p",str(ROOT/"kernel"),"-t","600"],
-        timeout=240)
-    print("V4_CGR_PRIVATE_CPU_PUSH_RETURNED_OK",flush=True)
+    from kaggle.api.kaggle_api_extended import KaggleApi
+    api=KaggleApi()
+    api.authenticate()
+    pushed=api.kernels_push(str(ROOT/"kernel"))
+    version=verified_kernel_version(pushed)
+    pinned_kernel=f"{KERNEL}/{version}"
+    print("V4_CGR_PRIVATE_CPU_PUSH_VERIFIED="+pinned_kernel,flush=True)
     for _ in range(60):
-        status=cmd(["kaggle","kernels","status",KERNEL],timeout=60)
+        status=cmd(["kaggle","kernels","status",pinned_kernel],timeout=60)
         if "KernelWorkerStatus.COMPLETE" in status:
             break
         if any(x in status for x in ("KernelWorkerStatus.ERROR",
@@ -154,7 +168,7 @@ def submit() -> None:
         raise RuntimeError("V4_CPU_BUILDER_TIMEOUT")
     remote=ROOT/"remote"
     remote.mkdir()
-    subprocess.run(["kaggle","kernels","output",KERNEL+"/1",
+    subprocess.run(["kaggle","kernels","output",pinned_kernel,
                     "-p",str(remote),"-o"],check=True,
                    stdout=subprocess.DEVNULL,timeout=180)
     if (remote/"submission.zip").read_bytes()!=local:
@@ -162,14 +176,11 @@ def submit() -> None:
     print("V4_CGR_EXACT_REMOTE_ZIP_VERIFIED="+digest,flush=True)
     if not check_slot():
         return
-    from kaggle.api.kaggle_api_extended import KaggleApi
-    api=KaggleApi()
-    api.authenticate()
-    print("V4_CGR_OFFICIAL_SUBMIT_CALL_STARTED",flush=True)
+    print("V4_CGR_OFFICIAL_SUBMIT_CALL_STARTED="+pinned_kernel,flush=True)
     try:
         response=api.competition_submit_code(
             file_name="submission.zip",message=MARKER,competition=COMPETITION,
-            kernel=KERNEL,kernel_version=1,quiet=True)
+            kernel=KERNEL,kernel_version=version,quiet=True)
         print("V4_CGR_SUBMIT_API_RESPONSE="+json.dumps(
             response.to_dict() if hasattr(response,"to_dict") else str(response),
             default=str,sort_keys=True),flush=True)
