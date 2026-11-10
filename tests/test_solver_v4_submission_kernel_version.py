@@ -20,16 +20,49 @@ class KernelVersionContractTests(unittest.TestCase):
     def test_valid_server_version_and_fail_closed_errors(self):
         valid = types.SimpleNamespace(ref=target.KERNEL, version_number=7)
         self.assertEqual(target.verified_kernel_version(valid), 7)
+        official_cli_response = types.SimpleNamespace(
+            url="https://www.kaggle.com/code/" + target.KERNEL,
+            versionNumber=7,
+            error="",
+        )
+        self.assertEqual(target.verified_kernel_version(official_cli_response), 7)
+        both = types.SimpleNamespace(
+            ref=target.KERNEL,
+            version_number=7,
+            versionNumber=7,
+        )
+        self.assertEqual(target.verified_kernel_version(both), 7)
         for bad in (
             types.SimpleNamespace(ref=target.KERNEL, version_number=0),
             types.SimpleNamespace(ref=target.KERNEL, version_number=None),
             types.SimpleNamespace(ref=target.KERNEL, version_number=True),
-            types.SimpleNamespace(ref="somebody/other", version_number=7),
+            types.SimpleNamespace(ref=target.KERNEL, version_number=7,
+                                  versionNumber=8),
+            types.SimpleNamespace(ref=target.KERNEL, versionNumber="7"),
             object(),
         ):
             with self.subTest(bad=repr(bad)):
                 with self.assertRaisesRegex(RuntimeError, "VERSION_UNCONFIRMED"):
                     target.verified_kernel_version(bad)
+        for bad in (
+            types.SimpleNamespace(ref="somebody/other", versionNumber=7),
+            types.SimpleNamespace(
+                url="https://www.kaggle.com/code/somebody/other",
+                versionNumber=7,
+            ),
+            types.SimpleNamespace(
+                url="https://www.kaggle.com.evil.invalid/code/" + target.KERNEL,
+                versionNumber=7,
+            ),
+            types.SimpleNamespace(versionNumber=7),
+        ):
+            with self.subTest(bad=repr(bad)):
+                with self.assertRaisesRegex(RuntimeError, "IDENTITY_UNCONFIRMED"):
+                    target.verified_kernel_version(bad)
+        error = types.SimpleNamespace(ref=target.KERNEL, versionNumber=7,
+                                      error="insufficient notebook quota")
+        with self.assertRaisesRegex(RuntimeError, "VERSION_UNCONFIRMED"):
+            target.verified_kernel_version(error)
 
     def test_exact_pushed_version_used_for_status_output_and_submit(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -42,7 +75,8 @@ class KernelVersionContractTests(unittest.TestCase):
 
             api = Mock()
             api.kernels_push.return_value = types.SimpleNamespace(
-                ref=target.KERNEL, version_number=7,
+                url="https://www.kaggle.com/code/" + target.KERNEL,
+                versionNumber=7, error="",
             )
             api.competition_submit_code.return_value = {"ok": True}
             extended = types.ModuleType("kaggle.api.kaggle_api_extended")
