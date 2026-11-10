@@ -1,3 +1,13 @@
+# NOW — Reference research: actual V32 artifact and user-provided config-only 0.22 (2026-11-10)
+
+**Completed forensic source review:** [2026-11-10 public Kaggle notebooks comparison](docs/research/2026-11-10-two-public-gemma-notebook-comparison.md) with read-only evidence [42773762918](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42773762918), [42774739938](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42774739938) and [42775023705](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42775023705). **prvsiyan high-scoring V32 archived ZIP retrieved**, not guessed from latest Notebook: V32 public best displayed 0.20, latest displayed 0.15. The model, nine tools, 28-call/8-minute budget and sampling are byte-identical; only `prompts/system.md` differs; V32 includes a post-final-edit checkpoint. This is a controlled archive diff, **not proof of causal scoring gain**.
+
+**bliverrigpdoge `LB 0.22` source pulled:** a one-cell, literal four-config, no-training 31B agent with native tools, 28 calls/8 minutes/80 turns, early localization, prompt edit, narrow tests and submission; **0.22 is title-asserted, not independently verified official score** from the public kernel metadata. Neither reference demonstrates a novel deterministic repair controller. **Decision:** do NOT copy/re-submit their prompt-only or 8-minute configs or claim agent architecture improvement.
+
+**Research objective unchanged:** our 31B V3-R CPU-valid executable pytest witness still requires a real model function-call/result trace, feedback uptake and independent resolution improvement at matched time before a single V3-R official submission. This public-reference research did **not** start new inference or competition submissions. Earlier official 8-minute/60-tool variant failed timeout; do not use reference budgets blindly.
+
+---
+
 # NOW — Solver V3-R executable candidate built, official CPU VERIFIED (2026-11-10)
 
 **Actual new software:** `experiments/solver-v3/skill/scripts/witness.py` runs real, bounded targeted pytest, saves pre-edit evidence outside the worktree, classifies after-edit repair vs introduced regression vs unchanged failure vs blocked, and refuses to equate a narrow test with hidden issue resolution. The deterministic 31B candidate builder `scripts/build_solver_v3r_candidate.py` combines the pinned attributed V2 source, the witness `SkillToolset`, a bounded evidence-feedback instruction, and **5min / 28 calls / 80 turns** (avoids failed 8min / 60 calls). No training, LoRA, second model, or novel custom callback/tool registry.
