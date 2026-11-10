@@ -1,0 +1,86 @@
+name: Official Toolcap60 Safety 5-minute Timeout Recovery Once
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/toolcap60-safetime5-official-once.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: gemma4-toolcap60-safetime5-20261110
+  cancel-in-progress: false
+jobs:
+  code_submission:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: CPU tests, source contract and timeout-risk facts
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/build_toolcap60_timeout_recovery.py scripts/submit_toolcap60_timeout_recovery_once.py
+          python -m unittest -v             tests.test_build_toolcap60_timeout_recovery             tests.test_build_v2_toolcap_submission             tests.test_prepare_public_budgetfit_v2
+          python - <<'PY'
+          assumed_issues=120
+          task_minutes=5
+          total_minutes=12*60
+          ceiling=assumed_issues*task_minutes
+          assert ceiling==600 and ceiling<total_minutes
+          print("MAX_AGENT_TASK_MINUTES_FOR_120_ISSUES",ceiling)
+          print("HEADROOM_BEFORE_SETUP_AND_OVERHEAD_MINUTES",total_minutes-ceiling)
+          print("HIDDEN_ISSUE_COUNT_UNVERIFIED=TRUE")
+          print("NO_GUARANTEE_AGAINST_OTHER_PLATFORM_TIMEOUTS=TRUE")
+          print("NOVEL_SOLVER_CORRECTNESS_GAIN_PROVEN=FALSE")
+          PY
+      - name: Authenticate and prevent duplicate official submissions
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0" "nbformat==5.10.4"
+          python -m scripts.submit_toolcap60_timeout_recovery_once quota
+      - name: Install official current CPU compiler and scorer schema
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gemma4-official-safetime5-wheels
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel"               -p /tmp/gemma4-official-safetime5-wheels --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check /tmp/gemma4-official-safetime5-wheels/*.whl
+          python - <<'PY'
+          import importlib.metadata as m
+          for pkg,expected in (
+              ("adk-submission","0.2.13"),("google-adk","1.36.1"),
+              ("adk-eval-core","0.1.0"),("swegemma","0.2.11")):
+              actual=m.version(pkg)
+              assert actual==expected,(pkg,actual)
+              print("OFFICIAL_PACKAGE_VERIFIED",pkg,actual)
+          PY
+      - name: Compile original V2-derived 5-minute archive without model inference
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_toolcap60_timeout_recovery_once preflight
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,zipfile,yaml
+          p=Path("/tmp/gemma4-toolcap60-safetime5-submit/submission.zip")
+          with zipfile.ZipFile(p) as z:
+              assert set(z.namelist())=={"agent.yaml","prompts/system.md","configs/sampling.yaml","eval_config.yaml"}
+              settings=yaml.safe_load(z.read("eval_config.yaml"))["evaluation"]
+              assert settings["max_time_minutes"]==5
+              assert settings["max_tool_calls"]==60
+              assert settings["max_turns"]==80
+          digest=hashlib.sha256(p.read_bytes()).hexdigest()
+          assert digest==Path("/tmp/gemma4-toolcap60-safetime5-submit/candidate.sha256").read_text()
+          print("SAFETIME5_FINAL_LOCAL_ARCHIVE_SHA256",digest)
+          print("OFFICIAL_CPU_COMPILE_GATE=PASS")
+          PY
+      - name: Create private CPU builder, verify byte-identical remote ZIP, official submit once
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_toolcap60_timeout_recovery_once submit
+          echo "SUBMISSION_OPERATOR_TERMINAL=TRUE"
