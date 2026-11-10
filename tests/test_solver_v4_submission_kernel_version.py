@@ -26,6 +26,14 @@ class KernelVersionContractTests(unittest.TestCase):
             error="",
         )
         self.assertEqual(target.verified_kernel_version(official_cli_response), 7)
+        # Actual Kaggle SDK response observed in authenticated private CPU
+        # canary 2026-11-11: ref="/code/owner/slug", both version fields.
+        actual_sdk_shape = types.SimpleNamespace(
+            ref="/code/" + target.KERNEL,
+            url="https://www.kaggle.com/code/" + target.KERNEL,
+            versionNumber=7, version_number=7, error="",
+        )
+        self.assertEqual(target.verified_kernel_version(actual_sdk_shape), 7)
         both = types.SimpleNamespace(
             ref=target.KERNEL,
             version_number=7,
@@ -46,6 +54,9 @@ class KernelVersionContractTests(unittest.TestCase):
                     target.verified_kernel_version(bad)
         for bad in (
             types.SimpleNamespace(ref="somebody/other", versionNumber=7),
+            types.SimpleNamespace(ref="/code/somebody/other", versionNumber=7),
+            types.SimpleNamespace(ref="/code/" + target.KERNEL + "/1",
+                                  versionNumber=7),
             types.SimpleNamespace(
                 url="https://www.kaggle.com/code/somebody/other",
                 versionNumber=7,
@@ -75,8 +86,9 @@ class KernelVersionContractTests(unittest.TestCase):
 
             api = Mock()
             api.kernels_push.return_value = types.SimpleNamespace(
+                ref="/code/" + target.KERNEL,
                 url="https://www.kaggle.com/code/" + target.KERNEL,
-                versionNumber=7, error="",
+                versionNumber=7, version_number=7, error="",
             )
             api.competition_submit_code.return_value = {"ok": True}
             extended = types.ModuleType("kaggle.api.kaggle_api_extended")
