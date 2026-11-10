@@ -26,12 +26,12 @@ jobs:
     timeout-minutes: 55
     env:
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
-      SOURCE_SHA: 70dcd7d9ea796d64b7c7029490e5e4de6722d823
+      SOURCE_SHA: c74f437d87c455480a6335be0b744f70a5092662
     steps:
       - name: Check out exact preflighted V4 commit (never mutable branch HEAD)
         uses: actions/checkout@v4
         with:
-          ref: 70dcd7d9ea796d64b7c7029490e5e4de6722d823
+          ref: c74f437d87c455480a6335be0b744f70a5092662
           persist-credentials: false
 
       - name: Verify immutable research commit and submit source
