@@ -1,0 +1,73 @@
+name: Read-only scored V32 shape-of-doubt artifact and 0.22 public metadata
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/study-shape-v32-artifact-readonly.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Collect public V32 scored zip and compare against latest without inference
+        run: |
+          set -euo pipefail
+          python -m pip install -q "kaggle==2.2.5" "six==1.17.0" "pyyaml==6.0.2"
+          mkdir -p /tmp/shapev32 /tmp/shapelatest
+          if kaggle kernels output prvsiyan/gemma-and-the-shape-of-doubt/32 -p /tmp/shapev32 -o >/tmp/shapev32-stderr 2>&1; then
+            echo "HISTORIC_V32_ARTIFACT_FETCH=SUCCESS"
+          else
+            echo "HISTORIC_V32_ARTIFACT_FETCH=FAILED"
+            head -c 600 /tmp/shapev32-stderr
+          fi
+          if kaggle kernels output prvsiyan/gemma-and-the-shape-of-doubt -p /tmp/shapelatest -o >/tmp/shapelatest-stderr 2>&1; then
+            echo "LATEST_ARTIFACT_FETCH=SUCCESS"
+          else
+            echo "LATEST_ARTIFACT_FETCH=FAILED"
+            head -c 600 /tmp/shapelatest-stderr
+          fi
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile,hashlib,yaml,json
+          for dirname in ("shapev32","shapelatest"):
+              d=Path("/tmp")/dirname
+              print("ARTIFACT_DIRECTORY",dirname,[(x.name,x.stat().st_size) for x in d.iterdir() if x.is_file()][:50])
+              for p in d.glob("*.zip"):
+                  print("SCORING_OUTPUT_ZIP",dirname,p.name,hashlib.sha256(p.read_bytes()).hexdigest())
+                  with zipfile.ZipFile(p) as z:
+                      print("ZIP_MEMBERS",z.namelist()[:30])
+                      for n in ("agent.yaml","eval_config.yaml","configs/sampling.yaml","prompts/system.md"):
+                          if n in z.namelist():
+                              s=z.read(n).decode()
+                              print("BUNDLE_FILE_SHA",dirname,n,hashlib.sha256(s.encode()).hexdigest(),len(s))
+                              if n.endswith(".md"):
+                                  print("PUBLIC_PROMPT_HEADINGS",dirname,[l for l in s.splitlines() if l.lstrip().startswith("#")][:40])
+                              elif n.endswith(".yaml"):
+                                  print("PUBLIC_CONFIG",dirname,n,json.dumps(yaml.safe_load(s),default=str)[:2200])
+          PY
+      - name: Check public Kaggle kernel list metadata for claimed 0.22 notebook
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          api=KaggleApi()
+          api.authenticate()
+          for owner in ("bliverrigpdoge","prvsiyan"):
+            try:
+              rows=api.kernels_list(user=owner,page=1,page_size=100)
+              for row in rows:
+                value=row.to_dict() if hasattr(row,"to_dict") else getattr(row,"__dict__",{})
+                name=str(value.get("ref",""))+" "+str(value.get("title",""))
+                if any(k in name.lower() for k in ("0.22","shape-of-doubt","config-files")):
+                  safe={k:v for k,v in value.items() if k in ("ref","title","currentPublicScore","bestPublicScore","lastRunTime","totalVotes","scriptVersionId")}
+                  print("KAGGLE_PUBLIC_KERNEL_METADATA",owner,json.dumps(safe,default=str,sort_keys=True))
+            except Exception as e:
+              print("KAGGLE_PUBLIC_KERNEL_LIST_ERROR",owner,type(e).__name__,str(e)[:240])
+          PY
