@@ -1,3 +1,10 @@
+## Authenticated competitive checkpoint — 0.18 Public (2026-11-10)
+
+[Read-only authenticated Kaggle ledger, Actions 42845134459](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42845134459) confirms new **Public best `0.18`**, submission `58183466`, `toolcap60-safetime5-v1-20261110`, COMPLETE. This is the 5-minute **V2 Toolcap60** budget variant and **not** the V3-R mechanism. The old attributed V2 control ref `58019162` scored `0.17`. The older 8-minute Toolcap60 ref `58164176` is COMPLETE with blank score.
+
+**Updated success definition:** Any eventual V3-R public claim must exceed **0.18**, not 0.17; prove V3-R mechanism uptake on actual 31B and compare on disjoint independent tasks with matched 5min/28-call control, while acknowledging 5min/60-call 0.18 official best is a different budget. At 2026-11-10 15:31 UTC the old private 31B pilot remained QUEUED; no new expensive model run or V3 official submission is authorized based on CPU scripted proof alone.
+
+---
 ## M1 COMPLETE — official injected CodeExecutor + real ADK tool-event integration (2026-11-10)
 
 **Passed:** [Actions 42785080724](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42785080724) **SUCCESS**. This is more than ZIP compilation: the exact V3-R research ZIP was compiled with the **official** `swegemma.harness.agent_runner.AdkSandboxCodeExecutor` attached to `compile_submission`, and a no-inference scripted `BaseLlm` drove the real `google.adk.runners.Runner` with actual tools through an isolated synthetic git checkout. Every step emitted both `FunctionCall` and `FunctionResponse`:
