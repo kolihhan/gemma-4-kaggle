@@ -25,7 +25,7 @@ from scripts.submit_v2_toolcap60_official_once import (
 
 KERNEL = "kolihhan/gemma4-solver-v4-cgr-one-shot-20261110"
 MARKER = "solver-v4-cgr-one-shot-20261110"
-EXPECTED_SHA = "3e56add0b7a94d81e46bff35326df314459e8a8fb3c2e80e68691222809cc9bc"
+EXPECTED_SHA = "5015ae18d03c1aca2e708e749e2f49b8da17ea49b7eb5c14f850558c3110c8be"
 ROOT = Path("/tmp/gemma4-solver-v4-cgr-official")
 
 
