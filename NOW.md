@@ -1,3 +1,13 @@
+# NOW — V4 submit transport 600s cap regression repaired (2026-11-11 02:07 MYT)
+
+A code audit found the SDK transition from `kaggle kernels push -t 600` to `KaggleApi.kernels_push()` had silently dropped the CPU notebook's 600-second execution cap. This was repaired with `kernels_push(...,timeout="600")` and a direct mock assertion in the version/receipt test. **No agent ZIP/model/prompt/sampling/budget changed.**
+
+Verified [official preflight Actions 42871166764](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42871166764) **SUCCESS**, 15 tests passed, official injected ADK scripted CPU probe PASS, exact candidate ZIP SHA256 still `5015ae18d03c1aca2e708e749e2f49b8da17ea49b7eb5c14f850558c3110c8be`, and `V4_CGR_NO_OFFICIAL_SUBMISSION_TRIGGERED=TRUE`. Main manual workflow `submit-v4-cgr-manual.yml` re-pinned in [main commit affc784c](https://github.com/kolihhan/gemma-4-kaggle/commit/affc784c049f52b6a115946b2db21305cd48f3e9) to the exact preflighted research commit `70dcd7d9ea796d64b7c7029490e5e4de6722d823` (double-confirm/manual-only).
+
+**Outcome unchanged:** Kaggle account best scored Public **0.18** (submission `58183466`), V4 has no Kaggle submission/score. Most recent authenticated daily quota still 0 available at 2026-11-11 01:50 MYT; recheck it live before an authorized manual one-shot. The old V2 GPU kernel is still QUEUED, not a V4 pilot. Do not infer a competition improvement from this transport fix or CPU success.
+
+---
+
 # NOW — 31B queue cause narrowed; V4 one-shot decision and architecture pivot (2026-11-11 01:58 MYT)
 
 **New authenticated Kaggle resource fact:** [Actions 42869971831](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42869971831) successfully queried `kaggle==2.2.5` accelerator quota and existing old **V2 Toolcap**, not V4, kernel `kolihhan/gemma4-toolcap-31b-42609260933`. At 2026-11-10 **17:56 UTC**, that Notebook remains `KernelWorkerStatus.QUEUED`, with **no failure message**. Kaggle GPU weekly quota: **17.76h remaining of 30h** (12.24 used), refresh **2026-11-14 00:00 UTC / 08:00 MYT**. This falsifies the simplistic hypothesis that the existing queue is blocked because weekly GPU hours are exhausted; it does **not** prove a particular scheduling root cause. The Notebook cannot establish V4 tool uptake or real V4 issue correctness.
