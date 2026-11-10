@@ -1,0 +1,55 @@
+name: Solver V3-R real ADK Runner tool visibility and queue probe
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/solver-v3r-actual-adk-tools-cpu.yml"]
+permissions:
+  contents: read
+jobs:
+  official_cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install official Kaggle ADK and swegemma wheels for no-inference probe
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "pytest==8.4.2" "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p /tmp/v3r-real-adk-probe-wheels /tmp/v3r-real-adk-probe-source
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel"               -p /tmp/v3r-real-adk-probe-wheels --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check /tmp/v3r-real-adk-probe-wheels/*.whl
+      - name: Existing GPU queue and official score read only
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import subprocess,re,json
+          p=subprocess.run(["kaggle","kernels","status","kolihhan/gemma4-toolcap-31b-42609260933"],capture_output=True,text=True,timeout=90)
+          m=re.search(r"KernelWorkerStatus\.([A-Z_]+)",p.stdout+" "+p.stderr)
+          print("V3R_EXISTING_PRIVATE_KERNEL_STATUS="+json.dumps({"returncode":p.returncode,"state":m.group(1) if m else "UNKNOWN"},sort_keys=True))
+          p=subprocess.run(["kaggle","competitions","submissions","-c","gemma-4-developer-agent","-v"],capture_output=True,text=True,timeout=90)
+          if p.returncode:
+            print("V3R_KAGGLE_LEDGER=UNAVAILABLE")
+          else:
+            for line in p.stdout.splitlines():
+              if any(f in line for f in ("58183466","58164176","58019162")):
+                print("V3R_KAGGLE_LEDGER_ROW="+line[:400])
+          print("V3R_NO_NEW_KERNEL_OR_COMPETITION_SUBMISSION=TRUE")
+          PY
+      - name: Run official compiler and actual ADK Runner no-inference event probe
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_solver_v3r_witness tests.test_build_solver_v3r_candidate
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2             -p /tmp/v3r-real-adk-probe-source -o >/dev/null
+          python -m scripts.build_solver_v3r_candidate             --source-zip /tmp/v3r-real-adk-probe-source/submission.zip             --out /tmp/v3r-real-adk-probe.zip
+          python -m scripts.probe_solver_v3r_adk_calls --zip /tmp/v3r-real-adk-probe.zip
+          echo "V3R_REAL_ADK_FUNCTION_TOOL_PROBE=PASS"
+          echo "V3R_NO_GPU_NO_OFFICIAL_SUBMISSION=TRUE"
