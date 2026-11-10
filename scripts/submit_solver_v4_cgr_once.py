@@ -133,12 +133,38 @@ def preflight() -> None:
 
 
 def verified_kernel_version(response) -> int:
-    """Trust the version acknowledged by the Kaggle push, never a guessed /1."""
-    version = getattr(response, "version_number", None)
-    reference = getattr(response, "ref", None)
-    if reference != KERNEL or type(version) is not int or version < 1:
+    """Pin the saved kernel version using the official Kaggle SDK response.
+
+    Kaggle's response schema documents version_number, while CLI 2.2.5
+    reads versionNumber from its SDK object. Fail closed on disagreement.
+    """
+    from urllib.parse import urlsplit
+
+    if response is None or getattr(response, "error", None):
         raise RuntimeError("KAGGLE_PUSH_VERSION_UNCONFIRMED")
-    return version
+    versions = [
+        value for value in (
+            getattr(response, "version_number", None),
+            getattr(response, "versionNumber", None),
+        ) if value is not None
+    ]
+    if (not versions or any(type(x) is not int or x < 1 for x in versions)
+            or any(x != versions[0] for x in versions)):
+        raise RuntimeError("KAGGLE_PUSH_VERSION_UNCONFIRMED")
+    reference = getattr(response, "ref", None)
+    url = getattr(response, "url", None)
+    if reference is not None and reference != KERNEL:
+        raise RuntimeError("KAGGLE_PUSH_IDENTITY_UNCONFIRMED")
+    if url is not None:
+        parsed = urlsplit(url)
+        expected = "/code/" + KERNEL
+        if (parsed.scheme != "https" or parsed.netloc not in
+                ("www.kaggle.com", "kaggle.com") or
+                parsed.path.rstrip("/") != expected):
+            raise RuntimeError("KAGGLE_PUSH_IDENTITY_UNCONFIRMED")
+    if reference is None and url is None:
+        raise RuntimeError("KAGGLE_PUSH_IDENTITY_UNCONFIRMED")
+    return versions[0]
 
 
 
