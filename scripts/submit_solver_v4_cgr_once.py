@@ -178,7 +178,7 @@ def submit() -> None:
     from kaggle.api.kaggle_api_extended import KaggleApi
     api=KaggleApi()
     api.authenticate()
-    pushed=api.kernels_push(str(ROOT/"kernel"))
+    pushed=api.kernels_push(str(ROOT/"kernel"), timeout="600")
     version=verified_kernel_version(pushed)
     pinned_kernel=f"{KERNEL}/{version}"
     print("V4_CGR_PRIVATE_CPU_PUSH_VERIFIED="+pinned_kernel,flush=True)
