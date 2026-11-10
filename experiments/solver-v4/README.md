@@ -1,3 +1,10 @@
+## Delivery checkpoint — 2026-11-10
+
+**Engineering COMPLETE (not research efficacy):** [official CPU mechanism Actions 42847735843](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42847735843) and [full immutable official preflight Actions 42848898816](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42848898816) both **SUCCESS**. Exact V4 archive SHA-256: `3e56add0b7a94d81e46bff35326df314459e8a8fb3c2e80e68691222809cc9bc`. The standard V2/31B native tools/sampling are unchanged from V3-R; same 5-min/28-call budget. The new test is locked and executed through official ADK-injected CodeExecutor with synthetic no-inference LLM, pytest fail→edit→pytest pass. A full CPU Kaggle Notebook builder was prepared but **not uploaded or scored**.
+
+**Quota gate:** [authenticated Kaggle Action 42848511113](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42848511113) reported `allowed_now=0`, `num_today=1`, no active submissions. No new official submission attempted. The manual-only `solver-v4-cgr-manual-official-once.yml` workflow requires explicit `workflow_dispatch.submit_official=true` and quota to push and submit once. Push-triggered preflight is not a submission. Real 31B tool uptake and independent resolution **UNKNOWN**. Best scored Public **0.18** is unrelated V2 Toolcap60.
+
+---
 # Solver V4-CGR — Counterexample-Guided Repair
 
 **Status:** New unscored research candidate, *not* a competitive breakthrough yet.
