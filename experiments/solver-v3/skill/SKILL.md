@@ -5,7 +5,7 @@ description: Run a real bounded targeted pytest witness before and after a code 
 
 # Repair Witness (V3-R)
 
-Runs a **real pytest process** in the offline /workspace sandbox. This is not
+Runs a **real pytest process** in the offline sandbox's actual git checkout (preferring SWE_WORKSPACE or PWD; the subprocess backend may remap /workspace). This is not
 a hidden-test oracle and not a reason to generate speculative tests. Use only
 a test file/node already found in the repository, not the full suite.
 
