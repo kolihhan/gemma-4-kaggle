@@ -1,8 +1,8 @@
 # Public Repository Execution Policy
 
-**Status: PUBLIC EXECUTION ALLOWED — LEGACY EXPOSURE CLEANUP DEFERRED.**
+**Status: PARTIALLY MITIGATED — DATA RELEASE IS DRAFT, REPOSITORY STILL PUBLIC AND NOT LEAK-FREE.**
 
-Last decision: 2026-11-03.
+Last verified: 2026-11-11 (01:20 MYT).
 
 The repository may remain public while scientific work continues. Public visibility by itself is **not** a blocker for verifier-LoRA, reliability calibration, or other experiments.
 
@@ -24,9 +24,11 @@ The current verifier-LoRA/reliability execution paths follow the intended direct
 
 ## Legacy exposure
 
-Historical exposure remains separate cleanup debt:
+Historical exposure remains separate cleanup debt. On 2026-11-11, [GitHub Actions 42863482029](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42863482029) successfully changed the old Release tagged `kaggle-data-2026-10-31` from published to **DRAFT** without deleting any of its 13 assets. Subsequent normal Release-by-tag GitHub API access returned **404**, mitigating ongoing access through that public endpoint. This does not revoke prior downloads, cached asset URLs, or other exposures. The repository itself remains **public**; its former GitHub Actions attempt to change visibility failed with 403 and its administrator still needs to change visibility in Settings.
 
-- the old GitHub Release tagged `kaggle-data-2026-10-31` may still exist;
+Remaining risks:
+
+- the draft historical Release (13 assets preserved) still exists for authorized collaborators;
 - `tasks.jsonl` exists in reachable repository state/history;
 - older workflow artifacts and historical commits may require a later cleanup audit.
 
