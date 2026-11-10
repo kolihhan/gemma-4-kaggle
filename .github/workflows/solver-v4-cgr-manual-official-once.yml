@@ -1,0 +1,66 @@
+name: Solver V4-CGR frozen official candidate preflight and MANUAL one-shot submit
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/solver-v4-cgr-manual-official-once.yml"]
+  workflow_dispatch:
+    inputs:
+      submit_official:
+        description: "Actually submit one exploratory V4-CGR Kaggle entry (only if authenticated quota is available)"
+        required: true
+        default: false
+        type: boolean
+permissions:
+  contents: read
+concurrency:
+  group: gemma4-v4-cgr-one-official-entry
+  cancel-in-progress: false
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Explicit manual submit gate and official quota, no code submission yet
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.submit_official }}
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python -m scripts.submit_solver_v4_cgr_once quota
+          echo "V4_CGR_MANUAL_SUBMISSION_REQUESTED=TRUE"
+      - name: Run actual counterexample research tests
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "pytest==8.4.2"
+          python -m unittest -v tests.test_solver_v4_counterexample tests.test_build_solver_v4_cgr_candidate
+          python -m py_compile scripts/submit_solver_v4_cgr_once.py
+      - name: Install official compiler wheels from Kaggle wheelhouse
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0" "nbformat==5.10.4"
+          mkdir -p /tmp/v4-official-wheels
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel"               -p /tmp/v4-official-wheels --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check /tmp/v4-official-wheels/*.whl
+      - name: Compile SHA-pinned V4 candidate through real official injected executor
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_solver_v4_cgr_once preflight
+          echo "V4_CGR_FROZEN_CPU_BUILDER_PREFLIGHT=PASS"
+      - name: Make exactly one official Kaggle submission ONLY after explicit manual toggle
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.submit_official }}
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_solver_v4_cgr_once submit
+          echo "V4_CGR_ONE_SHOT_SUBMISSION_PROCEDURE_RETURNED=TRUE"
+      - name: State no submission during normal push preflight
+        if: ${{ github.event_name == 'push' || !inputs.submit_official }}
+        run: echo "V4_CGR_NO_OFFICIAL_SUBMISSION_TRIGGERED=TRUE"
