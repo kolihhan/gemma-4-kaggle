@@ -1,0 +1,98 @@
+name: Read-only reference analysis of two public Gemma notebooks
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/study-two-public-kaggle-references-once.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Pull only public notebook source and check exact scored versions
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          kaggle kernels pull --help | tail -35
+          mkdir -p /tmp/gemma-public-reference-review
+          for reference in "prvsiyan/gemma-and-the-shape-of-doubt" "bliverrigpdoge/lb-0-22-4-config-files-no-training"; do
+            slug="${reference#*/}"
+            owner="${reference%%/*}"
+            target="/tmp/gemma-public-reference-review/${owner}-${slug}-latest"
+            mkdir -p "$target"
+            echo "PUBLIC_REFERENCE_PULL_START=${reference} latest"
+            if kaggle kernels pull "$reference" -p "$target" -m; then
+              echo "PUBLIC_REFERENCE_PULL_SUCCESS=${reference} latest"
+              ls -lh "$target"
+            else
+              echo "PUBLIC_REFERENCE_PULL_FAILED=${reference} latest"
+            fi
+          done
+          mkdir -p /tmp/gemma-public-reference-review/prvsiyan-shape-v32
+          echo "PUBLIC_REFERENCE_PULL_START=prvsiyan/gemma-and-the-shape-of-doubt V32"
+          if kaggle kernels pull "prvsiyan/gemma-and-the-shape-of-doubt" -p /tmp/gemma-public-reference-review/prvsiyan-shape-v32 -m -v 32; then
+            echo "PUBLIC_REFERENCE_PULL_SUCCESS=prvsiyan/gemma-and-the-shape-of-doubt V32"
+          else
+            echo "PUBLIC_REFERENCE_PULL_FAILED=prvsiyan/gemma-and-the-shape-of-doubt V32"
+          fi
+      - name: Print compact reproducible source analysis without republishing notebooks
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,hashlib,re
+          from pathlib import Path
+          root=Path("/tmp/gemma-public-reference-review")
+          pats=re.compile(r'(?i)agent.yaml|eval_config|sampling.yaml|model_name|model:|max_time|tool_calls|turns|temperature|top_p|top_k|native|skill|test|pytest|rollback|recover|commit|patch|files\s*=|FILE[S]?\s*=|system_prompt|graph|critic|verification|validation|budget|token|doubt|confidence|reason|uncertain|independent|sequential|subagent|plan|code_execution|source|resolution')
+          for folder in sorted(root.iterdir()):
+            print("===== PUBLIC_REFERENCE_DIGEST",folder.name)
+            files=list(folder.rglob("*"))
+            print("FILES",[(str(p.relative_to(folder)),p.stat().st_size) for p in files if p.is_file()][:30])
+            for p in files:
+              if not p.is_file() or p.suffix.lower() not in (".ipynb",".py"):
+                continue
+              raw=p.read_bytes()
+              if p.suffix.lower()==".ipynb":
+                obj=json.loads(raw)
+                cells=[c for c in obj.get("cells",[]) if c.get("cell_type")=="code"]
+                code="\n\n".join("".join(c.get("source",[])) for c in cells)
+                print("NOTEBOOK",p.name,"code_cells",len(cells),"source_chars",len(code),"sha256",hashlib.sha256(raw).hexdigest())
+              else:
+                code=raw.decode("utf-8",errors="replace")
+                print("PYTHON",p.name,"source_chars",len(code),"sha256",hashlib.sha256(raw).hexdigest())
+              lines=code.splitlines()
+              matching=[i for i,line in enumerate(lines) if pats.search(line)]
+              keep=set()
+              for i in matching:
+                keep.update(range(max(0,i-1),min(len(lines),i+3)))
+              print("CODE_TOTAL_LINES",len(lines),"MATCHED_LINES",len(matching))
+              last=-2
+              max_print=200
+              for n,i in enumerate(sorted(keep)[:max_print]):
+                if i>last+1:print("...")
+                print("L",i+1,lines[i][:260].replace("\t","  "))
+                last=i
+              print("REFERENCE_END",p.name)
+          PY
+      - name: Read own official Kaggle submission ledger for 2 known refs, no submissions
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,subprocess
+          p=subprocess.run(["kaggle","competitions","submissions","-c","gemma-4-developer-agent","-v"],capture_output=True,text=True,timeout=90)
+          print("SELF_SUBMISSION_LEDGER_STATUS",p.returncode)
+          if p.returncode:
+              print("SELF_SUBMISSION_LEDGER_UNAVAILABLE")
+          else:
+              rows=[x for x in p.stdout.splitlines() if any(token in x for token in ("58164176","58183466","58019162"))]
+              for row in rows:print("SELF_SUBMISSION_LEDGER_ROW",row[:380])
+              print("SELF_SUBMISSION_LEDGER_MATCHES",len(rows))
+          PY
