@@ -1,0 +1,96 @@
+name: V4-CGR user-authorized one-time official submission 20261111
+on:
+  push:
+    branches:
+      - research/dual-agent-recovery-v0-20261108
+    paths:
+      - ".github/workflows/v4-cgr-user-go-once-20261111.yml"
+permissions:
+  contents: read
+concurrency:
+  group: gemma4-v4-cgr-one-official-entry
+  cancel-in-progress: false
+jobs:
+  guarded_submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Authenticate and determine whether a new V4 entry is permitted
+        id: slot
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import json,os
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          from scripts.submit_solver_v4_cgr_once import (
+              COMPETITION,receipt,authenticated_submissions,MARKER
+          )
+          records=authenticated_submissions()
+          existing=receipt(records)
+          if existing is not None:
+              go=False
+              print("V4_GO_ALREADY_SUBMITTED="+json.dumps(existing,sort_keys=True),flush=True)
+          else:
+              api=KaggleApi()
+              api.authenticate()
+              quota=api.competition_get_submission_limits(COMPETITION)
+              active=[r.get("ref") for r in records
+                  if (r.get("status") or "").upper().split(".")[-1] in
+                     {"PENDING","RUNNING","QUEUED","SCORING","EVALUATING"}]
+              go=bool(quota.num_allowed_now>=1 and
+                      not quota.limited_by_total and not active)
+              print("V4_GO_AUTHENTICATED_QUOTA="+json.dumps({
+                  "allowed_now":quota.num_allowed_now,
+                  "num_today":quota.num_today,
+                  "limited_by_total":quota.limited_by_total,
+                  "active":active,
+                  "can_submit":go,
+              },sort_keys=True),flush=True)
+          with open(os.environ["GITHUB_OUTPUT"],"a",encoding="utf-8") as out:
+              out.write("proceed="+("true" if go else "false")+"\n")
+          print("V4_GO_USER_AUTHORIZED_ONE_SHOT_MARKER="+MARKER,flush=True)
+          PY
+      - name: Stop cleanly if quota blocked or identical submission exists
+        if: ${{ steps.slot.outputs.proceed != 'true' }}
+        run: echo "V4_GO_NO_SUBMISSION_QUOTA_OR_DUPLICATE_BLOCK=TRUE"
+      - name: Verify frozen candidate code and behavior (no model inference)
+        if: ${{ steps.slot.outputs.proceed == 'true' }}
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "pytest==8.4.2" "nbformat==5.10.4"
+          python -m unittest -v tests.test_solver_v4_counterexample tests.test_build_solver_v4_cgr_candidate
+          python -m py_compile scripts/submit_solver_v4_cgr_once.py
+          mkdir -p /tmp/v4-user-go-official-wheels
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel" -p /tmp/v4-user-go-official-wheels --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check /tmp/v4-user-go-official-wheels/*.whl
+          python -m scripts.submit_solver_v4_cgr_once preflight
+          echo "V4_GO_EXACT_FROZEN_CPU_PREFLIGHT=PASS"
+      - name: Submit exact preflighted V4 ZIP once and verify Kaggle receipt
+        if: ${{ steps.slot.outputs.proceed == 'true' }}
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_solver_v4_cgr_once submit
+          echo "V4_GO_SUBMIT_PATH_COMPLETED=TRUE"
+      - name: Verify official ledger marker and report status without resubmission
+        if: ${{ steps.slot.outputs.proceed == 'true' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from scripts.submit_solver_v4_cgr_once import authenticated_submissions,receipt
+          entry=receipt(authenticated_submissions())
+          if entry is None:
+              raise RuntimeError("V4_GO_NO_AUTHENTICATED_KAGGLE_RECEIPT")
+          print("V4_GO_OFFICIAL_LEDGER="+json.dumps(entry,sort_keys=True),flush=True)
+          PY
