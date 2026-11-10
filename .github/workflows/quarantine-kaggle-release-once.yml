@@ -1,0 +1,38 @@
+name: Quarantine historical competition-data Release once
+on:
+  push:
+    branches:
+      - research/dual-agent-recovery-v0-20261108
+    paths:
+      - .github/workflows/quarantine-kaggle-release-once.yml
+permissions:
+  contents: write
+jobs:
+  quarantine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Make old competition-data Release a draft without deleting assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag="kaggle-data-2026-10-31"
+          response="$(gh api "repos/${REPO}/releases/tags/${tag}")"
+          release_id="$(jq -r '.id' <<<"$response")"
+          current_draft="$(jq -r '.draft' <<<"$response")"
+          asset_count="$(jq -r '.assets | length' <<<"$response")"
+          echo "QUARANTINE_BEFORE_DRAFT=$current_draft ASSET_COUNT=$asset_count"
+          test "$release_id" != "null"
+          test "$asset_count" -eq 13
+          if [ "$current_draft" != "true" ]; then
+            printf '%s' '{"draft":true}' |
+              gh api -X PATCH "repos/${REPO}/releases/${release_id}" --input - >/dev/null
+          fi
+          final="$(gh api "repos/${REPO}/releases/${release_id}")"
+          test "$(jq -r '.draft' <<<"$final")" = "true"
+          test "$(jq -r '.assets | length' <<<"$final")" -eq 13
+          echo "QUARANTINE_RELEASE_DRAFT=TRUE ASSETS_PRESERVED=13"
+          echo "REPOSITORY_VISIBILITY_UNCHANGED=TRUE"
