@@ -2,6 +2,60 @@
 
 **Status:** Current strategy and next delivery contract. This document replaces the diffuse previous plan at this path. It **does not** mean Solver V3 has already been implemented, measured or submitted. Historical plan is preserved in Git history.
 
+## PI directive — architecture and Kaggle outcome over process metrics (2026-11-10 11:06 MYT)
+
+This section is the **current user-aligned decision contract**, superseding procedural priorities below where they disagree. Do not create a second plan file. Existing frozen experimental results and official receipts remain unchanged.
+
+### Four required outcomes
+
+1. **Competitive strength** — beat our actual verified scored 31B Public **0.17** (attributed third-party Budget-Fit V2, `58019162`), not merely finish ZIP compilation, get a Kaggle submission ID or beat the failed original E4B baseline. Maintain 12-hour **aggregate** issue+sandbox time feasibility. Our own V3 must be a new independent candidate, not misattributed copy.
+2. **Technical substance** — improve a meaningful **agent decision mechanism or action interface** that could change which GitHub issue fixes are correct. An extra prompt, timeout tweak, tool-call budget increase, or optional Reviewer is not a scientific architecture contribution. Do not claim a deterministic gate unless the exact official ADK runtime can execute it.
+3. **Complete delivery** — Research hypothesis → **running** native-ADK Solver → independently measured issue PASS/FAIL and cost → one frozen legal `submission.zip` → one official submission → official scored result and honest keep/reject decision. A candidate without independent correctness evidence may only be submitted as one explicitly marked exploratory end-to-end probe when separate 31B infrastructure is inaccessible and the CPU runtime path is verified.
+4. **Resource discipline** — reuse scored original V2 ZIP and existing diagnostics; do not initiate repeated user-managed training, speculative LoRA, redundant private GPU runs, 4-task overfitting, repeated failed score submissions or unlimited queue polling. New training requires an explicit new user decision and evidence that the bottleneck is model generation, not harness mechanics.
+
+### Clear model of the architecture (31B)
+
+**Official production path:** GitHub issue + mounted source → **one Gemma 4 31B patch writer** with official ADK tools → gathered code/requirements witnesses → **concrete materialized candidate patch** → targeted test and typed result → select a repair / preserve the supported patch / finalize → `submit_patch` → independent scorer. The submitted code ZIP is **declarative**, not an arbitrary Python harness. Only officially registered tools and permitted skills/subagents can run in the official evaluator.
+
+**Control plane** (outside production): GitHub tests and scripts, private Kaggle source hydration, official ADK compilation, score/trace observers, independent grader, one-shot competition ZIP build and authenticated score ledger. Nothing in the control plane should be passed off as an agent improvement. Our `scripts/candidate_history.py` observer runs privately for diagnostics; Kaggle's closed registry **does not** register our Python callback as a submission capability.
+
+### Primary engineering candidate: Solver V3-R (conditional evidence-to-repair)
+
+**Question:** Can a coder turn *actual source and test observations* into a more correct second edit, without merely increasing calls or time?
+
+**Decision policy to implement in a supported action path:**
+
+- **Localize only until there is a falsifiable hypothesis.** Extract explicit issue requirements, implementation/caller obligations, and relevant source/test witnesses. Unknown requirements stay UNKNOWN; broad unrelated reads are not rewarded.
+- **Materialize one minimum viable candidate** and identify its exact actual diff. Preserve worktree state when the official available native tools permit it; check that this is actually observable/usable in the production sandbox. A private diagnostic snapshot alone does **not** give the submitted agent rollback capability.
+- **Interpret evidence, not exit-code mythology:** distinguish (i) directly relevant behavioral assertion failed, (ii) environment/collection/import failure, (iii) test passed but incomplete requirement coverage, and (iv) inconclusive result. Each leads to a different **next action**: narrow semantic repair, alternative focused check, inspect another affected path, or terminate within budget.
+- **One purposeful recovery:** update the mistaken hypothesis based on the observed failure and make a targeted second patch; do not automatically revert on any nonzero exit or repeat a Reviewer. Save the best supported candidate only if the runtime can actually restore it under the allowed tools.
+- **Finish deliberately:** verify touched behavior, current diff and patch completeness. Submit once within the global budget. If the supported runtime cannot enforce some intended guard, label it **model-mediated** rather than pretend a reliable external callback exists.
+
+**What is genuinely different from a prompt:** The first prototype must have **typed tool-call / tool-result traces plus observable, non-illusory state transitions**, not just a changed instruction paragraph. Where a deterministic action requires an unregistered custom callback/tool, **stop** that mechanism and select a legal native-tool/ADK alternative. Verify tool events in a scripted clean CPU fixture; this proves mechanics only, not repair quality.
+
+**Global competing hypotheses / falsifiers:**
+
+| Hypothesis | Observable support | What would reject or demote it |
+| --- | --- | --- |
+| H1: Missing issue semantics / feedback utilization (first) | Code reached and test evidence identifies overlooked behavior; corrected second patch independently resolves issue | Valid evidence is consumed but repeated candidate repairs remain wrong; overhead harms matched-budget resolution |
+| H2: Lost good intermediate patch (conditional, NOT assumed) | A pre-submit snapshot independently passes but later final patch fails | History contains no passing intermediate patch; rollback machinery cannot add a real rescue |
+| H3: Model generation ceiling | Correct source/evidence is accessible yet no acceptable candidate ever materializes | Meaningful non-training decision intervention consistently improves clean resolution |
+| H4: Genuine specialist value | Same-budget role provides disjoint new evidence absent in coder continuation | Repeat of Reviewer v0's extra cost and no added issue resolutions |
+
+### One executable sequence, no more parallel experiments
+
+**M0 (read-only, current state):** Keep frozen V2 31B control ZIP hash `a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3`. Official scoring best 0.17. Check Toolcap60 recovery `58183466` to terminal status using the existing ledger job, but **do not turn timeout recovery into the next research lane**; close it after that one result.
+
+**M1 (FIRST CODE CHANGE):** Implement **one** true V3-R candidate in `experiments/solver-v3/`, with `build_` runner, exact V2 provenance, official native YAML/Skill/AgentTool support check, scripted non-competition CPU fixture that emits real ADK invocation/result events, and an explicit fail-closed prohibition on unregistered hooks. No modification to historical `submission/` or scored V2 source. Gate: a real production-legal mechanism is reached through an actual tool event and changes the chosen action based on a deliberately contrasting returned observation. If not, reject this prototype before GPU.
+
+**M2 (CORRECTNESS GATE):** If M1 passes, run exactly one preregistered **fresh task-disjoint**, matched-budget 31B control vs V3-R experiment when private Kaggle inference is available. Collect actual `swegemma` resolved per issue, rescues/regressions, affected source paths, patch validity, tool-result handling and *aggregate* time. Previously exposed four-task Contract & Impact and old E4B failures are diagnostics only. If private GPU queue is unavailable, no repeated queue-wait kernels: optionally one clearly marked **exploratory** official end-to-end submission after CPU compiler and valid ZIP tests, authorized resources and available quota. Do not claim its score proves mechanism.
+
+**M3 (OFFICIAL SHIP):** Build one immutable candidate ZIP, run the official CPU preflight, publish the exact package using existing Kaggle tooling, submit ONCE, and capture official terminal score and no-timeout outcome. Keep if real independently resolved issues improve **and** official score beats 0.17 without breaking runtime. Otherwise record failure and pivot a **method class**, not model prompt/call count/time limit.
+
+**Scope controls:** no fresh GPU runs or new official submissions as part of *this replan*. Implementation work is a separate execution milestone, not secretly completed by this design record. One active candidate, one matched experiment, one official Kaggle receipt, one source of truth (`NOW.md`). Do not proliferate Action YAMLs or start a new training project to avoid architecture work.
+
+---
+
 ## 1. Purpose — what the user is paying attention to
 
 **Build a genuinely stronger Gemma 4 coding agent that fixes more unseen GitHub issues, fits the competition's global runtime, and produces competitive, scored Kaggle submissions.**
