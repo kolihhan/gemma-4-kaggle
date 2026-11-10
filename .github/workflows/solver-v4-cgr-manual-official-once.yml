@@ -40,7 +40,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install -q --disable-pip-version-check "pytest==8.4.2"
-          python -m unittest -v tests.test_solver_v4_counterexample tests.test_build_solver_v4_cgr_candidate
+          python -m unittest -v tests.test_solver_v4_counterexample tests.test_build_solver_v4_cgr_candidate tests.test_solver_v4_submission_kernel_version
           python -m py_compile scripts/submit_solver_v4_cgr_once.py
       - name: Install official compiler wheels from Kaggle wheelhouse
         run: |
