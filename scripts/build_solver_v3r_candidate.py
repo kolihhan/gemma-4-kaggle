@@ -31,11 +31,13 @@ what behavior needs repairing. Do not invent requirements or fake test results.
 A nonempty diff does not mean a correct repair.
 
 The repair-witness Skill is a REAL executable targeted pytest witness, NOT a
-second LLM or hidden oracle. When an applicable existing test is known, use
-run_skill_script with skill_name="repair-witness", file_path="scripts/witness.py",
+second LLM or hidden oracle. When an applicable existing test is known,
+FIRST call load_skill with skill_name="repair-witness" and read its protocol.
+Then call run_skill_script with skill_name="repair-witness",
+file_path="scripts/witness.py",
 args={"phase":"before","target":"relative/test_file.py::test_name"} before
 the edit IF it fits the time budget, then rerun with phase="after" and the
-same target after editing. Skill lookup may require load_skill first.
+same target after editing. Never call a skill script before loading its Skill.
 If an existing narrow test is only found after editing, run phase="after"
 only and recognize baseline_unavailable. Never invent a test path.
 
