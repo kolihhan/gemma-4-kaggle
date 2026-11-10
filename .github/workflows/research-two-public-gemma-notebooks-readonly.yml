@@ -1,0 +1,119 @@
+name: Research two public Gemma Agent notebooks — code and config static only
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/research-two-public-gemma-notebooks-readonly.yml]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: python -m pip install -q kaggle==2.2.5 six==1.17.0
+      - name: Pull two public notebook sources, no model run, no GPU, no submission
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python - <<'PY'
+          import ast,hashlib,json,pathlib,re,subprocess,tempfile
+          refs=[
+              "prvsiyan/gemma-and-the-shape-of-doubt",
+              "bliverrigpdoge/lb-0-22-4-config-files-no-training",
+          ]
+          helper=subprocess.run(["kaggle","kernels","pull","--help"],
+                            capture_output=True,text=True)
+          flags=[s.strip() for s in helper.stdout.splitlines()
+                 if any(k in s for k in ("--version","--kernel","-m,", "-v,"))]
+          print("PUBLIC_GEMMA_KERNEL_PULL_VERSION_FLAGS",json.dumps(flags),flush=True)
+          def sha(data):return hashlib.sha256(data.encode("utf-8")).hexdigest()
+          def linestr(x):return "".join(x) if isinstance(x,list) else str(x)
+          def extract_literal_file_maps(source):
+              found=[]
+              try:tree=ast.parse(source)
+              except SyntaxError:return found
+              for node in tree.body:
+                  value=None
+                  keys=[]
+                  if isinstance(node,(ast.Assign,ast.AnnAssign)):
+                      keys=[t.id for t in node.targets if isinstance(t,ast.Name)] if isinstance(node,ast.Assign) else ([node.target.id] if isinstance(node.target,ast.Name) else [])
+                      value=node.value
+                  if value is None or not isinstance(value,ast.Dict):continue
+                  try:obj=ast.literal_eval(value)
+                  except Exception:continue
+                  if not isinstance(obj,dict) or not obj:continue
+                  filelike=sum(isinstance(k,str) and k.endswith((".yaml",".yml",".md",".py")) for k in obj)
+                  if filelike>=2:
+                      found.append((keys[0] if keys else "<unnamed>",obj))
+              return found
+          with tempfile.TemporaryDirectory() as tmp:
+              for j,ref in enumerate(refs):
+                  folder=pathlib.Path(tmp)/str(j);folder.mkdir()
+                  p=subprocess.run(["kaggle","kernels","pull",ref,"-p",str(folder),"-m"],
+                    capture_output=True,text=True,timeout=140)
+                  if p.returncode:
+                      print("PUBLIC_GEMMA_SOURCE_PULL_ERROR",json.dumps({
+                        "ref":ref,"return_code":p.returncode,
+                        "reason":(p.stdout+"\n"+p.stderr)[-450:]
+                      },sort_keys=True),flush=True)
+                      continue
+                  meta_path=folder/"kernel-metadata.json"
+                  meta=json.loads(meta_path.read_text()) if meta_path.is_file() else {}
+                  files=list(folder.glob("*.ipynb"))+list(folder.glob("*.py"))
+                  cells=[]
+                  for file in files:
+                      if file.suffix==".py":
+                          cells.append(file.read_text(errors="replace"))
+                      else:
+                          doc=json.loads(file.read_text())
+                          cells += [linestr(c.get("source",[])) for c in doc.get("cells",[])
+                                    if c.get("cell_type")=="code"]
+                  code="\n".join(cells)
+                  constants=[]
+                  for cell in cells:constants.extend(extract_literal_file_maps(cell))
+                  derived={}
+                  for name,asset_map in constants:
+                      for fname,body in asset_map.items():
+                          if not isinstance(fname,str) or not isinstance(body,str) or not fname.endswith((".yaml",".yml",".md",".py")):continue
+                          derived[fname]=body
+                  configs=[]
+                  for fname,body in sorted(derived.items()):
+                      lines=body.splitlines()
+                      if fname.endswith((".yaml",".yml")):
+                          selected=[s.strip()[:140] for s in lines
+                            if re.match(r"^\s*(agent_class|name|model|tools|agent_tool|config_path|skills|sub_agents|max_tool_calls|max_time_minutes|timeout_seconds|max_turns|thinking_budget|temperature|top_p|instruction|include_contents|description):",s)]
+                      else:
+                          selected=[s.strip()[:145] for s in lines if
+                             re.match(r"^\s*(#{1,4}\s|[-*]\s+\*\*|###|def |class )",s)]
+                      configs.append({"file":fname,"sha256":sha(body),"chars":len(body),
+                          "lines":len(lines),"structural_lines":selected[:32],
+                          "evidence_mentions":len(re.findall(r"test|assert|traceback|hypothes|verify|edit|diff|regress|rollback|uncertain|confidence|budget|repair",body,re.I))})
+                  interesting=[]
+                  pat=re.compile(r"(?i)(?:AgentTool|SequentialAgent|LoopAgent|ParallelAgent|LLMagent|AGENT_YAML|FILES|zipfile|submission.zip|checkpoint|rollback|rank|reason|verify|self.check|source|traceback|uncertain|confidence|test feedback|test output|root cause|time_minutes|max_tool_calls)")
+                  for ci,cell in enumerate(cells):
+                      for i,line in enumerate(cell.splitlines()):
+                          if not pat.search(line):continue
+                          # Only short structural snippets, never print raw task text/dataset.
+                          if "base64" in line.lower() or len(line)>340:continue
+                          interesting.append({"cell":ci,"line":i+1,"snippet":line.strip()[:160]})
+                  rec={
+                    "ref":ref,"metadata":{k:meta.get(k) for k in
+                      ("id","id_no","title","is_private","kernel_type","enable_internet","competition_sources","dataset_sources","model_sources","code_file")},
+                    "source_files":[p.name for p in files],
+                    "source_sha256":sha(code),"source_chars":len(code),
+                    "code_cells":len(cells),"static_file_maps":[{"name":n,"files":len(d)} for n,d in constants],
+                    "derived_files":configs[:25],
+                    "interesting_snippets":interesting[:72],
+                    "training_signals":{k:len(re.findall(v,code,re.I)) for k,v in
+                       {"optimizer":r"torch\.optim|optimizer\.step|\.backward\(\)",
+                        "lora":r"lora|peft|adapter_model",
+                        "zip":r"submission\.zip",
+                        "root_model":r"gemma-4-31b|gemma-4-e4b|gemma-4-12b",
+                        "tooling":r"AgentTool|LlmAgent|SequentialAgent|LoopAgent|tool_registry"}.items()}
+                  }
+                  print("PUBLIC_GEMMA_STATIC_SOURCE_AUDIT",json.dumps(rec,sort_keys=True),flush=True)
+          PY
