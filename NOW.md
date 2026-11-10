@@ -1,3 +1,13 @@
+# NOW — Toolcap60 Notebook Timeout → bounded recovery (2026-11-10)
+
+**New verified incident:** User's Kaggle submission `58164176` reported **Notebook Timeout**. Authenticated [GitHub check 42648039124](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42648039124) at **2026-11-10 02:38 UTC** reported `SubmissionStatus.COMPLETE` with **blank Public and Private scores**; this matches the user-visible error. It is **not** evidence of poor patch correctness. The Kaggle main competition limits agent+setup time to **12 hours total**, independent of optional per-task cap. Earlier 28-call/8min V2 scored **0.17**, and 28-call/5min V2 scored **0.15**. We cannot prove which exact task or engine stall produced the new timeout without grader traces.
+
+**One operational repair, not Solver V3:** new builder `scripts/build_toolcap60_timeout_recovery.py` retains original model/assistant/tool schema, sampling, 60 calls and 80 turns of the failed Toolcap60 ZIP, changing only per-task time **8→5 minutes**. Under an *assumed* 120 issues: 600 agent-task minutes versus 720-minute limit, providing 120 minutes of contingent setup/other buffer; task count/overhead may differ. This is NOT proof of timeout elimination or improvement over 0.17. [New one-shot official workflow 42744871831](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42744871831) passed CPU tests and quota/duplicate checks, started its official ADK preflight and remote ZIP verification; **no new receipt at this writing**. It will submit once if official checks pass and a slot is available. Existing score controls and canonical E4B `submission/` remain untouched.
+
+**Incident report:** [Toolcap60 notebook timeout and scoped recovery](docs/evaluation/toolcap60-notebook-timeout-recovery-2026-11-10.md). **Research direction unchanged:** halt repeated tool/time cap tuning after this operational recovery and resume real Semantic Repair Solver V3 (repo-evidence → verified patch correctness) under matched compute. Never equate successful packaging or official acceptance with stronger agent quality.
+
+---
+
 # NOW — Goal-aligned Gemma 4 strategy RESET (2026-11-10)
 
 **North star:** genuinely stronger *offline software-engineering issue repair*, independently resolved tasks per total competition compute; Kaggle is the external validation endpoint, not a prompt/leaderboard optimization loop. Read the complete [goal-aligned replan](docs/design/goal-aligned-replan-2026-11-10.md).
