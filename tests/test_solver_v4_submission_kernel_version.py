@@ -114,7 +114,7 @@ class KernelVersionContractTests(unittest.TestCase):
 
             self.assertEqual(gate.call_count, 2)
             api.authenticate.assert_called_once()
-            api.kernels_push.assert_called_once_with(str(root / "kernel"))
+            api.kernels_push.assert_called_once_with(str(root / "kernel"), timeout="600")
             self.assertEqual(download_refs, [target.KERNEL + "/7"])
             self.assertEqual(cli.call_args.args[0][:4], [
                 "kaggle", "kernels", "status", target.KERNEL + "/7"
