@@ -23,7 +23,7 @@ Existing exact, third-party Apache-2.0 Budget-Fit V2 31B control scored **0.17**
 | `scripts/verify_solver_v3r_official.py` | Official wheelhouse ADK compiler + sandbox-free synthetic ZIP script execution |
 | `.github/workflows/solver-v3r-cpu-gate.yml` | One focused CPU CI execution gate |
 
-**Verified CPU Actions**: [42748472850](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42748472850) **SUCCESS**, 10 focused unit tests; compilation with `adk-submission==0.2.13` / `swegemma==0.2.11` accepted the ZIP, root model 31B, and displayed `SkillToolset` in compiled agent.tools. The **actual script from unpacked ZIP** ran a real synthetic pytest and reported pass. ZIP SHA256: `259f143e111bcd0e3e40af9f4ad0ab8536243436ff9b13c0365bab36d10b2e65`.
+**Verified final CPU Actions (with required load_skill-before-run_skill_script protocol)**: [42749343409](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42749343409) **SUCCESS**, 10 focused unit tests; compilation with `adk-submission==0.2.13` / `swegemma==0.2.11` accepted the ZIP, root model 31B, and displayed `SkillToolset` in compiled agent.tools. The **actual script from unpacked ZIP** ran a real synthetic pytest and reported pass. ZIP SHA256: `25e86f12c992a068cac77ae532482374be5a3dc508a55b4844869aa0241cc50d`.
 
 **Explicitly NOT verified:** genuine 31B model chose to call `run_skill_script`; the scorer sandbox's live CodeExecutor executed it; real issue-level correctness improved; full hidden evaluation completed without timeout. Synthetic scripted tool availability/CPU tests are not substitutes for a model trace or a scored solution.
 
