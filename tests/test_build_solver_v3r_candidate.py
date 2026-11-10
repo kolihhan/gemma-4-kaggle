@@ -39,6 +39,8 @@ class V3RCandidateTests(unittest.TestCase):
         self.assertNotIn("max_time_minutes: 8", files["eval_config.yaml"])
         self.assertIn("skills:\n  - skills/repair-witness",files["agent.yaml"])
         self.assertIn("run_skill_script", files["prompts/system.md"])
+        self.assertLess(files["prompts/system.md"].index("FIRST call load_skill"),
+                        files["prompts/system.md"].index("Then call run_skill_script"))
         self.assertIn("skills/repair-witness/SKILL.md", files)
         self.assertIn("skills/repair-witness/scripts/witness.py", files)
 
