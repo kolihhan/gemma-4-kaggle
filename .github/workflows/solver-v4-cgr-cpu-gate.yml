@@ -1,0 +1,42 @@
+name: Solver V4-CGR real counterexample mechanism official CPU gate
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/solver-v4-cgr-cpu-gate.yml"]
+permissions:
+  contents: read
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Real before/after witness tests and deterministic no-training build
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "pytest==8.4.2"
+          python -m unittest -v tests.test_solver_v4_counterexample tests.test_build_solver_v4_cgr_candidate
+          python -m unittest -v tests.test_solver_v3r_witness tests.test_build_solver_v3r_candidate
+          python -m py_compile scripts/build_solver_v4_cgr_candidate.py scripts/probe_solver_v4_cgr_official_executor.py
+      - name: Official 31B CPU wheelhouse, no GPU and no official submission
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p /tmp/v4-cgr-official-wheels /tmp/v4-cgr-pinned-source
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel"               -p /tmp/v4-cgr-official-wheels --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check /tmp/v4-cgr-official-wheels/*.whl
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2             -p /tmp/v4-cgr-pinned-source -o >/dev/null
+          python -m scripts.build_solver_v4_cgr_candidate             --source-zip /tmp/v4-cgr-pinned-source/submission.zip             --out /tmp/v4-cgr-candidate.zip
+          python -m scripts.probe_solver_v4_cgr_official_executor             --zip /tmp/v4-cgr-candidate.zip
+          echo "V4_CGR_OFFICIAL_CPU_END_TO_END=PASS"
+          echo "V4_CGR_REAL_GEMMA_MODEL_EVALUATED=FALSE"
+          echo "V4_CGR_NEW_COMPETITION_SUBMISSION=FALSE"
