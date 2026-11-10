@@ -72,6 +72,44 @@ def _assess(returncode: int | None, output: str) -> str:
     return "blocked"
 
 
+def _worktree_fingerprint(workspace: Path) -> str:
+    """Fingerprint source edits, staged changes and untracked-file contents.
+
+    A generated test is arbitrary Python; test SHA-locking alone cannot stop
+    that test from mutating the implementation it claims to validate.
+    """
+    digest = hashlib.sha256()
+    for args in (
+        ("git", "status", "--porcelain=v1", "--untracked-files=all"),
+        ("git", "diff", "--binary", "--"),
+        ("git", "diff", "--cached", "--binary", "--"),
+        ("git", "ls-files", "--others", "--exclude-standard", "-z"),
+    ):
+        p = subprocess.run(args, cwd=workspace, capture_output=True,
+                           timeout=12, check=True)
+        digest.update(p.stdout)
+        digest.update(b"\\0")
+        if args[-1] != "-z":
+            continue
+        paths = [name for name in p.stdout.split(b"\\0") if name]
+        if len(paths) > 2000:
+            raise ValueError("too many untracked files for integrity audit")
+        for name in paths:
+            target = workspace / os.fsdecode(name)
+            digest.update(name)
+            if target.is_symlink():
+                digest.update(os.readlink(target).encode(errors="surrogateescape"))
+            elif target.is_file():
+                size = target.stat().st_size
+                if size > 8 * 1024 * 1024:
+                    # Expensive untracked data cannot be trusted as an exact
+                    # integrity witness under this small task-time budget.
+                    raise ValueError("untracked file too large for integrity audit")
+                digest.update(target.read_bytes())
+            digest.update(b"\\0")
+    return digest.hexdigest()
+
+
 def _test(workspace: Path, path: Path, seconds: int) -> dict:
     env = dict(os.environ)
     env["PYTHONPATH"] = str(workspace) + os.pathsep + env.get("PYTHONPATH", "")
@@ -123,10 +161,15 @@ def run(workspace: Path, phase: str, *, source: str | None = None,
         if test_file.exists() and test_file.read_text(encoding="utf-8") != source:
             raise ValueError("existing case ID source mismatch")
         test_file.write_text(source, encoding="utf-8")
+        clean_before = _worktree_fingerprint(workspace)
         evidence = _test(workspace, test_file, timeout_seconds)
+        if _worktree_fingerprint(workspace) != clean_before:
+            evidence = {"status": "blocked", "exit_code": evidence["exit_code"],
+                        "evidence": "Generated test mutated repository during BEFORE; discard this witness."}
         record = {"workspace": str(workspace),
                   "test_sha256": hashlib.sha256(source.encode()).hexdigest(),
-                  "baseline_status": evidence["status"]}
+                  "baseline_status": evidence["status"],
+                  "baseline_fingerprint": clean_before}
         record_file.write_text(json.dumps(record, sort_keys=True), encoding="utf-8")
         return {"phase": "before", "case_id": case_id, **evidence,
                 "baseline_discriminating": evidence["status"] == "fail",
@@ -144,7 +187,16 @@ def run(workspace: Path, phase: str, *, source: str | None = None,
     if (state.get("workspace") != str(workspace) or
             hashlib.sha256(raw).hexdigest() != state.get("test_sha256")):
         raise ValueError("test source or workspace changed after baseline")
+    before_after_run = _worktree_fingerprint(workspace)
     result = _test(workspace, test_file, timeout_seconds)
+    if _worktree_fingerprint(workspace) != before_after_run:
+        result = {"status": "blocked", "exit_code": result["exit_code"],
+                  "evidence": "Generated test mutated repository during AFTER; discard this witness."}
+    elif (state["baseline_status"] == "fail" and
+          result["status"] == "pass" and
+          before_after_run == state.get("baseline_fingerprint")):
+        result = {"status": "blocked", "exit_code": result["exit_code"],
+                  "evidence": "No source change observed since baseline; a PASS is not agent repair."}
     comparison = compare(state["baseline_status"], result["status"])
     return {"phase": "after", "case_id": case_id, **result,
             "baseline_status": state["baseline_status"],
