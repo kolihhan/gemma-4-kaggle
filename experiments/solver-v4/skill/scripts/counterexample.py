@@ -88,10 +88,10 @@ def _worktree_fingerprint(workspace: Path) -> str:
         p = subprocess.run(args, cwd=workspace, capture_output=True,
                            timeout=12, check=True)
         digest.update(p.stdout)
-        digest.update(b"\\0")
+        digest.update(b"\0")
         if args[-1] != "-z":
             continue
-        paths = [name for name in p.stdout.split(b"\\0") if name]
+        paths = [name for name in p.stdout.split(b"\0") if name]
         if len(paths) > 2000:
             raise ValueError("too many untracked files for integrity audit")
         for name in paths:
@@ -106,7 +106,7 @@ def _worktree_fingerprint(workspace: Path) -> str:
                     # integrity witness under this small task-time budget.
                     raise ValueError("untracked file too large for integrity audit")
                 digest.update(target.read_bytes())
-            digest.update(b"\\0")
+            digest.update(b"\0")
     return digest.hexdigest()
 
 
