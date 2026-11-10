@@ -48,3 +48,5 @@ jobs:
 # v3r: validate actual subprocess PWD workspace discovery and new CLI regression tests
 
 # v3r: verify real sandbox script JSON payload drives native edit and after-test branch
+
+# v3r: official sandbox script-to-native-edit path with exact callable registry names
