@@ -1,0 +1,59 @@
+name: V4 read-only diagnosis of existing 31B queue and Kaggle GPU quota
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/v4-existing-31b-queue-diagnosis-once.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Inspect authenticated existing kernel status and weekly accelerator quota
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import json
+          from datetime import timezone
+          from kaggle.api.kaggle_api_extended import KaggleApi
+
+          api = KaggleApi()
+          api.authenticate()
+          kernel = "kolihhan/gemma4-toolcap-31b-42609260933"
+          state = api.kernels_status(kernel)
+          status = str(getattr(state, "status", "UNKNOWN"))
+          failmsg = str(getattr(state, "failure_message", "") or "")
+          category = "none"
+          if failmsg:
+              lowered = failmsg.lower()
+              for token in ("quota", "timeout", "resource", "oom", "memory", "invalid", "cancel", "error"):
+                  if token in lowered:
+                      category = token
+                      break
+              else:
+                  category = "other"
+          print("V4_EXISTING_31B_QUEUE_STATE="+json.dumps({
+              "kernel":kernel,"status":status,
+              "failure_message_present":bool(failmsg),
+              "failure_class":category,
+          },sort_keys=True),flush=True)
+          q=api.quota_view()
+          refresh=getattr(q,"quota_refresh_time",None)
+          refresh_utc=refresh.replace(tzinfo=timezone.utc).isoformat() if refresh and refresh.utcoffset() is None else refresh.isoformat() if refresh else None
+          metrics={}
+          for label,limit in (("gpu",getattr(q,"gpu_quota",None)),("tpu",getattr(q,"tpu_quota",None))):
+              if limit is None:continue
+              used=limit.time_used.total_seconds()/3600
+              total=limit.total_time_allowed.total_seconds()/3600
+              metrics[label]={"used_hours":round(used,2),"total_hours":round(total,2),"remaining_hours":round(max(0,total-used),2)}
+          print("V4_KAGGLE_ACCELERATOR_QUOTA="+json.dumps({"refresh_utc":refresh_utc,"quotas":metrics},sort_keys=True),flush=True)
+          print("V4_QUEUE_DIAGNOSIS_READ_ONLY_NO_GPU_NO_SUBMISSION=TRUE")
+          PY
