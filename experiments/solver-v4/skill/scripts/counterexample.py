@@ -65,8 +65,9 @@ def _assess(returncode: int | None, output: str) -> str:
     if returncode == 0 and re.search(r"\b\d+ passed\b", output):
         return "pass"
     # Only a real pytest assertion failure counts as a counterexample.
-    if (returncode == 1 and "AssertionError" in output and
-            re.search(r"\b\d+ failed\b", output)):
+    if (returncode == 1 and
+            re.search(r"(?m)^E\\s+assert\\b|\\bAssertionError\\b", output) and
+            re.search(r"\\b\\d+ failed\\b", output)):
         return "fail"
     return "blocked"
 
