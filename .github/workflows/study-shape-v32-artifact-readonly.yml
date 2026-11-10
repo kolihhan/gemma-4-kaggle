@@ -49,7 +49,7 @@ jobs:
                               if n.endswith(".md"):
                                   print("PUBLIC_PROMPT_HEADINGS",dirname,[l for l in s.splitlines() if l.lstrip().startswith("#")][:40])
                               elif n.endswith(".yaml"):
-                                  print("PUBLIC_CONFIG",dirname,n,json.dumps(yaml.safe_load(s),default=str)[:2200])
+                                  print("PUBLIC_CONFIG",dirname,n,(" ".join(s.splitlines()) if "!include" in s else json.dumps(yaml.safe_load(s),default=str))[:2200])
           PY
       - name: Check public Kaggle kernel list metadata for claimed 0.22 notebook
         run: |
