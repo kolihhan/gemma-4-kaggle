@@ -1,3 +1,15 @@
+# NOW — Read-only Kaggle reconciliation (2026-11-11 01:02 MYT)
+
+**Actual live execution, no GPU and no new competition entry:** [GitHub Actions read-only run 42845134459, attempt 2](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42845134459) completed successfully at 2026-11-10 17:02 UTC. Authenticated Kaggle rechecked existing private 31B kernel `kolihhan/gemma4-toolcap-31b-42609260933`: **still QUEUED**. Authenticated official ledger reconfirmed **best scored Public 0.18**, ref `58183466` COMPLETE; prior control `58019162` 0.17 COMPLETE; `58164176` COMPLETE but unscored. This read was not a model evaluation, and did not change candidate bytes or submission quota.
+
+**V4:** Earlier [authorized V4 one-shot Actions 42854209735](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42854209735) confirmed `allowed_now=0, num_today=1, active=[]` on 2026-11-10 16:24 UTC and skipped all submission steps. There is **no V4 Kaggle receipt/score**. Frozen V4 SHA256 remains `3e56add0b7a94d81e46bff35326df314459e8a8fb3c2e80e68691222809cc9bc`; keep `submission/` and V4 source untouched. The one-shot script explicitly forbids scheduled execution. Do not bypass quota or automatically create a recurring submitter; trigger the existing guarded submission only under its authorized/manual constraints after authenticated quota becomes available.
+
+**Visibility incident remains unresolved:** repository still `public` and historical `kaggle-data-2026-10-31` release still has 13 assets. Prior [make-private Action 41432110211](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/41432110211) returned GitHub 403 `Resource not accessible by integration`; connected tools cannot change repo visibility. This is an outstanding owner/admin action; never claim exposure has been remediated, republish data, or delete/rewrite without explicit authority.
+
+**Scientific decision unchanged:** No useful disjoint live-model evidence exists to choose V4 over the 0.18 scorer. Do not tune the same known E4B diagnostic, spawn another queued GPU pilot, or label synthetic CPU fail→pass as hidden issue resolution. On next available independent real-model execution, measure 31B uptake of generated tests and matched-budget issue-level resolved count, then compare against 0.18.
+
+---
+
 # NOW — V4 official attempt blocked by Kaggle quota (2026-11-11 MYT)
 
 **Verified user-authorized official submission attempt:** [Actions 42854209735](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42854209735) checked Kaggle authenticated code-submission quota 2026-11-10 16:24:38 UTC: `allowed_now=0`, `num_today=1`, `limited_by_total=false`, `active=[]`. The fail-closed guard SKIPPED submission; **there is NO new Kaggle V4 Submission ID, no model evaluation, and no GPU expense**. The workflow itself succeeded by safely stopping. This is an external quota blocker, not a test failure.
