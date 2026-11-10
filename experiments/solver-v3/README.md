@@ -1,57 +1,40 @@
-# Solver V3 — code-grounded, checkpointed single-writer agent (research contract)
+# Solver V3-R — executable pytest evidence witness (2026-11-10)
 
-**Status:** Architecture proposal; NOT implemented, measured, promoted, or submitted. This is the intended substantial next refactor, distinct from the already-running V2 tool-cap60 one-variable experiment. Current authentic Public best: **0.17**.
+**Status: candidate IMPLEMENTED + CPU verified, NOT proven competitive, NOT officially submitted.**
 
-## The actual problem
+## What changed and why
 
-The previous four-task 31B V2 pilot ended with nonempty patches on 4/4 tasks and an independent resolution rate of 0/4. Contract & Impact's full root prompt + optional Skill also resolved 0/4; optional Skill invocation was not observable. Merely adding tokens, stages, a second LLM, extra prompts or CPU-only tests cannot establish improved patch correctness.
+Existing exact, third-party Apache-2.0 Budget-Fit V2 31B control scored **0.17** Public (ref 58019162). It frequently produced nonempty patches without independently resolved issues on exposed private pilot tasks. The proposed V3-R mechanism is to provide an *actual* feedback instrument rather than simply add another verifier prompt: a model-invoked, 20-second-bounded real pytest **witness** that compares an existing targeted test before and after a workspace edit and emits structured regression/repair evidence.
 
-Two causal possibilities remain unseparated: **(a)** the solver did not generate a semantically correct repair; **(b)** it generated one but failed to preserve/verify/select it. A third is insufficient issue context. Solver V3 must be able to distinguish these without assuming one already wins.
+- The script is **real and independently executable**: `skill/scripts/witness.py` executes a focused pytest subprocess and returns actual output, status, comparison, and limitations. It does **not** edit source, inspect gold/reference patches, or certify hidden issue correctness.
+- The exact compiled ADK root is one 31B `LlmAgent`, with the existing native tools plus an official `SkillToolset` for `repair-witness`. No new custom ToolRegistry, user callback, second model, LoRA or training.
+- The prompt explicitly requests `load_skill`/`run_skill_script` **only when an existing narrow test and sufficient budget are available**. This call is still **model-discretionary**; an optional tool's presence does not prove it was used.
+- The candidate uses **5 minutes / 28 native tool calls / 80 turns**, not the 8min / 60 calls combination that previously triggered Notebook Timeout. Sampling and native tools are preserved from pinned Budget-Fit V2. The budget differs from the scored 8-minute V2 control: no isolated semantic-quality claim from comparing Public scores.
 
-## Architecture (not another Reviewer)
+## Source and exact build
 
-```
-Original task + repository source
-            |
-  Single 31B Root Coder (same closed-model constraint)
-     |       |        |
-     |    Repo Evidence/Localization
-     |       |
-     |    Candidate Edit A --- reversible worktree snapshot
-     |       |                    |
-     |       v                    v
-     |    Focused verification + real tool-result evidence
-     |       |                    |
-     |       +--> retain A / revise to B / restore best state
-     |                                  |
-     +--> Verify final actual diff and submit_patch
-```
+| File | Purpose |
+| --- | --- |
+| `experiments/solver-v3/skill/SKILL.md` | Activation and evidence semantics for one executable Skill |
+| `experiments/solver-v3/skill/scripts/witness.py` | Actual pytest subprocess and before/after regression comparison |
+| `scripts/build_solver_v3r_candidate.py` | Deterministic ZIP builder from byte-pinned external V2 |
+| `tests/test_solver_v3r_witness.py` | Real tests: fail→pass, pass→fail, no baseline, path safety, empty suite, isolated state |
+| `tests/test_build_solver_v3r_candidate.py` | Source provenance, exact model, budget, build determinism, script included |
+| `scripts/verify_solver_v3r_official.py` | Official wheelhouse ADK compiler + sandbox-free synthetic ZIP script execution |
+| `.github/workflows/solver-v3r-cpu-gate.yml` | One focused CPU CI execution gate |
 
-1. **Single writer, real source evidence.** Keep exactly one root Coder responsible for writing and `submit_patch`. Inspect the issue behavior, source-level entry points and relevant tests. If the task lacks requirements, record an unknown rather than inventing an oracle.
-2. **Deterministic versioned repair state.** A private sandbox-side controller records *materialized* patch hashes and test outcomes, rather than trusting the agent's prose. A correct candidate cannot silently disappear when subsequent edits fail or are reversed. Nonempty final patch is necessary but not proof of correctness.
-3. **Verification-aware candidate selection.** Compare a small number of actual candidate worktree states under the same total compute and test budget. Prefer a candidate only on applicable, discriminating tests and explicit requirements, not test count or green syntax. If no candidate earns support, preserve the most defensible state without claiming resolution.
-4. **Budget-controlled action policy.** No free extra 31B agent; reserve capacity for a usable patch and independent finalization. Any added state manager must pay its latency cost against the same total 12-hour evaluation window.
-5. **Real tool invocation guarantee.** The earlier optional Skill showed zero exact invocation markers in incomplete logs. V3 may not assume an instruction is execution. Before any expensive 31B run, verify the *actual ADK function-call events* and whether the controller can run under the restricted official tool registry and sandbox. If no reliable supported implementation route exists, reject this architecture rather than promoting a decorative diagram.
+**Verified CPU Actions**: [42748472850](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42748472850) **SUCCESS**, 10 focused unit tests; compilation with `adk-submission==0.2.13` / `swegemma==0.2.11` accepted the ZIP, root model 31B, and displayed `SkillToolset` in compiled agent.tools. The **actual script from unpacked ZIP** ran a real synthetic pytest and reported pass. ZIP SHA256: `259f143e111bcd0e3e40af9f4ad0ab8536243436ff9b13c0365bab36d10b2e65`.
 
-## Intervention and falsifiers
+**Explicitly NOT verified:** genuine 31B model chose to call `run_skill_script`; the scorer sandbox's live CodeExecutor executed it; real issue-level correctness improved; full hidden evaluation completed without timeout. Synthetic scripted tool availability/CPU tests are not substitutes for a model trace or a scored solution.
 
-| Component | Missing capability targeted | Minimal independent falsifier |
-| --- | --- | --- |
-| Versioned patch states | Intermediate good code overwritten before submit | Actual tool-boundary snapshots never show an independently passing candidate discarded |
-| Evidence-driven test use | Semantic errors persist despite test feedback | Model repeatedly selects wrong fixes after independently discriminating test feedback at matched budget |
-| Bounded candidate search | Only one implementation hypothesis explored | Additional candidates add latency but no independently passing outcome |
-| Stronger Coder model policy / clean LoRA | No correct candidate ever generated | Reproducible clean-held-out improvement fails to transfer |
+## Promotion gates
 
-Do **not** stack components automatically. If a different Coder policy or LoRA becomes the strongest explanation, switch architectures. The current deterministic observer is private-only: `scripts/candidate_history.py` and its submission-boundary tests may be reused as **measurement**, not mislabeled as a submitted capability.
+1. **Actual model uptake:** trace 31B function calls on a private, previously uninspected, correctly scoped development task; prove `run_skill_script` is called, that output is consumed, and that overhead remains acceptable. Do not infer uptake from the presence of SkillToolset. The previous optional Contract & Impact Skill's tool-call evidence was inconclusive.
+2. **Valid independent resolution:** paired test against exact 31B V2 with matched **5min / 28 calls** runtime; freeze disjoint task IDs before inspecting outcomes. Count independently resolved tasks, rescues, regressions, tool usage and elapsed time. Earlier E4B 17 and 31B pilot four are *exposed*, not confirmation.
+3. **Official score:** only after supported mechanism uptake and authenticity checks, stage one idempotent Kaggle official submission with an exact ZIP hash. Compare a completed score with the 0.17 best scored reference, acknowledging its 8-minute ceiling and run-to-run variance.
 
-## Evaluation
+**Current blocker:** [authenticated status probe 42617516719](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42617516719) at **2026-11-10 03:21 UTC** reported the pre-existing private 31B kernel `kolihhan/gemma4-toolcap-31b-42609260933` still `QUEUED`. No new private 31B pilot was launched. The operational 5-minute Toolcap60 submission `58183466` remained PENDING at the last authenticated ledger check. **No new V3-R official submission was made.**
 
-- Original byte-pinned V2 remains the control. Do not compare with a different task budget without labeling the effect.
-- Evaluate on disjoint preregistered development tasks across repositories. Prior four Contract & Impact tasks and the separate four tool-cap pilot tasks are **exposed** and cannot become confirmation.
-- Record actual final resolution, nonempty patches, preserved intermediate candidates, tool-call budgets, elapsed model/total time, typed tool invocation, and timeouts.
-- Ablate checkpointing against equally budgeted ordinary Coder continuation. A second LLM only if it beats a same-cost Coder; an extra stage without new information is not a win.
-- A new official Kaggle submission requires a valid scored candidate and available quota; never infer a gain from an Action or ADK CPU pass.
+## Falsifier/pivot
 
-## Immediate delivery distinction
-
-The **current new official submission attempt** is the narrow, reproducible V2 tool-cap60 candidate under `scripts/build_v2_toolcap_submission.py` and `.github/workflows/v2-toolcap60-official-once.yml`. That pathway changes *only* one budget dimension and is explicitly **not Solver V3** or a research breakthrough. It will refuse a formal submission if its already-running private 31B comparison fails the safety/evidence gate, or if official ADK compilation/quota checks fail. The final verified submission receipt is the only evidence of a new official entry.
+If the real model never invokes this Skill, or its extra tool/pytest overhead reduces correctly resolved issues, **reject this candidate**, do not just add louder prompt instructions or another optional Reviewer. Reopen a supported alternative (single-root direct native test policy, evidence-aware Coder policy adaptation, or model-independent search/selection if evidence supports it). The previous checkpoint-first V3 proposal is historical; candidate loss is not established as the bottleneck.
