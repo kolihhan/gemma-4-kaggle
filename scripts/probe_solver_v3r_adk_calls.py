@@ -25,6 +25,8 @@ async def check(candidate: bytes) -> dict:
     from swegemma.config import build_submission_limits
 
     observed = []
+    tool_responses = []
+    turn = [0]
     class ScriptedProbe(BaseLlm):
         async def generate_content_async(self, llm_request, stream=False):
             functions = []
@@ -33,9 +35,45 @@ async def check(candidate: bytes) -> dict:
                 for declaration in (getattr(tool, "function_declarations", None) or []):
                     functions.append(declaration.name)
             observed.append(functions)
-            yield LlmResponse(content=types.Content(
-                role="model", parts=[types.Part(text="CPU probe complete")]
-            ))
+            response_parts = [
+                p.function_response for msg in (getattr(llm_request,"contents",None) or [])
+                for p in (getattr(msg,"parts",None) or [])
+                if getattr(p,"function_response",None) is not None
+            ]
+            if response_parts:
+                tool_responses.extend({"name":x.name,"response":x.response}
+                                      for x in response_parts)
+            if turn[0] == 0:
+                call = types.FunctionCall(
+                    name="load_skill",args={"skill_name":"repair-witness"})
+                print("V3R_SYNTHETIC_ADK_MODEL_CALL=load_skill",flush=True)
+                response = types.Content(role="model",parts=[types.Part(function_call=call)])
+            elif turn[0] == 1:
+                schema = [
+                    d for t in (getattr(config,"tools",None) or [])
+                    for d in (getattr(t,"function_declarations",None) or [])
+                    if d.name=="run_skill_script"
+                ]
+                if len(schema)!=1:
+                    raise AssertionError("run_skill_script not declared on second model call")
+                params = getattr(schema[0],"parameters",None)
+                props=set((getattr(params,"properties",None) or {}).keys())
+                print("V3R_SCRIPT_TOOL_PARAMETER_KEYS="+json.dumps(sorted(props)),flush=True)
+                arguments={"skill_name":"repair-witness","file_path":"scripts/witness.py"}
+                if "script_args" in props:
+                    arguments["script_args"]={"phase":"after","target":"test_synthetic.py"}
+                elif "args" in props:
+                    arguments["args"]={"phase":"after","target":"test_synthetic.py"}
+                else:
+                    raise AssertionError("no documented script args property")
+                call=types.FunctionCall(name="run_skill_script",args=arguments)
+                print("V3R_SYNTHETIC_ADK_MODEL_CALL=run_skill_script",flush=True)
+                response=types.Content(role="model",parts=[types.Part(function_call=call)])
+            else:
+                response=types.Content(role="model",parts=[
+                    types.Part(text="CPU probe complete")])
+            turn[0]+=1
+            yield LlmResponse(content=response)
 
     with tempfile.TemporaryDirectory(prefix="gemma-v3r-adk-events-") as tmp:
         root = Path(tmp) / "submission"
@@ -90,10 +128,22 @@ async def check(candidate: bytes) -> dict:
                     if getattr(p,"function_response",None)],
             })
         print("V3R_ADK_FAKE_MODEL_EVENTS="+json.dumps(events,sort_keys=True),flush=True)
-        if len(observed)!=1:
-            raise AssertionError(f"expected one no-inference model call, got {len(observed)}")
+        print("V3R_SYNTHETIC_TOOL_FUNCTION_RESPONSES="+json.dumps(
+            tool_responses,default=str,sort_keys=True)[:4200],flush=True)
+        if len(observed)!=3:
+            raise AssertionError(f"expected 3 no-inference model turns, got {len(observed)}")
+        if not any(x["name"]=="load_skill" for x in tool_responses):
+            raise AssertionError("ADK did not return a load_skill function response")
+        scripts=[x for x in tool_responses if x["name"]=="run_skill_script"]
+        if len(scripts)!=1:
+            raise AssertionError("ADK did not return run_skill_script function response")
         offered=observed[0]
-        report={"offers_load_skill":"load_skill" in offered,
+        scripts=[x for x in tool_responses if x["name"]=="run_skill_script"]
+        script_result=scripts[0]["response"] or {}
+        report={"script_return_kind": "error" if script_result.get("error") else "normal",
+                "script_error_code":script_result.get("error_code"),
+                "actual_function_response_for_script":True,
+                "offers_load_skill":"load_skill" in offered,
                 "offers_run_skill_script":"run_skill_script" in offered,
                 "offered_skill_tools":[x for x in offered if "skill" in x],
                 **snapshot}
@@ -101,6 +151,12 @@ async def check(candidate: bytes) -> dict:
         # Tool advertised is mandatory to proceed to any 31B evaluation.
         if not report["offers_run_skill_script"]:
             raise RuntimeError("V3R_SCRIPT_UNREACHABLE_IN_REAL_ADK_LLM_REQUEST")
+        if report["script_error_code"] == "NO_CODE_EXECUTOR":
+            print("V3R_STANDALONE_RUNNER_NEEDS_EVALUATOR_EXECUTOR=TRUE",flush=True)
+        elif report["script_error_code"] is not None:
+            print("V3R_STANDALONE_RUNNER_SCRIPT_ERROR="+str(report["script_error_code"]),flush=True)
+        else:
+            print("V3R_ADK_SCRIPT_FUNCTION_RESPONSE_DELIVERED_NO_ERROR=TRUE",flush=True)
         return report
 
 
