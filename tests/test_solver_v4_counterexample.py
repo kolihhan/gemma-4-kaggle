@@ -113,8 +113,8 @@ class CounterexampleTests(unittest.TestCase):
         self.assertFalse((self.workspace/"test_issue_contract.py").exists())
 
 
-    def test_audit_generated_contract_cannot_modify_source(self):
-        # Characterization audit: frozen V4 executes arbitrary generated pytest
+    def test_detect_generated_contract_source_mutation(self):
+        # Regression: BEFORE-generated pytest must not certify its own source edits
         # without checking whether pytest itself changed tracked source.
         adversarial=(
             "from pathlib import Path\n\n"
@@ -127,15 +127,17 @@ class CounterexampleTests(unittest.TestCase):
             "    assert True\n"
         )
         before=self.v4.run(self.workspace,"before",source=adversarial)
-        self.assertEqual(before["status"],"fail",before)
+        self.assertEqual(before["status"],"blocked",before)
+        self.assertFalse(before["baseline_discriminating"])
+        self.assertIn("mutated repository during BEFORE",before["evidence"])
         self.assertEqual(
             (self.workspace/"example.py").read_text(encoding="utf-8"),
             "def answer():\n    return 3\n",
-            "Observed integrity gap: generated test changed source during BEFORE",
+            "The test did mutate source; guard must detect and reject its evidence",
         )
 
-    def test_audit_generated_test_must_not_fake_repair_without_agent_edit(self):
-        # Characterization audit: BEFORE test mutates implementation and fails;
+    def test_detect_test_side_effect_cannot_fake_repair(self):
+        # Regression: BEFORE test mutates implementation and fails;
         # AFTER succeeds on its own side-effect, no agent source edit involved.
         adversarial=(
             "from pathlib import Path\n\n"
@@ -148,11 +150,11 @@ class CounterexampleTests(unittest.TestCase):
             "    assert True\n"
         )
         before=self.v4.run(self.workspace,"before",source=adversarial)
-        self.assertEqual(before["status"],"fail",before)
+        self.assertEqual(before["status"],"blocked",before)
         after=self.v4.run(self.workspace,"after",case_id=before["case_id"])
-        self.assertEqual(
+        self.assertNotEqual(
             after["comparison"],"counterexample_repaired",
-            "Observed integrity gap: V4 counts test-induced mutation as repair",
+            "Test-induced mutation must not count as a coder repair",
         )
 
 
