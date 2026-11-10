@@ -79,6 +79,21 @@ jobs:
               api=KaggleApi()
               api.authenticate()
               response=api.kernels_push(str(kernel),timeout="600")
+              # Diagnostic uses only the Notebook's public-facing identity/URL
+              # shape and returned version. Never log auth credentials.
+              from urllib.parse import urlsplit
+              result_url=str(getattr(response,"url","") or "")
+              parsed=urlsplit(result_url)
+              print("V4_CANARY_REAL_PUSH_RESPONSE_SHAPE="+json.dumps({
+                  "versionNumber":getattr(response,"versionNumber",None),
+                  "version_number":getattr(response,"version_number",None),
+                  "ref":getattr(response,"ref",None),
+                  "url_scheme":parsed.scheme,
+                  "url_host":parsed.netloc,
+                  "url_path":parsed.path,
+                  "url_has_query":bool(parsed.query),
+                  "server_error_present":bool(getattr(response,"error",None)),
+              },sort_keys=True),flush=True)
               # The production verifier must validate the actual Kaggle SDK response.
               submission.KERNEL=slug
               version=submission.verified_kernel_version(response)
