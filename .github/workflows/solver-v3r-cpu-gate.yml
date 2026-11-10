@@ -42,3 +42,5 @@ jobs:
 # v3r: rerun after actual pytest-regression witness fixes
 
 # v3r: verify official load_skill -> run_skill_script protocol
+
+# v3r: validate actual subprocess PWD workspace discovery and new CLI regression tests
