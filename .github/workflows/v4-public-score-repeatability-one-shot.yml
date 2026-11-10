@@ -1,0 +1,78 @@
+name: V4 decision audit - public score repeatability one shot
+on:
+  push:
+    branches:
+      - research/dual-agent-recovery-v0-20261108
+    paths:
+      - .github/workflows/v4-public-score-repeatability-one-shot.yml
+permissions:
+  contents: read
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch attributed public aggregate evidence, NO competition tasks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p /tmp/gemma4-public-draws
+          kaggle datasets download -d dariushafshar/gemma-4-agent-public-config-draws \
+            -f public_config_draws.csv -p /tmp/gemma4-public-draws --unzip >/dev/null
+          test -s /tmp/gemma4-public-draws/public_config_draws.csv
+          python - <<'PY'
+          import csv
+          import itertools
+          import json
+          import math
+          import statistics
+          from collections import defaultdict
+          from pathlib import Path
+
+          rows=list(csv.DictReader(Path("/tmp/gemma4-public-draws/public_config_draws.csv").open(encoding="utf-8-sig")))
+          grouped=defaultdict(list)
+          scored=0
+          for row in rows:
+              key=(row.get("files_sha256") or "").strip().lower()
+              label=(row.get("hash_kind") or "").strip().lower()
+              score=(row.get("public_score") or "").strip()
+              if not score:
+                  continue
+              try:
+                  s=float(score)
+              except ValueError:
+                  continue
+              if not (0 <= s <= 1):
+                  continue
+              scored+=1
+              if len(key)==64 and all(ch in "0123456789abcdef" for ch in key) and label=="files":
+                  grouped[key].append(s)
+
+          duplicates={key:items for key,items in grouped.items() if len(items)>1}
+          pairs=[abs(a-b) for values in duplicates.values()
+                 for a,b in itertools.combinations(values,2)]
+          spreads=[max(values)-min(values) for values in duplicates.values()]
+          summary={
+              "rows":len(rows),
+              "scored_rows":scored,
+              "unique_exact_file_hashes":len(grouped),
+              "identical_bundle_hashes_with_repeat_scoring":len(duplicates),
+              "repeat_scored_rows":sum(map(len,duplicates.values())),
+              "groups_with_nonzero_observed_score_spread":sum(x>1e-10 for x in spreads),
+              "max_observed_same_bundle_public_score_spread":round(max(spreads,default=0),4),
+              "median_same_bundle_pair_absolute_score_difference":round(statistics.median(pairs),4) if pairs else None,
+              "pairs_comparable":len(pairs),
+              "single_0_17_to_0_18_increment_is_less_than_or_equal_to_one_task_of_58":True,
+              "notes":"Public dataset observational sample; repeated public bundle scores are not paired random-seed controlled outcomes. No Kaggle hidden issue counts or private labels."
+          }
+          if summary["identical_bundle_hashes_with_repeat_scoring"]<1:
+              raise RuntimeError("NO_REPEATED_PUBLIC_BUNDLES_OR_DATASET_SCHEMA_CHANGED")
+          print("V4_PUBLIC_REPEATABILITY_AUDIT="+json.dumps(summary,sort_keys=True))
+          print("V4_PUBLIC_AUDIT_NO_COMPETITION_TASK_DATA_NO_SUBMISSION_NO_GPU=TRUE")
+          PY
