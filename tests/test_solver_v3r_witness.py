@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
+from unittest.mock import patch
 from pathlib import Path
 import subprocess
 import sys
@@ -91,6 +94,35 @@ class WitnessTests(unittest.TestCase):
         self.assertEqual(output["status"], "blocked")
         self.assertFalse(output["verified_test_process"])
         self.assertNotEqual(output["comparison"], "repair_demonstrated")
+
+
+    def test_workspace_resolution_prefers_real_pwd_in_subprocess_sandbox(self):
+        w = witness_module()
+        skillcwd = Path(self.tmp.name) / "isolated_skill_cwd"
+        skillcwd.mkdir()
+        with patch.dict(os.environ, {"PWD": str(self.workspace),
+                                      "SWE_WORKSPACE": ""}):
+            self.assertEqual(w.locate_workspace(), self.workspace.resolve())
+
+    def test_packaged_cli_without_workspace_argument_uses_pwd(self):
+        # Official subprocess scorer maps /workspace to a temp checkout.
+        # Skill subprocess can have a different actual cwd, but an exported
+        # PWD points to the repository. Verify the real shipped CLI behavior.
+        skillcwd = Path(self.tmp.name) / "isolated_skill_cwd"
+        skillcwd.mkdir()
+        env = dict(os.environ)
+        env.pop("SWE_WORKSPACE", None)
+        env["PWD"] = str(self.workspace)
+        proc = subprocess.run([
+            sys.executable, str(SCRIPT), "--phase", "after",
+            "--target", "test_fixme.py::test_answer",
+        ], cwd=skillcwd, env=env, capture_output=True, text=True,
+           timeout=30, check=False)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        output = json.loads(proc.stdout)
+        self.assertEqual(output["status"], "fail")
+        self.assertEqual(output["comparison"], "baseline_unavailable")
+        self.assertFalse(output["independent_issue_resolved"])
 
     def test_state_is_per_target_not_shared(self):
         w = witness_module()
