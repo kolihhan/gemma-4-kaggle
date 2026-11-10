@@ -132,9 +132,12 @@ async def run(candidate: bytes) -> dict:
                 elif s == 2:
                     if last is None or last.name != "run_skill_script":
                         raise AssertionError("no before script function response")
-                    payload = json.dumps(last.response,default=str,sort_keys=True)
-                    if '"fail"' not in payload or "baseline_recorded" not in payload:
-                        raise AssertionError("real before-test did not fail: "+payload[-1200:])
+                    envelope=last.response or {}
+                    if envelope.get("status")!="success":
+                        raise AssertionError("official script executor failed: "+json.dumps(envelope,default=str)[-1200:])
+                    parsed=json.loads(envelope.get("stdout",""))
+                    if parsed.get("status")!="fail" or parsed.get("comparison")!="baseline_recorded":
+                        raise AssertionError("real before-test did not fail: "+json.dumps(parsed)[-1200:])
                     inspected.append("before-failed-evidence-used")
                     call = types.FunctionCall(
                         name="edit_file",
@@ -154,9 +157,12 @@ async def run(candidate: bytes) -> dict:
                 elif s == 4:
                     if last is None or last.name != "run_skill_script":
                         raise AssertionError("no after script response")
-                    payload = json.dumps(last.response,default=str,sort_keys=True)
-                    if "repair_demonstrated" not in payload or '"pass"' not in payload:
-                        raise AssertionError("real after-test did not verify repair: "+payload[-1200:])
+                    envelope=last.response or {}
+                    if envelope.get("status")!="success":
+                        raise AssertionError("official after-script failed: "+json.dumps(envelope,default=str)[-1200:])
+                    parsed=json.loads(envelope.get("stdout",""))
+                    if parsed.get("status")!="pass" or parsed.get("comparison")!="repair_demonstrated":
+                        raise AssertionError("real after-test did not verify repair: "+json.dumps(parsed)[-1200:])
                     inspected.append("repair-evidence-used")
                     call = types.FunctionCall(name="submit_patch",args={})
                 elif s == 5:
