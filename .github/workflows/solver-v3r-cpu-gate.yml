@@ -46,3 +46,5 @@ jobs:
 # v3r: verify official load_skill -> run_skill_script protocol
 
 # v3r: validate actual subprocess PWD workspace discovery and new CLI regression tests
+
+# v3r: verify real sandbox script JSON payload drives native edit and after-test branch
