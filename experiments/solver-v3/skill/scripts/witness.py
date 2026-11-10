@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 import subprocess
@@ -16,6 +17,41 @@ import sys
 
 DEFAULT_STATE = Path("/tmp/gemma4-solver-v3r-witness")
 VALID_PHASES = {"before", "after"}
+
+def locate_workspace(override: str | None = None) -> Path:
+    """Find the sandbox's actual checkout, not a hardcoded host path.
+
+    The official subprocess sandbox can map /workspace to an isolated real
+    directory and point PWD at the checkout even while a skill runs from a
+    separate temporary current working directory. We accept a candidate only
+    when it is a git checkout, so we never silently test an unrelated folder.
+    """
+    if override is not None:
+        return Path(override).resolve(strict=True)
+    candidates = (
+        os.environ.get("SWE_WORKSPACE"),
+        os.environ.get("PWD"),
+        "/workspace",
+        str(Path.cwd()),
+    )
+    seen: set[str] = set()
+    for raw in candidates:
+        if not raw:
+            continue
+        candidate = Path(raw).expanduser()
+        try:
+            real = candidate.resolve(strict=True)
+        except (OSError, ValueError):
+            continue
+        if str(real) in seen:
+            continue
+        seen.add(str(real))
+        if real.is_dir() and (real / ".git").exists():
+            return real
+    raise FileNotFoundError(
+        "No git workspace found via SWE_WORKSPACE, PWD, /workspace or cwd"
+    )
+
 
 
 def safe_test_node(workspace: Path, target: str) -> str:
@@ -143,11 +179,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--phase", required=True, choices=sorted(VALID_PHASES))
     parser.add_argument("--target", required=True)
-    parser.add_argument("--workspace", default="/workspace")
+    parser.add_argument("--workspace", default=None)
     parser.add_argument("--timeout_seconds", type=int, default=20)
     args = parser.parse_args()
     result = run_witness(
-        Path(args.workspace), args.target, args.phase,
+        locate_workspace(args.workspace), args.target, args.phase,
         timeout_seconds=args.timeout_seconds,
     )
     print(json.dumps(result, sort_keys=True))
