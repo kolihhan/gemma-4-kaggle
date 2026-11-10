@@ -1,3 +1,4 @@
+# Verified real Kaggle SDK push returns ref=/code/owner/slug: exact identity fix + private CPU V2 output roundtrip
 # Submission transport regression gate: preserve 600-second CPU builder cap with SDK push
 # Kaggle SDK response contract regression: accept snake_case version_number and CLI versionNumber; validate ref/URL
 # V4-CGR integrity-gated CPU candidate SHA256: 5015ae18d03c1aca2e708e749e2f49b8da17ea49b7eb5c14f850558c3110c8be
