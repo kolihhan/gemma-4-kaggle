@@ -1,0 +1,41 @@
+name: V3R M2 single read-only Kaggle inference readiness and score
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/v3r-m2-queue-ledger-check-once.yml"]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Read existing private GPU queue state and official score ledger, no submissions
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import subprocess,re,csv,io,json
+          ref="kolihhan/gemma4-toolcap-31b-42609260933"
+          r=subprocess.run(["kaggle","kernels","status",ref],capture_output=True,text=True,timeout=70)
+          m=re.search(r"KernelWorkerStatus\.([A-Z_]+)",r.stdout+" "+r.stderr)
+          state=m.group(1) if m else "UNKNOWN"
+          print("V3R_M2_PREEXISTING_GPU_KERNEL="+json.dumps({"ref":ref,"state":state,"returncode":r.returncode},sort_keys=True),flush=True)
+          p=subprocess.run(["kaggle","competitions","submissions","-c","gemma-4-developer-agent","-v"],capture_output=True,text=True,timeout=70)
+          if p.returncode!=0:raise RuntimeError("Cannot verify authenticated competition ledger")
+          rows=list(csv.DictReader(io.StringIO(p.stdout)))
+          if not rows or "ref" not in rows[0]:raise RuntimeError("Kaggle submission CSV unreadable")
+          for number in ("58019162","58164176","58183466"):
+              matches=[x for x in rows if x.get("ref")==number]
+              if len(matches)!=1:raise RuntimeError("Missing or repeated existing submission "+number)
+              r=matches[0]
+              print("V3R_M2_AUTHENTICATED_SUBMISSION="+json.dumps({
+                k:r.get(k) for k in ("ref","date","description","status","publicScore","privateScore")
+              },sort_keys=True),flush=True)
+          print("V3R_M2_READ_ONLY_NO_GPU_NO_NEW_SUBMISSION=TRUE")
+          PY
