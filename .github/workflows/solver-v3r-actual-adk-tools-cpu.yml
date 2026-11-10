@@ -51,5 +51,18 @@ jobs:
           kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2             -p /tmp/v3r-real-adk-probe-source -o >/dev/null
           python -m scripts.build_solver_v3r_candidate             --source-zip /tmp/v3r-real-adk-probe-source/submission.zip             --out /tmp/v3r-real-adk-probe.zip
           python -m scripts.probe_solver_v3r_adk_calls --zip /tmp/v3r-real-adk-probe.zip
+          python - <<'PY'
+          from pathlib import Path
+          import swegemma
+          root=Path(swegemma.__file__).parent
+          patterns=('code_executor','SkillToolset','_code_executor','run_skill_script')
+          matches=[]
+          for p in root.rglob('*.py'):
+            lines=p.read_text(encoding='utf-8',errors='replace').splitlines()
+            for n,line in enumerate(lines,1):
+              if any(k in line for k in patterns):
+                matches.append((str(p.relative_to(root)),n,line.strip()[:180]))
+          print("OFFICIAL_SWEGEMMA_EXECUTOR_REFERENCES",matches[:100])
+          PY
           echo "V3R_REAL_ADK_FUNCTION_TOOL_PROBE=PASS"
           echo "V3R_NO_GPU_NO_OFFICIAL_SUBMISSION=TRUE"
