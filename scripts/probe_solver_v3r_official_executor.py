@@ -178,6 +178,12 @@ async def run(candidate: bytes) -> dict:
                 yield LlmResponse(content=types.Content(
                     role="model",parts=[types.Part(function_call=call)]))
 
+        # The official compiler's FunctionTool uses Python callable names,
+        # not only ToolRegistry lookup keys. Name fixture tools like the
+        # production native tool contract; otherwise ADK exposes
+        # tool_edit_file instead of edit_file and the scripted call fails.
+        tool_edit_file.__name__ = "edit_file"
+        tool_submit_patch.__name__ = "submit_patch"
         sandbox = SyntheticSandbox(workspace)
         code_executor = AdkSandboxCodeExecutor(sandbox=sandbox,timeout_seconds=45)
         models = ModelRegistry()
@@ -192,6 +198,7 @@ async def run(candidate: bytes) -> dict:
         ):
             def unused(*args, **kwargs):
                 raise AssertionError("no extra native tool in scripted probe")
+            unused.__name__ = name
             tools.register(name,unused)
 
         agent = compile_submission(
