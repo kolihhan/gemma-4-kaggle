@@ -1,3 +1,9 @@
+# NOW — Public-score stochasticity independently audited (2026-11-11 01:50 MYT)
+
+The official candidate remains **V4-CGR SHA256 5015ae18d03c1aca2e708e749e2f49b8da17ea49b7eb5c14f850558c3110c8be**; this research does **not** change the candidate, its submission workflow, or consume GPU/quota. [GitHub Actions 42868703115](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42868703115) read the public Kaggle dataset's scored, exact-traced file hashes: 29 repeated score observations across six identical-bundle groups; all six showed score variation; median of 84 within-hash pairwise absolute differences was **0.02**, and the maximum observed same-config range was **0.10**. Those 84 correlated pairwise comparisons are NOT 84 independent trials. A single 0.17→0.18 score shift is **not** reproducible proof of technical superiority. See [`docs/public-score-repeatability-2026-11-11.md`](docs/public-score-repeatability-2026-11-11.md) for source, constraints and V4 decision rule. Public notebook titles claiming 0.24 are not evidence when the notebook's displayed best is 0.18. Keep the next actual V4 submission as the sole decisive competition task after authenticated quota is available, and capture true receipt and scored result.
+
+---
+
 # NOW — Kaggle SDK response compatibility verified, manual V4 entry re-pinned (2026-11-11 01:45 MYT)
 
 **No new Kaggle submission:** At 2026-11-10 **17:37 UTC** ([GitHub Actions 42848511113 attempt 2](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42848511113)) the authenticated official competition quota was `{"allowed_now":0,"num_today":1,"active":[],"limited_by_total":false}`. No submission was attempted. Best official scored Public remains **0.18** (ref `58183466`); no V4 code-submission receipt or 31B hidden solve score exists.
