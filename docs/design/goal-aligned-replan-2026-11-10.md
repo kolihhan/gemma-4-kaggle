@@ -1,3 +1,12 @@
+## 2026-11-10 23:31 MYT — official competitive target reset
+
+Authenticated read-only [Actions 42845134459](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42845134459): Kaggle official submission `58183466` (Toolcap60 SafeTime5, **V2 config variation**, not V3-R) **COMPLETE, Public `0.18`**. This supersedes `0.17` as best scored Public and raises the eventual V3-R official win requirement to **strictly above 0.18**. Prior attributed V2 31B ref `58019162` remains an accurate historical `0.17` baseline; do not rewrite its score.
+
+**Fair experiment:** On disjoint issues measure V3-R against unchanged V2 with the **same 5-minute / 28-tool budget** for mechanism attribution; do not mistake the 5-minute/60-call `0.18` score for a matched V3-R control. A follow-up official V3-R must beat the separate overall best 0.18. The M1 official sandbox/scripted model trace and real pytest evidence mechanics have passed [Actions 42785080724](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42785080724); real Gemma 31B uptake and issue resolution remain unmeasured.
+
+**Current blocker:** Existing private 31B Kaggle kernel `kolihhan/gemma4-toolcap-31b-42609260933` was still `QUEUED` when authenticated check ran at 15:31 UTC. Its prior GitHub pollers already terminated, providing no valid independent 31B task scores. Existing paired renderer `scripts/render_v2_toolcap_31b_pilot.py` is for V2 28-vs-60 with an 8-minute time cap and cannot itself serve as a matched V3-R M2 test without replacing both payload and budget contract. Do not duplicate GPU sessions or claim M2 started.
+
+---
 # Gemma 4 — PI Research-to-Submission Reset (2026-11-10)
 
 **Status:** Current strategy and next delivery contract. This document replaces the diffuse previous plan at this path. It **does not** mean Solver V3 has already been implemented, measured or submitted. Historical plan is preserved in Git history.
