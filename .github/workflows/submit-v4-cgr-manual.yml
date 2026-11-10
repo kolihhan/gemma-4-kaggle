@@ -1,0 +1,105 @@
+name: Gemma V4-CGR guarded manual official submission
+on:
+  workflow_dispatch:
+    inputs:
+      submit_official:
+        description: "Submit ONE frozen V4-CGR entry after authenticated quota is available"
+        required: true
+        default: false
+        type: boolean
+      confirm:
+        description: "Type SUBMIT to confirm consuming one Kaggle submission quota"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gemma4-v4-cgr-one-official-entry
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    if: ${{ inputs.submit_official == true && inputs.confirm == 'SUBMIT' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      SOURCE_SHA: 8c3e29b8892f19a90e7c674219cf2ee3a4795d39
+    steps:
+      - name: Check out exact preflighted V4 commit (never mutable branch HEAD)
+        uses: actions/checkout@v4
+        with:
+          ref: 8c3e29b8892f19a90e7c674219cf2ee3a4795d39
+          persist-credentials: false
+
+      - name: Verify immutable research commit and submit source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          grep -Fx 'EXPECTED_SHA = "5015ae18d03c1aca2e708e749e2f49b8da17ea49b7eb5c14f850558c3110c8be"' scripts/submit_solver_v4_cgr_once.py
+          echo "V4_MANUAL_EXACT_SOURCE_SHA=$SOURCE_SHA"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Authenticate, reject duplicate V4 receipt and enforce live quota
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          from scripts.submit_solver_v4_cgr_once import check_slot
+          if not check_slot():
+              raise SystemExit("V4_ALREADY_SUBMITTED; no duplicate submission")
+          print("V4_MANUAL_LIVE_KAGGLE_SLOT_AVAILABLE=TRUE",flush=True)
+          PY
+
+      - name: Verify frozen V4 tests and source integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "pytest==8.4.2" "nbformat==5.10.4"
+          python -m unittest -v tests.test_solver_v4_counterexample tests.test_build_solver_v4_cgr_candidate tests.test_solver_v4_submission_kernel_version
+          python -m py_compile scripts/submit_solver_v4_cgr_once.py scripts/build_solver_v4_cgr_candidate.py
+
+      - name: Restore official CPU compiler dependencies from Kaggle wheelhouse
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/v4-manual-official-wheels
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel" -p /tmp/v4-manual-official-wheels --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check /tmp/v4-manual-official-wheels/*.whl
+
+      - name: Rebuild and verify exact immutable V4 ZIP with official ADK CPU harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_solver_v4_cgr_once preflight
+          test "$(cat /tmp/gemma4-solver-v4-cgr-official/candidate.sha256)" = "5015ae18d03c1aca2e708e749e2f49b8da17ea49b7eb5c14f850558c3110c8be"
+          echo "V4_MANUAL_EXACT_CPU_PREFLIGHT=PASS"
+
+      - name: Submit one Kaggle code entry, fail closed on quota/duplicate/ZIP drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_solver_v4_cgr_once submit
+
+      - name: Verify official Kaggle ledger receipt before claiming submission
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from scripts.submit_solver_v4_cgr_once import authenticated_submissions,receipt
+          entry = receipt(authenticated_submissions())
+          if entry is None or not entry.get("ref"):
+              raise RuntimeError("V4_OFFICIAL_RECEIPT_NOT_FOUND_DO_NOT_RETRY")
+          print("V4_MANUAL_AUTHENTICATED_RECEIPT="+json.dumps(entry,sort_keys=True),flush=True)
+          PY
