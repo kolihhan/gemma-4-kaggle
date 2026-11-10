@@ -1,0 +1,45 @@
+name: V4 manual submission workflow registration smoke test once
+on:
+  push:
+    branches:
+      - research/dual-agent-recovery-v0-20261108
+    paths:
+      - .github/workflows/v4-manual-registration-smoke-once.yml
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Confirm default-branch V4 workflow is ACTIVE and dispatchable
+        shell: bash
+        run: |
+          set -euo pipefail
+          meta="$(gh api "repos/${REPO}/actions/workflows/submit-v4-cgr-manual.yml")"
+          name="$(jq -r '.name' <<< "$meta")"
+          state="$(jq -r '.state' <<< "$meta")"
+          path="$(jq -r '.path' <<< "$meta")"
+          id="$(jq -r '.id' <<< "$meta")"
+          echo "V4_MANUAL_REGISTERED_ID=$id"
+          echo "V4_MANUAL_REGISTERED_STATE=$state"
+          echo "V4_MANUAL_REGISTERED_PATH=$path"
+          test "$state" = active
+          test "$path" = ".github/workflows/submit-v4-cgr-manual.yml"
+          test "$name" = "Gemma V4-CGR guarded manual official submission"
+          commit="$(gh api "repos/${REPO}/contents/.github/workflows/submit-v4-cgr-manual.yml" -H "Accept: application/vnd.github.raw+json")"
+          grep -Fq "SOURCE_SHA: 70dcd7d9ea796d64b7c7029490e5e4de6722d823" <<< "$commit"
+          grep -Fq "ref: 70dcd7d9ea796d64b7c7029490e5e4de6722d823" <<< "$commit"
+          grep -Fq "5015ae18d03c1aca2e708e749e2f49b8da17ea49b7eb5c14f850558c3110c8be" <<< "$commit"
+          grep -Fq "confirm == 'SUBMIT'" <<< "$commit"
+          if grep -Eq '^  (schedule|push):' <<< "$commit"; then
+            echo "V4_MANUAL_UNEXPECTED_AUTO_TRIGGER=TRUE" >&2; exit 1
+          fi
+          echo "V4_MANUAL_REGISTERED_AND_FROZEN_VERIFIED=TRUE"
+          echo "V4_MANUAL_REGISTRATION_SMOKE_NO_KAGGLE_NO_GPU_NO_SUBMISSION=TRUE"
