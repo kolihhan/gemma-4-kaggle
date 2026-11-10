@@ -1,0 +1,109 @@
+name: V4 real Kaggle CPU transport canary once
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths:
+      - .github/workflows/v4-real-kaggle-cpu-transport-canary-once.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v4-cpu-transport-canary-20261111
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      TEST_KERNEL: kolihhan/gemma4-v4-cpu-transport-canary-20261111
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Authenticated PRIVATE CPU notebook push, version status, exact output roundtrip
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          import tempfile
+          import time
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          from scripts import submit_solver_v4_cgr_once as submission
+
+          # Test the REAL push/status/output interface without a competition entry,
+          # Gemma model, competition data, or GPU session.
+          slug = os.environ["TEST_KERNEL"]
+          payload = b"gemma4-v4-cpu-transport-canary:2026-11-11\n"
+          digest = hashlib.sha256(payload).hexdigest()
+          with tempfile.TemporaryDirectory(prefix="gemma-v4-canary-") as temp:
+              root = Path(temp)
+              kernel = root / "kernel"
+              kernel.mkdir()
+              notebook = {
+                  "nbformat":4,
+                  "nbformat_minor":5,
+                  "metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"}},
+                  "cells":[{
+                      "cell_type":"code",
+                      "execution_count":None,
+                      "metadata":{},
+                      "outputs":[],
+                      "source":[
+                          "from pathlib import Path\n",
+                          f"Path('/kaggle/working/v4-transport-canary.txt').write_bytes({payload!r})\n",
+                          "print('V4_PRIVATE_CPU_TRANSPORT_CANARY_EXECUTED=TRUE')\n",
+                      ],
+                  }],
+              }
+              (kernel/"canary.ipynb").write_text(json.dumps(notebook))
+              (kernel/"kernel-metadata.json").write_text(json.dumps({
+                  "id":slug, "title":slug.split("/",1)[1],
+                  "code_file":"canary.ipynb", "language":"python",
+                  "kernel_type":"notebook","is_private":True,
+                  "enable_gpu":False,"enable_tpu":False,
+                  "enable_internet":False,
+                  "competition_sources":[],"dataset_sources":[],
+                  "kernel_sources":[],"model_sources":[],
+              }))
+              api=KaggleApi()
+              api.authenticate()
+              response=api.kernels_push(str(kernel),timeout="600")
+              # The production verifier must validate the actual Kaggle SDK response.
+              submission.KERNEL=slug
+              version=submission.verified_kernel_version(response)
+              pinned=f"{slug}/{version}"
+              print("V4_REAL_CANARY_PUSHED_PINNED="+pinned,flush=True)
+              assert version>=1
+              last="UNKNOWN"
+              for _ in range(38):
+                  status=api.kernels_status(pinned)
+                  last=str(getattr(status,"status","UNKNOWN"))
+                  if "COMPLETE" in last:
+                      break
+                  if any(x in last for x in ("ERROR","FAILED","CANCELLED")):
+                      raise RuntimeError("CANARY_KERNEL_TERMINAL_FAILURE:"+last)
+                  time.sleep(8)
+              else:
+                  print("V4_REAL_CANARY_NONTERMINAL="+last,flush=True)
+                  raise RuntimeError("CANARY_PRIVATE_CPU_KERNEL_STILL_QUEUED_OR_RUNNING")
+              output=root/"output"
+              output.mkdir()
+              api.kernels_output(pinned,str(output),force=True,quiet=True)
+              observed=(output/"v4-transport-canary.txt").read_bytes()
+              if hashlib.sha256(observed).hexdigest()!=digest:
+                  raise RuntimeError("CANARY_OUTPUT_BYTES_OR_VERSION_WRONG")
+              print("V4_REAL_CANARY_VERSION_ROUNDTRIP_VERIFIED="+pinned,flush=True)
+              print("V4_REAL_CANARY_OUTPUT_SHA256="+digest,flush=True)
+              print("V4_REAL_CANARY_NO_COMPETITION_SUBMISSION_NO_GPU_NO_GEMMA=TRUE",flush=True)
+          PY
