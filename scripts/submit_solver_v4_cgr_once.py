@@ -153,7 +153,9 @@ def verified_kernel_version(response) -> int:
         raise RuntimeError("KAGGLE_PUSH_VERSION_UNCONFIRMED")
     reference = getattr(response, "ref", None)
     url = getattr(response, "url", None)
-    if reference is not None and reference != KERNEL:
+    # Kaggle SDK 2.2.5 actually responds with ref="/code/owner/slug",
+    # not necessarily "owner/slug". Both identify the exact same notebook.
+    if reference is not None and reference not in (KERNEL, "/code/" + KERNEL):
         raise RuntimeError("KAGGLE_PUSH_IDENTITY_UNCONFIRMED")
     if url is not None:
         parsed = urlsplit(url)
