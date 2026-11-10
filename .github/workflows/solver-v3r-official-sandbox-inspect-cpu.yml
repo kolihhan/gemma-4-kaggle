@@ -1,0 +1,58 @@
+name: Solver V3-R official subprocess sandbox executor contract CPU
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/solver-v3r-official-sandbox-inspect-cpu.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Official wheehouse (no GPU, no competition submission)
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p /tmp/solver-v3r-sandbox-wheels
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel"               -p /tmp/solver-v3r-sandbox-wheels --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check /tmp/solver-v3r-sandbox-wheels/*.whl
+      - name: Inspect official executor construction and callable API (read only)
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import inspect,importlib,glob
+          from pathlib import Path
+          mod=importlib.import_module("swegemma.harness.agent_runner")
+          path=Path(mod.__file__)
+          src=path.read_text(encoding="utf-8").splitlines()
+          for begin,end in ((580,635),(755,790)):
+            print("OFFICIAL_AGENT_RUNNER_SOURCE_LINES",begin,end)
+            for i in range(begin-1,min(end,len(src))):
+              print(f"SWEGEMMA_LINE_{i+1}={src[i]}")
+          for key,value in sorted(vars(mod).items()):
+            if "SandboxCodeExecutor" in key:
+              print("OFFICIAL_EXECUTOR_CLASS",key)
+              print("OFFICIAL_EXECUTOR_SIGNATURE",inspect.signature(value))
+              lines=inspect.getsource(value).splitlines()
+              for i,line in enumerate(lines[:220]):
+                print(f"EXECUTOR_CLASS_LINE_{i+1}={line}")
+          root=path.parent.parent
+          for p in sorted(root.rglob("*.py")):
+            if "class SubprocessSandbox" in p.read_text(encoding="utf-8",errors="replace"):
+              print("OFFICIAL_SUBPROCESS_SANDBOX_MODULE",p)
+              val=p.read_text().splitlines()
+              hits=[i for i,x in enumerate(val) if "class SubprocessSandbox" in x]
+              for i in hits:
+                print("OFFICIAL_SANDBOX_CLASS_LINES",str(p.relative_to(root)),i)
+                for j in range(i,min(i+105,len(val))):
+                  print(f"SANDBOX_CLASS_LINE_{j+1}={val[j]}")
+          print("NO_GPU_NO_NEW_KERNEL_NO_SUBMISSION=TRUE")
+          PY
