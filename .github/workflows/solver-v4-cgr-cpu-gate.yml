@@ -2,7 +2,13 @@ name: Solver V4-CGR real counterexample mechanism official CPU gate
 on:
   push:
     branches: [research/dual-agent-recovery-v0-20261108]
-    paths: [".github/workflows/solver-v4-cgr-cpu-gate.yml"]
+    paths:
+      - ".github/workflows/solver-v4-cgr-cpu-gate.yml"
+      - "experiments/solver-v4/**"
+      - "scripts/build_solver_v4_cgr_candidate.py"
+      - "scripts/probe_solver_v4_cgr_official_executor.py"
+      - "tests/test_solver_v4_counterexample.py"
+      - "tests/test_build_solver_v4_cgr_candidate.py"
 permissions:
   contents: read
 jobs:
