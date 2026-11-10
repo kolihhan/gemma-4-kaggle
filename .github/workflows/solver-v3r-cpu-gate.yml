@@ -38,3 +38,5 @@ jobs:
           echo "SOLVER_V3R_NO_GPU_NO_OFFICIAL_SUBMISSION=TRUE"
 
 # v3r: run green gate against executable bundled skill and compiler
+
+# v3r: rerun after actual pytest-regression witness fixes
