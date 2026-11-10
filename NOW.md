@@ -1,3 +1,11 @@
+# NOW — Main V4 manual submission workflow is registered ACTIVE (2026-11-11 02:11 MYT)
+
+**Direct GitHub Actions API verification, not just file existence:** [One-time Actions smoke run 42872606020](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42872606020) **SUCCESS**; GitHub authenticated `repos/kolihhan/gemma-4-kaggle/actions/workflows/submit-v4-cgr-manual.yml` returned workflow ID **413586641**, `state=active`, and the exact `main/.github/workflows/submit-v4-cgr-manual.yml` path. It fetched the default-branch file to verify immutable source pin `70dcd7d9ea796d64b7c7029490e5e4de6722d823`, ZIP digest `5015ae18d03c1aca2e708e749e2f49b8da17ea49b7eb5c14f850558c3110c8be`, explicit `SUBMIT` confirmation and no scheduled/push trigger. The separate failed zero-job baseline workflow runs on `main` pushes **do not mean this manually registered workflow is missing**, as the API check establishes its active registration. This smoke test did not dispatch it, authenticate to Kaggle, start GPUs or spend quota. Manual end-to-end official Kaggle receipt still **not proven**.
+
+**Next actual action:** only after official Kaggle quota becomes available, initiate the **already registered manual** workflow by the user through GitHub Actions (`submit_official=true`, `confirm=SUBMIT`), then collect authenticated Kaggle submission ID, score and status before claiming V4 performance. Do not schedule the competition submission or claim background delivery. Best verified Public 0.18 remains unchanged.
+
+---
+
 # NOW — V4 submit transport 600s cap regression repaired (2026-11-11 02:07 MYT)
 
 A code audit found the SDK transition from `kaggle kernels push -t 600` to `KaggleApi.kernels_push()` had silently dropped the CPU notebook's 600-second execution cap. This was repaired with `kernels_push(...,timeout="600")` and a direct mock assertion in the version/receipt test. **No agent ZIP/model/prompt/sampling/budget changed.**
