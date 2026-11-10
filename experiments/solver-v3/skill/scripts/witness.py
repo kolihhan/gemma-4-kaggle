@@ -30,7 +30,10 @@ def safe_test_node(workspace: Path, target: str) -> str:
             not path.suffix == ".py"):
         raise ValueError("test target must be a relative Python test file/node")
     root = workspace.resolve(strict=True)
-    full = (root / raw_path).resolve(strict=True)
+    try:
+        full = (root / raw_path).resolve(strict=True)
+    except (FileNotFoundError, OSError) as exc:
+        raise ValueError("test target outside workspace or missing") from exc
     if not full.is_relative_to(root) or not full.is_file():
         raise ValueError("test target outside workspace or missing")
     return target
@@ -46,7 +49,7 @@ def _status(returncode: int, output: str) -> str:
     if returncode == 0 and re.search(r"(?m)(?:\d+ passed|1 passed)\b", output):
         return "pass"
     if returncode == 1 and re.search(
-            r"(?im)^\s*FAILED\s|(?m)\b\d+ failed\b", output):
+            r"(?im)^\s*FAILED\s|\b\d+ failed\b", output):
         return "fail"
     return "blocked"
 
@@ -88,7 +91,7 @@ def run_witness(workspace: Path, target: str, phase: str, *,
             if before not in {"pass", "fail", "blocked"}:
                 before = None
 
-    command = [sys.executable, "-m", "pytest", "-q", "-x",
+    command = [sys.executable, "-B", "-m", "pytest", "-q", "-x",
                "--disable-warnings", target]
     try:
         proc = subprocess.run(
