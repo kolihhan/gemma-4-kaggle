@@ -1,3 +1,19 @@
+## M1 COMPLETE — official injected CodeExecutor + real ADK tool-event integration (2026-11-10)
+
+**Passed:** [Actions 42785080724](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42785080724) **SUCCESS**. This is more than ZIP compilation: the exact V3-R research ZIP was compiled with the **official** `swegemma.harness.agent_runner.AdkSandboxCodeExecutor` attached to `compile_submission`, and a no-inference scripted `BaseLlm` drove the real `google.adk.runners.Runner` with actual tools through an isolated synthetic git checkout. Every step emitted both `FunctionCall` and `FunctionResponse`:
+
+`load_skill → run_skill_script(before) → edit_file → run_skill_script(after) → submit_patch`.
+
+The actual packaged `skills/repair-witness/scripts/witness.py` invoked real pytest: **before** returned `status=fail, comparison=baseline_recorded`, the registered native `edit_file` changed one synthetic source line, **after** returned `status=pass, comparison=repair_demonstrated`, and the synthetic model read that structured feedback before it called `submit_patch`. **12 focused tests pass**, official ADK / `swegemma` compilation and limits pass. Verifiable exact ZIP SHA256: `ae8201c0ce30daf581102ef5d22886f8a4dcebfae47236dffb02ffa6426f9b0c`.
+
+**Real runtime bug fixed:** the official subprocess sandbox may use an isolated checkout path different from literal `/workspace`. `witness.py` now finds an actual git workspace using `SWE_WORKSPACE`, then `PWD`, then `/workspace`, then cwd. A CLI subprocess test reproducing execution from a distinct skill cwd passes. The official `swegemma` runtime source confirms it constructs `AdkSandboxCodeExecutor(sandbox=context.sandbox, ...)` and passes `code_executor` to `compile_submission` (verified in [Actions 42783433294](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42783433294)). An ordinary ADK Runner *without* that injection returns `NO_CODE_EXECUTOR`; this is expected and not representative of official scoring.
+
+**Critical scientific boundary:** this uses a scripted model, **not** a real Gemma 4 31B model. It proves production-legal mechanics and evidence-driven conditional actions, **not** that 31B autonomously selects the witness or that issue-resolution improves. The private 31B Kaggle kernel was still `QUEUED` at 2026-11-10 08:30 UTC. No GPU inference, new Kaggle competition submission or score resulted from M1. The true verified Public best is still **0.17**. M2 must preregister a disjoint real model uptake check at matched five-minute/28-call budgets and only proceed when private Kaggle inference is available. Do not promote the V3-R ZIP as scored.
+
+**Source:** `scripts/probe_solver_v3r_official_executor.py`, `.github/workflows/solver-v3r-cpu-gate.yml`, `tests/test_solver_v3r_witness.py`, `experiments/solver-v3/skill/scripts/witness.py`.
+
+---
+
 # Solver V3-R — executable pytest evidence witness (2026-11-10)
 
 **Status: candidate IMPLEMENTED + CPU verified, NOT proven competitive, NOT officially submitted.**
