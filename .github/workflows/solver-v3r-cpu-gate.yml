@@ -36,3 +36,5 @@ jobs:
           python -m scripts.build_solver_v3r_candidate             --source-zip /tmp/solver-v3r-source/submission.zip             --out /tmp/solver-v3r-submission.zip
           python -m scripts.verify_solver_v3r_official --zip /tmp/solver-v3r-submission.zip
           echo "SOLVER_V3R_NO_GPU_NO_OFFICIAL_SUBMISSION=TRUE"
+
+# v3r: run green gate against executable bundled skill and compiler
