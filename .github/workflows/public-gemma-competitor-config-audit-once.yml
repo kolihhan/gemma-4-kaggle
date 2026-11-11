@@ -1,0 +1,94 @@
+name: Audit actual PUBLIC Gemma competitor submission config against immutable V2 (CPU)
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/public-gemma-competitor-config-audit-once.yml"]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Authenticated public notebook extraction and V2 comparison, no inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          from pathlib import Path
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          import ast, difflib, hashlib, json, re, zipfile
+          api=KaggleApi();api.authenticate()
+          base=Path("/tmp/v2-public-source");base.mkdir()
+          api.kernels_output("lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2",str(base),force=True,quiet=True)
+          with zipfile.ZipFile(base/"submission.zip") as z:
+              v2={k:z.read(k).decode("utf-8") for k in z.namelist()}
+          print("PUBLIC_CONFIG_BASELINE_ZIP_SHA="+hashlib.sha256((base/"submission.zip").read_bytes()).hexdigest(),flush=True)
+          print("PUBLIC_CONFIG_V2_FILES="+json.dumps(sorted(v2)),flush=True)
+          refs=[
+              "bliverrigpdoge/lb-0-22-4-config-files-no-training",
+              "prvsiyan/gemma-and-the-shape-of-doubt",
+              "honghanhhh/gemma-4-baseline-lb-0-24"
+          ]
+          for idx,ref in enumerate(refs):
+              dest=Path(f"/tmp/comparison-{idx}");dest.mkdir()
+              try: api.kernels_pull(ref,str(dest),metadata=True,quiet=True)
+              except Exception as err:
+                  print("PUBLIC_STATIC_AUDIT="+json.dumps({"ref":ref,"status":"pull_failed","error_type":type(err).__name__}),flush=True)
+                  continue
+              candidates=[]
+              for book in dest.glob("*.ipynb"):
+                  try:obj=json.loads(book.read_text())
+                  except Exception:continue
+                  for c in obj.get("cells",[]):
+                      if c.get("cell_type")!="code":continue
+                      source=c.get("source",[])
+                      source="".join(source) if isinstance(source,list) else source
+                      try:tree=ast.parse(source)
+                      except SyntaxError:continue
+                      for node in ast.walk(tree):
+                          if not isinstance(node,ast.Dict):continue
+                          try:value=ast.literal_eval(node)
+                          except (ValueError,TypeError,OverflowError,RecursionError):continue
+                          if not isinstance(value,dict):continue
+                          keys=set(value)
+                          if {"agent.yaml","eval_config.yaml"}.issubset(keys) and
+                             all(isinstance(x,str) for x in value.values()):
+                              candidates.append(value)
+              report={"ref":ref,"status":"static_only",
+                      "literal_bundle_count":len(candidates)}
+              if candidates:
+                  bundle=max(candidates,key=lambda d:len(d))
+                  report["files"]=sorted(bundle)
+                  report["has_nested"]=bool({"workflow.yaml"}&set(bundle)) or "sub_agents/" in str(bundle.keys())
+                  report["has_skills"]=any(str(k).startswith("skills/") for k in bundle)
+                  report["all_file_sha"]={k:hashlib.sha256(v.encode()).hexdigest() for k,v in bundle.items() if k in v2}
+                  report["exact_file_match_v2"]={k:(bundle[k]==v2[k]) for k in bundle if k in v2}
+                  report["prompt_similarity_v2"]=round(difflib.SequenceMatcher(
+                    None,bundle.get("prompts/system.md",""),v2.get("prompts/system.md","")).ratio(),3)
+                  report["prompt_characters"]=len(bundle.get("prompts/system.md",""))
+                  report["eval_config_scalar_lines"]=[
+                    x.strip() for x in bundle.get("eval_config.yaml","").splitlines()
+                    if re.match(r"\s*(max_time_minutes|max_tool_calls|max_turns|timeout_seconds)\s*:",x)
+                  ]
+                  report["sampling_scalar_lines"]=[
+                    x.strip() for x in bundle.get("configs/sampling.yaml","").splitlines()
+                    if re.match(r"\s*(thinking_budget|temperature|top_p|max_output_tokens)\s*:",x)
+                  ]
+                  report["agent_class"]=next((x.strip() for x in
+                    bundle.get("agent.yaml","").splitlines() if x.strip().startswith("agent_class:")),"implicit LlmAgent")
+                  report["base_model"]=next((x.strip() for x in
+                    bundle.get("agent.yaml","").splitlines() if x.strip().startswith("model:")),"not declared")
+                  patterns=("edit","test","run_command","read_file","submit_patch","budget","time",
+                            "minimal","limit","stop","search","graph","locate","first")
+                  prompt=bundle.get("prompts/system.md","").lower()
+                  report["prompt_instruction_keyword_counts"]={w:len(re.findall(r"\b"+w+r"\b",prompt)) for w in patterns}
+              print("PUBLIC_STATIC_AUDIT="+json.dumps(report,sort_keys=True),flush=True)
+          print("PUBLIC_CONFIG_AUDIT_NO_UNTRUSTED_EXEC_NO_GPU_NO_SUBMISSION=TRUE",flush=True)
+          PY
