@@ -18,7 +18,7 @@ class FourTaskKernelTests(unittest.TestCase):
             self.assertEqual(report["tasks"],[
                 "fastapi_14458","fastapi_15589","rich_3894","rich_3905"
             ])
-            self.assertEqual(code.count("gemma4-clean-four-integrity-v1"),1)
+            self.assertEqual(code.count("gemma4-clean-four-integrity-v1"),2)
             self.assertEqual(code.count("def evaluate_controls()"),1)
             self.assertEqual(meta["enable_gpu"],False)
             self.assertEqual(meta["enable_internet"],False)
