@@ -1,5 +1,15 @@
 # Mandatory Scope → Coder — new structural architecture, 2026-11-11
 
+## Measured official ADK outcome — root SequentialAgent REJECTED (2026-11-11 14:11 MYT)
+
+- [CPU run 42969323985](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42969323985) **SUCCESS** with a scripted one-turn ADK Runner: `read_file → edit_file → submit_patch`; the `scope_packet` reached the writer; candidate SHA256 `dbf2ae3a536edc322dd827194ea548d9ae9f2ec7ec92b2e5251086229ad7b27f`. **This was NOT a proof of root app compaction.**
+- [Compaction stress 42970282094](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42970282094) **FAILED as expected** after five actual user invocations under the official 1.36.1 ADK App, with `ValueError: No LlmAgent model available for event compaction summarizer.` The direct root SequentialAgent architecture is **NOT eligible** for 31B inference or official submission. The failure confirms the historical root-compaction issue and refutes a false green CPU-only promotion.
+- **Separate next arm:** [LlmAgent-root wrapped builder](../../scripts/build_wrapped_scope_coder_candidate.py) and [official nested/compaction probe](../../scripts/probe_wrapped_scope_coder_official.py) put the same inner mandatory Scope→Coder `SequentialAgent` behind the root's **only `AgentTool`**. Any native source edit must pass the inner workflow because no direct editing/shell/submit tools are declared at the root. The root still decides whether to invoke the tool, so adoption is a live empirical risk. The wrapped arm has not been independently scored by Gemma 31B; do not call it a performance improvement.
+- The wrapped candidate's first [CPU run 42971014203](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42971014203) compiled the bundle, executed nested `read_file → edit_file → submit_patch`, but its strict requirement of an actual compaction event in a small synthetic five-invocation session failed: `ROOT_LLM_COMPACTION_NOT_ACTUALLY_TRIGGERED`. This is **not** the same error as absent root model. A follow-up checks ADK's exact default compactor model resolution without claiming that a compaction event was emitted. Do not promote it until the official follow-up is complete.
+
+---
+
+
 **Status:** executable experimental builder, structural tests passed. Official ADK CPU lifecycle gate running; no real 31B repair-rate result, no scoring submission, no extra GPU. See the final GitHub Actions result before treating this as compiler-verified.
 
 ## Correct the older research inference first
