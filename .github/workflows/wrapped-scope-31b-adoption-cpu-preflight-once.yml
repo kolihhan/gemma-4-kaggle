@@ -1,0 +1,54 @@
+name: Wrapped Scope 31B one-task adoption static plus actual reference CPU preflight
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/wrapped-scope-31b-adoption-cpu-preflight-once.yml"]
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Static tests for one-task selection and actual AgentTool observer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_render_wrapped_scope_31b_adoption_probe
+          python -m py_compile scripts/render_wrapped_scope_31b_adoption_probe.py
+          echo "WRAPPED_ADOPTION_STATIC_CPU_TESTS=PASS"
+      - name: Fetch immutable public V2 reference artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p /tmp/wrapped-adoption-reference
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p /tmp/wrapped-adoption-reference -o >/dev/null
+          test -s /tmp/wrapped-adoption-reference/submission.zip
+      - name: Compile exact private 31B runtime, verify SHA and no public submission
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.render_wrapped_scope_31b_adoption_probe \
+            --source-zip /tmp/wrapped-adoption-reference/submission.zip \
+            --repo . \
+            --out /tmp/wrapped-adoption-render \
+            --kernel-ref kolihhan/gemma4-wrapped-adoption-cpu-preflight
+          python -m py_compile /tmp/wrapped-adoption-render/wrapped_scope_31b_adoption_runtime.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          m=json.loads(Path('/tmp/wrapped-adoption-render/kernel-metadata.json').read_text())
+          assert m["is_private"] and m["enable_gpu"] and not m["enable_internet"]
+          assert m["competition_sources"] == ["gemma-4-developer-agent"]
+          assert m["model_sources"] == ["google/gemma-4/Other/gemma-4-31b-it-qat-w4a16-ct/2"]
+          print("WRAPPED_ADOPTION_PRIVATE_CONFIG_GATE=PASS")
+          print("WRAPPED_ADOPTION_NO_GPU_NO_KAGGLE_PUSH_NO_COMPETITION_SUBMISSION=TRUE")
+          PY
