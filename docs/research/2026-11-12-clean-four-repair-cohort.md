@@ -36,3 +36,18 @@ Code for this stage:
 - `scripts/render_clean_four_integrity_cpu.py` reuses the existing official-score-controlled private three-task runtime, substituting exactly the frozen four IDs.
 - `tests/test_render_clean_four_integrity_cpu.py` enforces historical eligibility and air-gapped CPU metadata.
 - `.github/workflows/clean-four-integrity-cpu-once-20261112.yml` is a one-off, push-guarded workflow; no GPU, inference, or competition submission.
+
+## Contemporaneous gold/no-op evidence — completed
+
+[Official-wheels private CPU Action 43076716956](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43076716956) returned **SUCCESS** and exactly the four predeclared task IDs; source code and static tests passed after a preflight-only first failure corrected the renderer. **No model GPU inference** and **no official Kaggle submission** were executed.
+
+| Frozen task | Current no-op | Current reference gold | Benchmark input chars | URL present | Hints chars | Result |
+|---|---|---|---:|---|---:|---|
+| `fastapi_14458` | unresolved, exit 1 | **resolved, exit 0** | 591 | yes | 0 | informative |
+| `fastapi_15589` | unresolved, exit 1 | **resolved, exit 0** | 1247 | no | 0 | informative |
+| `rich_3894` | unresolved, exit 1 | **resolved, exit 0** | 1974 | yes | 0 | informative |
+| `rich_3905` | unresolved, exit 1 | **resolved, exit 0** | 1672 | yes | 0 | informative |
+
+**4/4 local official verifier informativeness**, across FastAPI and Rich; all inputs are longer than the earlier 68-char pointer case and none matches the short-link heuristic. This removes the known specific Requests gold-fail confound on this panel; it does NOT prove zero missing requirements, hidden task transfer or proof of model success.
+
+Because the clean condition was predeclared and all four passed, **retain all four** for the separate matched real-model 12B vs 31B pilot. Do not cherry-pick between model outcomes. The model source, prompt, verifier and result gate are defined in `docs/research/2026-11-12-12b-vs-31b-clean-four-prereg.md` on the independent research branch.
