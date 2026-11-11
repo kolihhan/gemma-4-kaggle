@@ -1,0 +1,69 @@
+name: Public prompt-only 31B competitor frozen CPU 5min and original8 build once
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/public-gemma-prompt-only-cpu-build-once.yml"]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Unit-test public notebook no-execution, strict config parity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_build_public_prompt_only_control_20261111
+          python -m py_compile scripts/build_public_prompt_only_control_20261111.py
+          echo "PUBLIC_PROMPT_CPU_FOUR_STATIC_TESTS=PASS"
+      - name: Download exact public 4-file Notebook and SHA-pinned Budget-Fit V2 ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p /tmp/prompt-public-notebook /tmp/prompt-baseline-v2 /tmp/prompt-candidates
+          kaggle kernels pull bliverrigpdoge/lb-0-22-4-config-files-no-training \
+            -p /tmp/prompt-public-notebook -m >/dev/null
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 \
+            -p /tmp/prompt-baseline-v2 -o >/dev/null
+          test -s /tmp/prompt-baseline-v2/submission.zip
+          test -s /tmp/prompt-public-notebook/lb-0-22-4-config-files-no-training.ipynb
+      - name: Build original public 8-minute bundle with exact source SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.build_public_prompt_only_control_20261111 \
+            --source-zip /tmp/prompt-baseline-v2/submission.zip \
+            --public-ipynb /tmp/prompt-public-notebook/lb-0-22-4-config-files-no-training.ipynb \
+            --minutes 8 --out /tmp/prompt-candidates/public-8min.zip
+      - name: Build matched 5-minute prompt-only candidate, NO model changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.build_public_prompt_only_control_20261111 \
+            --source-zip /tmp/prompt-baseline-v2/submission.zip \
+            --public-ipynb /tmp/prompt-public-notebook/lb-0-22-4-config-files-no-training.ipynb \
+            --minutes 5 --out /tmp/prompt-candidates/public-5min.zip
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, zipfile
+          r=Path("/tmp/prompt-candidates")
+          with zipfile.ZipFile(r/"public-8min.zip") as a, zipfile.ZipFile(r/"public-5min.zip") as b:
+              aa={k:a.read(k) for k in a.namelist()}
+              bb={k:b.read(k) for k in b.namelist()}
+              assert len(aa)==len(bb)==4
+              assert {k for k in aa if aa[k]!=bb[k]}=={"eval_config.yaml"}
+              assert b"max_time_minutes: 5" in bb["eval_config.yaml"]
+              assert b"max_time_minutes: 8" in aa["eval_config.yaml"]
+          print("PUBLIC_PROMPT_STRICT_ONLY_BUDGET_DIFFERENCE=PASS",flush=True)
+          print("PUBLIC_PROMPT_5MIN_ZIP_SHA256="+hashlib.sha256((r/"public-5min.zip").read_bytes()).hexdigest(),flush=True)
+          print("PUBLIC_PROMPT_8MIN_ZIP_SHA256="+hashlib.sha256((r/"public-8min.zip").read_bytes()).hexdigest(),flush=True)
+          print("PUBLIC_PROMPT_NO_GPU_NO_KAGGLE_PUSH_NO_COMPETITION_SUBMISSION=TRUE",flush=True)
+          PY
