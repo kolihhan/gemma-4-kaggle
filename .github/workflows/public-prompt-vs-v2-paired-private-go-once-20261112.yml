@@ -1,0 +1,171 @@
+name: Gemma 31B real paired single-agent prompt-only vs V2 3 clean tasks PRIVATE once
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/public-prompt-vs-v2-paired-private-go-once-20261112.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: gemma31b-prompt-only-v2-paired-clean-v1-single-kernel
+  cancel-in-progress: false
+jobs:
+  paired_31b:
+    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'GO_PUBLIC_PROMPT_V2_DISJOINT_31B_PAIRED_ONE_PRIVATE_20261112' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 115
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-prompt-v2-paired-${{ github.run_id }}
+      SOURCE_REF: "c9354ff7555153babd22ec128633b0cabbbd1f8c"
+      SOURCE_DIR: /tmp/prompt-pair-source
+      NOTEBOOK_DIR: /tmp/prompt-pair-kernel
+      PRIVATE_DIR: /tmp/prompt-pair-private
+      SAFE_DIR: /tmp/prompt-pair-safe
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: "c9354ff7555153babd22ec128633b0cabbbd1f8c"
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify actual CPU Gate and reproducible repository snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_REF"
+          python -m unittest -q tests.test_render_public_prompt_vs_v2_paired_31b
+          python -m py_compile scripts/render_public_prompt_vs_v2_paired_31b.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path("experiments/public-prompt-vs-v2-disjoint-paired-20261112/manifest.json").read_text())
+          assert p["version"]=="public-prompt-v2-paired-clean-v1"
+          assert p["experiment"]["model_task_evaluations"]==6
+          assert p["experiment"]["tasks"]==3
+          assert p["shared_budget"]["max_time_minutes"]==5
+          assert p["shared_budget"]["max_tool_calls"]==28
+          assert p["prompt_only_5min_zip_sha256"]=="fdb862b0f8391b0596f200ccb8e3bece40d9dc8f1e3d60e63537277ac626649d"
+          print("PAIRED_PROMPT_REAL_31B_PREDECLARED_GATE=PASS",flush=True)
+          PY
+      - name: Check actual Kaggle GPU quota and exact private kernel idempotency
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import json,subprocess
+          r=subprocess.run(["kaggle","quota","--format","json"],capture_output=True,
+                           text=True,check=True,timeout=90)
+          rows=json.loads(r.stdout)
+          match=[x for x in rows if x.get("resource")=="GPU"]
+          if len(match)!=1:raise RuntimeError("no unique authenticated GPU quota")
+          remaining=float(str(match[0]["remaining"]).rstrip("h"))
+          print("PAIRED_PROMPT_GPU_REMAINING_HOURS="+str(remaining),flush=True)
+          if remaining<6.0:raise SystemExit("STOP_BELOW_6_GPU_HOURS")
+          print("PAIRED_PROMPT_GPU_QUOTA_GATE=PASS",flush=True)
+          PY
+          if kaggle kernels status "$KERNEL_REF" >/tmp/prompt-pair-existing.log 2>&1; then
+            echo "STOP_EXACT_PRIVATE_KERNEL_ALREADY_EXISTS"; exit 1
+          fi
+      - name: Render ONLY pinned public source and private competition runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$SOURCE_DIR/v2" "$SOURCE_DIR/public" "$SAFE_DIR"
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p "$SOURCE_DIR/v2" -o >/dev/null
+          kaggle kernels pull bliverrigpdoge/lb-0-22-4-config-files-no-training -p "$SOURCE_DIR/public" -m >/dev/null
+          python -m scripts.render_public_prompt_vs_v2_paired_31b \
+            --repo . --source-zip "$SOURCE_DIR/v2/submission.zip" \
+            --public-ipynb "$SOURCE_DIR/public/lb-0-22-4-config-files-no-training.ipynb" \
+            --out "$NOTEBOOK_DIR" --kernel-ref "$KERNEL_REF"
+          python -m py_compile "$NOTEBOOK_DIR/paired_prompt_vs_v2_31b_runtime.py"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          m=json.loads((Path(os.environ["NOTEBOOK_DIR"])/"kernel-metadata.json").read_text())
+          assert m["is_private"] and m["enable_gpu"] and not m["enable_internet"]
+          assert m["competition_sources"]==["gemma-4-developer-agent"]
+          assert m["model_sources"]==["google/gemma-4/Other/gemma-4-31b-it-qat-w4a16-ct/2"]
+          print("PAIRED_PROMPT_PRIVATE_RUNTIME_METADATA_GATE=PASS",flush=True)
+          PY
+      - name: Push EXACTLY ONE private L4x4 Notebook (no competition submission)
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          kaggle kernels push -p "$NOTEBOOK_DIR" --accelerator NvidiaL4 -t 3600 >/tmp/prompt-pair-push.log 2>&1
+          code=$?
+          set -e
+          python scripts/check_capacity_31b_push_v0.py --log /tmp/prompt-pair-push.log --client-exit-code "$code"
+          echo "PAIRED_PROMPT_PRIVATE_KERNEL_REF=$KERNEL_REF"
+          echo "PAIRED_PROMPT_COMPETITION_SUBMISSION=FALSE"
+      - name: Poll the SAME private Notebook without relaunch
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 150); do
+            info="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            lower="$(printf '%s' "$info" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal=complete; break; fi
+            if grep -Eq 'failed|failure|error|cancelled|canceled' <<<"$lower"; then terminal=error; break; fi
+            if [ "$attempt" -eq 1 ] || [ $((attempt % 20)) -eq 0 ]; then
+              echo "PAIRED_PROMPT_PRIVATE_POLL=$attempt"
+            fi
+            sleep 30
+          done
+          test -n "$terminal" || terminal=pending
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          echo "PAIRED_PROMPT_PRIVATE_KERNEL_TERMINAL=$terminal"
+      - name: Read ONLY allowed safe metric fields, never issue texts or raw patches
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          mkdir -p "$PRIVATE_DIR" "$SAFE_DIR"
+          kaggle kernels output "$KERNEL_REF" -p "$PRIVATE_DIR" -o >/tmp/prompt-pair-download.log 2>&1
+          if [ -s "$PRIVATE_DIR/paired_prompt_v2_31b_results.json" ]; then
+            python - <<'PY'
+          import json,os
+          from pathlib import Path
+          d=json.loads((Path(os.environ["PRIVATE_DIR"])/"paired_prompt_v2_31b_results.json").read_text())
+          records=d.get("results",[])
+          if len(records)!=6:
+              raise RuntimeError("STOP_INCOMPLETE_PAIRED_DENOMINATOR")
+          allowed=("arm","instance_id","status","resolved","test_exit_code",
+                   "patch_chars","has_patch","tool_calls","duration_seconds","error_type")
+          safe_records=[{k:r.get(k) for k in allowed} for r in records]
+          for arm in ("v2_5min","public_prompt_5min"):
+              matches=[r for r in safe_records if r["arm"]==arm]
+              assert len(matches)==3
+          safe={"version":"public-prompt-v2-paired-clean-v1",
+                "model":d.get("model"),"kernel_state":d.get("status"),
+                "score_by_arm":d.get("score_by_arm"),"records":safe_records,
+                "official_competition_submission":False}
+          (Path(os.environ["SAFE_DIR"])/"paired_safe_metrics.json").write_text(
+              json.dumps(safe,indent=2,sort_keys=True)+"\n")
+          print("PAIRED_PROMPT_REAL_31B_SAFE_RESULT="+json.dumps(safe,sort_keys=True),flush=True)
+          PY
+          else
+            echo "PAIRED_PROMPT_NO_TERMINAL_PRIVATE_RESULTS=TRUE"
+          fi
+          echo "PAIRED_PROMPT_NO_RAW_TASK_PATCH_TRACE_OR_REFERENCE_PUBLIC=TRUE"
+      - name: Upload ONLY derived safe paired metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemma4-prompt-v2-paired-safe-metrics-${{ github.run_id }}
+          path: /tmp/prompt-pair-safe/paired_safe_metrics.json
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Verify private 6-evaluation terminal outcome, no contest submission
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "PAIRED_PROMPT_FINAL_PRIVATE_STATE=${{ steps.poll.outputs.terminal }}"
+          echo "PAIRED_PROMPT_OFFICIAL_COMPETITION_SUBMISSION=0"
+          test "${{ steps.poll.outputs.terminal }}" = complete
+          test -s "$SAFE_DIR/paired_safe_metrics.json"
