@@ -63,3 +63,23 @@ jobs:
           print("PUBLIC_PROMPT_PAIR_REAL_SOURCE_PINNED_CPU_GATE=PASS")
           print("NO_GPU_NO_TRAINING_NO_KAGGLE_PUSH_NO_COMPETITION_SUBMISSION=TRUE")
           PY
+
+      - name: Check ACTUAL pinned official scorer EvalConfig copy compatibility (CPU only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/prompt-pair-wheels
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel" -p /tmp/prompt-pair-wheels --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check /tmp/prompt-pair-wheels/*.whl
+          python - <<'PY'
+          import dataclasses
+          from swegemma.config import EvalConfig
+          fields=getattr(EvalConfig,"__dataclass_fields__",{})
+          assert "submission_dir" in fields or "submission_dir" in getattr(EvalConfig,"model_fields",{})
+          assert "results_dir" in fields or "results_dir" in getattr(EvalConfig,"model_fields",{})
+          assert dataclasses.is_dataclass(EvalConfig) or hasattr(EvalConfig,"model_copy")
+          print("PAIRED_PROMPT_OFFICIAL_EVALCONFIG_COPY_SAFE=TRUE",flush=True)
+          print("PAIRED_PROMPT_EVALCONFIG_IS_DATACLASS="+str(dataclasses.is_dataclass(EvalConfig)),flush=True)
+          PY
