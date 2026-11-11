@@ -1,0 +1,62 @@
+name: Verify public 0.22 scored version 10 ZIP availability and configuration CPU only
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/verify-scored-public-022-zip-source-cpu-once.yml"]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Inspect exact Kaggle PUBLIC scored notebook v10 generated outputs, never execute notebook
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p /tmp/flexonafft-public-v10
+          python - <<'PY'
+          import hashlib,json,zipfile
+          from pathlib import Path
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          api=KaggleApi();api.authenticate()
+          ref="flexonafft/gemma-4-budget-aware-coding-agent-v2/10"
+          root=Path("/tmp/flexonafft-public-v10")
+          try:
+              api.kernels_output(ref,str(root),force=True,quiet=True)
+          except Exception as e:
+              print("PUBLIC_022_V10_OUTPUT_ERROR_CLASS="+type(e).__name__,flush=True)
+              raise
+          files=sorted(p for p in root.rglob("*") if p.is_file())
+          print("PUBLIC_022_V10_OUTPUT_FILES="+json.dumps(
+              [{"name":p.name,"ext":p.suffix,"bytes":p.stat().st_size}
+               for p in files[:35]],sort_keys=True),flush=True)
+          for p in files:
+              if p.suffix.lower()!=".zip" or p.stat().st_size>10_000_000: continue
+              try:
+                  with zipfile.ZipFile(p) as z:
+                      names=z.namelist()
+                      if not {"agent.yaml","eval_config.yaml","prompts/system.md"}.issubset(names):
+                          continue
+                      config=z.read("eval_config.yaml").decode()
+                      prompt=z.read("prompts/system.md")
+                      agent=z.read("agent.yaml").decode()
+                      print("PUBLIC_022_V10_REAL_ZIP="+json.dumps({
+                          "name":p.name,
+                          "sha256":hashlib.sha256(p.read_bytes()).hexdigest(),
+                          "members":names[:20],
+                          "prompt_sha256":hashlib.sha256(prompt).hexdigest(),
+                          "prompt_chars":len(prompt),
+                          "model_lines":[x.strip() for x in agent.splitlines() if x.strip().startswith("model:")],
+                          "budget_lines":[x.strip() for x in config.splitlines() if x.strip().startswith(("max_time_minutes:","max_tool_calls:","max_turns:"))]
+                      },sort_keys=True),flush=True)
+              except Exception as err:
+                  print("PUBLIC_022_V10_ARCHIVE_READER_CLASS="+type(err).__name__)
+          print("PUBLIC_022_V10_READONLY_NO_GPU_NO_SUBMISSION=TRUE",flush=True)
+          PY
