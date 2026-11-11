@@ -82,7 +82,11 @@ def render_runtime(template: str, source_zip: bytes, public: dict[str, str], pla
     if "max_time_minutes: 5" not in control["eval_config.yaml"]:
         raise ValueError("time cap mismatch")
 
-    text = replace_one(template, '"__SUBMISSION_PAYLOAD_B64__"', repr(payload(control)), "baseline payload")
+    # The original E4B reference runtime does not import hashlib; the
+    # frozen ID-only selector uses it. Inject only the standard-library import.
+    text = replace_one(template, "import json\n", "import json\nimport hashlib\n",
+                       "deterministic task selector import")
+    text = replace_one(text, '"__SUBMISSION_PAYLOAD_B64__"', repr(payload(control)), "baseline payload")
     text = replace_one(text,
         'HOLDOUT_MANIFEST_JSON = "__VERIFIER_LORA_HOLDOUT_MANIFEST_JSON__"',
         "HOLDOUT_MANIFEST_JSON = " + repr(json.dumps(plan, sort_keys=True)), "manifest")
