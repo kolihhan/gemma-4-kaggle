@@ -1,0 +1,157 @@
+name: Gemma 31B V2 same-task 5min posthoc control once PRIVATE
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/v2-5min-requests7328-posthoc-control-go-once.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: v2-5min-posthoc-requests7328-only-once
+  cancel-in-progress: false
+
+jobs:
+  one_private_v2_control:
+    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'GO_V2_5MIN_REQUESTS7328_POSTHOC_ONE_PRIVATE_20261111' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 95
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-v2-posthoc-requests7328-${{ github.run_id }}
+      SOURCE_DIR: /tmp/v2-control-source
+      KERNEL_DIR: /tmp/v2-control-private-kernel
+      PRIVATE_OUTPUT: /tmp/v2-control-private-output
+      SAFE_OUTPUT: /tmp/v2-control-safe
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify exact one-task posthoc comparison before GPU
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_render_v2_5min_requests7328_control
+          python -m py_compile scripts/render_v2_5min_requests7328_control.py
+          echo "POSTHOC_V2_CONTROL_STATIC_TESTS=PASS"
+          echo "THIS_IS_DIAGNOSTIC_NOT_INDEPENDENT_HOLDOUT=TRUE"
+      - name: Authenticate, check GPU quota, reject duplicate kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import json,subprocess
+          p=subprocess.run(["kaggle","quota","--format","json"],capture_output=True,
+                           text=True,timeout=90,check=True)
+          gpu=next(q for q in json.loads(p.stdout) if q["resource"]=="GPU")
+          hours=float(gpu["remaining"].rstrip("h"))
+          print("V2_POSTHOC_REMAINING_GPU_HOURS="+str(hours),flush=True)
+          if hours<4:raise SystemExit("STOP_GPU_QUOTA_BELOW_CONTROL_GATE")
+          print("V2_POSTHOC_GPU_QUOTA_GATE=PASS")
+          PY
+          if kaggle kernels status "$KERNEL_REF" >/tmp/v2-existing.log 2>&1; then
+            echo "STOP_PRIVATE_KERNEL_ALREADY_EXISTS"; exit 1
+          fi
+      - name: Render exact scored V2 except 8min to 5min, private model runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$SOURCE_DIR" "$SAFE_OUTPUT"
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p "$SOURCE_DIR" -o >/dev/null
+          test -s "$SOURCE_DIR/submission.zip"
+          python -m scripts.render_v2_5min_requests7328_control \
+            --repo . --source-zip "$SOURCE_DIR/submission.zip" \
+            --out "$KERNEL_DIR" --kernel-ref "$KERNEL_REF"
+          python -m py_compile "$KERNEL_DIR/v2_5min_requests7328_control_runtime.py"
+          python -m json.tool "$KERNEL_DIR/kernel-metadata.json" >/dev/null
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          m=json.loads((Path(os.environ["KERNEL_DIR"])/"kernel-metadata.json").read_text())
+          assert m["is_private"] and m["enable_gpu"] and not m["enable_internet"]
+          assert m["competition_sources"]==["gemma-4-developer-agent"]
+          assert m["model_sources"]==["google/gemma-4/Other/gemma-4-31b-it-qat-w4a16-ct/2"]
+          print("V2_POSTHOC_ONE_TASK_PRIVATE_GATE=PASS")
+          PY
+      - name: Launch EXACTLY one private V2 31B control (no competition submit)
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          kaggle kernels push -p "$KERNEL_DIR" --accelerator NvidiaL4 -t 3600 > /tmp/v2-control-push.log 2>&1
+          code=$?
+          set -e
+          python scripts/check_capacity_31b_push_v0.py --log /tmp/v2-control-push.log --client-exit-code "$code"
+          echo "V2_POSTHOC_PRIVATE_KERNEL_REF=$KERNEL_REF"
+          echo "KAGGLE_COMPETITION_SUBMISSION=FALSE"
+      - name: Poll same one private kernel and do not relaunch
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 120); do
+            status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            lower="$(printf '%s' "$status" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal=complete; break; fi
+            if grep -Eq 'error|failure|failed|cancelled|canceled' <<<"$lower"; then terminal=error; break; fi
+            if [ "$attempt" -eq 1 ] || [ $((attempt % 20)) -eq 0 ]; then
+              echo "V2_POSTHOC_PRIVATE_POLL=$attempt"
+            fi
+            sleep 30
+          done
+          test -n "$terminal" || terminal=pending
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          echo "V2_POSTHOC_PRIVATE_TERMINAL=$terminal"
+      - name: Retrieve only derived private task metrics, never competition data
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          mkdir -p "$PRIVATE_OUTPUT" "$SAFE_OUTPUT"
+          kaggle kernels output "$KERNEL_REF" -p "$PRIVATE_OUTPUT" -o >/tmp/v2-control-download.log 2>&1
+          if [ -s "$PRIVATE_OUTPUT/v2_5min_requests7328_results.json" ]; then
+            python - <<'PY'
+          import json,os
+          from pathlib import Path
+          raw=json.loads((Path(os.environ["PRIVATE_OUTPUT"])/"v2_5min_requests7328_results.json").read_text())
+          items=raw.get("results",[])
+          if len(items)!=1:raise RuntimeError("V2_POSTHOC_DENOMINATOR_CHANGED")
+          x=items[0]
+          assert x.get("instance_id")=="requests_7328"
+          safe={"version":"v2-5min-requests7328-posthoc-v1",
+                "posthoc_not_independent":True,
+                "model":raw.get("model"),
+                "requested":raw.get("requested"),
+                "completed":raw.get("completed"),
+                "resolved":raw.get("resolved"),
+                "record":{k:x.get(k) for k in
+                   ("instance_id","status","resolved","test_exit_code",
+                    "has_patch","patch_chars","tool_calls","duration_seconds","error_type")}}
+          out=Path(os.environ["SAFE_OUTPUT"])/"v2_posthoc_safe_metrics.json"
+          out.write_text(json.dumps(safe,indent=2,sort_keys=True)+"\n")
+          print("V2_POSTHOC_SAFE_ONE_TASK_RESULT="+json.dumps(safe,sort_keys=True),flush=True)
+          PY
+          else
+            echo "V2_POSTHOC_NOT_TERMINAL_OR_NO_METRICS=TRUE"
+          fi
+          echo "NO_RAW_TASK_PATCH_TRACE_OR_REFERENCE_PUBLIC=TRUE"
+      - name: Upload safe derived diagnostic only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2-5min-posthoc-requests7328-metrics-${{ github.run_id }}
+          path: /tmp/v2-control-safe/v2_posthoc_safe_metrics.json
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Verify that the single-task diagnostic has a real terminal result
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "V2_POSTHOC_FINAL_KERNEL_STATE=${{ steps.poll.outputs.terminal }}"
+          echo "V2_POSTHOC_NO_OFFICIAL_SUBMISSION=TRUE"
+          test "${{ steps.poll.outputs.terminal }}" = complete
+          test -s "$SAFE_OUTPUT/v2_posthoc_safe_metrics.json"
