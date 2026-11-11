@@ -1,3 +1,9 @@
+# NOW — Post-submit status check: 58222227 still PENDING (2026-11-11 10:38 MYT)
+
+**Authenticated independent score check:** [Read-only GitHub Action 42947403444](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42947403444) SUCCESS. At 2026-11-11 **02:38:40 UTC** the actual `kaggle competitions submissions gemma-4-developer-agent -v` CSV contained exactly one ID `58222227` with marker `solver-v4-cgr-one-shot-20261110`, `status=SubmissionStatus.PENDING`, and empty `publicScore` and `privateScore`. This is post-submission **confirmation**, not a completed score. **Do not start another submission**. The last real scored best remains `58183466: 0.18` until the new entry is COMPLETE with a returned numeric Public score. The one-time user-authorized submission action [42946421274](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42946421274) is terminal SUCCESS; official Kaggle ID `58222227` is the only meaningful new competitive result of that action thus far.
+
+---
+
 # NOW — V4-CGR officially submitted: Kaggle 58222227 (2026-11-11 10:34 MYT)
 
 **ACTUAL user-authorized official Kaggle code submission, NOT a test.** After explicit user `go`, authenticated Kaggle submission quota at [read-only Actions 42848511113 (fresh attempt)](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42848511113) at 2026-11-11 02:27:28 UTC was `allowed_now=1`, `num_today=0`, `active=[]`. A one-time push-triggered workflow was launched for this specific user authorization; the first YAML syntax attempt was rejected by GitHub pre-job with **zero jobs and zero Kaggle submissions**, then the corrected, exact-message-gated workflow [Actions 42946421274](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42946421274) ran **SUCCESS**.
