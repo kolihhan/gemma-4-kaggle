@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   submit:
-    if: ${{ github.event_name == 'push' && github.event.head_commit.message == 'execute: one-shot V4 Kaggle submission after authenticated reset 2026-11-11' }}
+    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'GO_V4_CGR_OFFICIAL_ONCE_20261111' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:
