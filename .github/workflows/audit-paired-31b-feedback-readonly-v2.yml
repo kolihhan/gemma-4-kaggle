@@ -1,4 +1,4 @@
-name: Gemma 31B completed paired test feedback read-only v2
+name: Gemma 31B completed paired test feedback read-only v2 (error follow-up)
 on:
   push:
     branches: [research/31b-test-feedback-evidence-20261112]
