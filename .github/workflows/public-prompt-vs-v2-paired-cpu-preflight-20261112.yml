@@ -1,3 +1,4 @@
+# Recheck deterministic selector import after unit-test NameError; no GPU and no third-party notebook execution.
 name: Paired public-prompt versus V2 fixed budget independent CPU preflight
 on:
   push:
