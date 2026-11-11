@@ -53,7 +53,8 @@ def render(repo: Path, out: Path, kernel_ref: str) -> dict:
         ("original_31b_paired_run", "prequalification_gold_noop_run"),
         ("43057377220", "41782992381"),
     ):
-        if text.count(old) != 1:
+        expected = 2 if old == "gemma4-paired-31b-three-task-integrity-v1" else 1
+        if text.count(old) != expected:
             raise ValueError("runtime anchor mismatch " + old)
         text = text.replace(old, new)
     compile(text, "clean_four_integrity_cpu.py", "exec")
