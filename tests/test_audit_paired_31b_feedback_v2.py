@@ -46,6 +46,23 @@ class FeedbackTests(unittest.TestCase):
         self.assertEqual(result["nonzero_test_then_edit"],1)
         self.assertEqual(result["tests_with_structured_exit"],{"nonzero":1})
         self.assertEqual(result["total_edit_actions"],2)
+        self.assertEqual(result["nonzero_commands_followed_by_edit"],1)
+        self.assertEqual(result["nonzero_commands_after_last_edit"],0)
+        self.assertEqual(result["nonzero_command_classes"],{"explicit_test":1})
+
+    def test_nonzero_after_last_edit_not_misreported_as_repaired(self):
+        trace={"steps":[
+            {"tool_calls":[{"function_name":"edit_file"}]},
+            {"tool_calls":[{"function_name":"run_command","arguments":{
+                "command":"git diff --check"}}],
+             "observation":{"content":{"exit_code":1}}},
+            {"tool_calls":[{"function_name":"submit_patch"}]}
+        ]}
+        result=reduce_feedback(trace)
+        self.assertEqual(result["nonzero_commands_followed_by_edit"],0)
+        self.assertEqual(result["nonzero_commands_after_last_edit"],1)
+        self.assertEqual(result["nonzero_commands_followed_by_submit_without_edit"],1)
+        self.assertEqual(result["nonzero_command_classes"],{"git_inspect":1})
 
     def test_full_paired_denominator(self):
         with tempfile.TemporaryDirectory() as tmp:
