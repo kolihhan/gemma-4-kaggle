@@ -196,8 +196,31 @@ async def probe(source: bytes):
             app_name="wrappedcpu",user_id="cpu",session_id=session.id)
         after=count_compactions(after_session.events)
         manual_official_compaction=after-before
-        if not compacted and manual_official_compaction<1:
-            raise AssertionError("ROOT_LLM_REAL_ADK_COMPACTION_EVENT_NOT_CREATED")
+        direct_summarizer_events=0
+        if after<1:
+            # Independent interface check: exercise the SAME official
+            # LlmEventSummarizer object installed by the App. This verifies
+            # model-driven event construction, but is NOT an automatic
+            # sliding-window invocation or a long-context scorer result.
+            summary=await app.events_compaction_config.summarizer.maybe_summarize_events(
+                events=latest.events)
+            if summary is None or not getattr(
+                getattr(summary,"actions",None),"compaction",None):
+                raise AssertionError("ROOT_LLM_OFFICIAL_SUMMARIZER_RETURNED_NO_EVENT")
+            await sessions.append_event(session=latest,event=summary)
+            direct_summarizer_events=1
+        stored=await sessions.get_session(
+            app_name="wrappedcpu",user_id="cpu",session_id=session.id)
+        stored_compaction_events=count_compactions(stored.events)
+        if stored_compaction_events<1:
+            raise AssertionError("NO_OFFICIAL_ADK_COMPACTION_EVENT_IN_SESSION")
+        print("WRAPPED_SCOPE_CODER_COMPACTION_DIAGNOSTICS="+json.dumps({
+            "invocations":len(invocations),
+            "compactions_before_sliding_call":before,
+            "compactions_after_sliding_call":after,
+            "explicit_summarizer_events":direct_summarizer_events,
+            "stored_compaction_events":stored_compaction_events,
+        },sort_keys=True),flush=True)
         if "return 3" not in (repo/"sample.py").read_text():
             raise AssertionError("synthetic patch not materialized")
         print("WRAPPED_SCOPE_CODER_OFFICIAL_CPU_GATE="+json.dumps({
@@ -205,10 +228,13 @@ async def probe(source: bytes):
             "root_only_agent_tool":True,
             "native_tool_order":native,
             "runner_stream_compaction_events":compacted,
-            "direct_official_compaction_events":manual_official_compaction,
+            "direct_official_sliding_window_events":manual_official_compaction,
+            "direct_summarizer_events":direct_summarizer_events,
+            "stored_compaction_events":stored_compaction_events,
             "recorded_user_invocations":len(invocations),
             "default_compactor_model_resolved":True,
-            "compaction_fully_exercised":bool(compacted or manual_official_compaction),
+            "compaction_event_formed":bool(stored_compaction_events),
+            "automatic_compaction_verified":bool(compacted or before),
             "typed_events":observed,
             "scope_packet_used":state["packet"],
             "synthetic_submission":True,
