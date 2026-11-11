@@ -1,3 +1,4 @@
+# Lifecycle stress: official ADK App compaction_interval=3 for mandatory root SequentialAgent.
 # Retry only after correcting V2 implicit agent_class default; no additional GPU or Kaggle competition submit.
 name: Mandatory two-stage SWE architecture - official CPU lifecycle gate
 on:
