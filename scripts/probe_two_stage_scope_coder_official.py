@@ -119,6 +119,16 @@ async def probe(archive: bytes):
                     yield LlmResponse(content=types.Content(role="model",
                          parts=[types.Part(text="synthetic task submitted")]))
                     return
+                elif step>=5:
+                    # Four further user invocations are essential: ADK event
+                    # compaction counts INVOCATIONS, not model/tool calls.
+                    # The scope/coder sequence runs once per invocation.
+                    state["step"]+=1
+                    followup=(scope_packet if (step-5)%2==0
+                              else "The synthetic task is already fixed.")
+                    yield LlmResponse(content=types.Content(role="model",
+                         parts=[types.Part(text=followup)]))
+                    return
                 else:
                     raise AssertionError("unexpected model step "+str(step))
                 state["step"]+=1
@@ -150,13 +160,23 @@ async def probe(archive: bytes):
                     compaction_interval=3,overlap_size=1))
         runner=Runner(app=app,session_service=session_service)
         events=[]
-        async for event in runner.run_async(
-            user_id="cpu",session_id=session.id,new_message=types.Content(
-                role="user",parts=[types.Part(text="Make sample.py result() return 3")]),
-        ):
-            for p in (getattr(getattr(event,"content",None),"parts",None) or []):
-                if p.function_call:events.append("call:"+p.function_call.name)
-                if p.function_response:events.append("result:"+p.function_response.name)
+        compaction_events=0
+        for invocation in range(5):
+            # One run_async call == one ADK user invocation, irrespective of
+            # internal LLM and native-tool turns.
+            message=("Make sample.py result() return 3" if invocation==0
+                     else "Confirm the synthetic patch is already finished")
+            async for event in runner.run_async(
+                user_id="cpu",session_id=session.id,new_message=types.Content(
+                    role="user",parts=[types.Part(text=message)]),
+            ):
+                if getattr(getattr(event,"actions",None),"compaction",None):
+                    compaction_events+=1
+                for p in (getattr(getattr(event,"content",None),"parts",None) or []):
+                    if p.function_call:events.append("call:"+p.function_call.name)
+                    if p.function_response:events.append("result:"+p.function_response.name)
+        if compaction_events<1:
+            raise AssertionError("ADK_COMPACTION_NOT_ACTUALLY_TRIGGERED")
         expected=["call:read_file","result:read_file","call:edit_file",
                   "result:edit_file","call:submit_patch","result:submit_patch"]
         if events!=expected:raise AssertionError({"observed":events,"expected":expected})
@@ -164,10 +184,10 @@ async def probe(archive: bytes):
             raise AssertionError("unexpected native tool execution order")
         if not state["scope_seen_by_coder"]:
             raise AssertionError("stage output packet never reached writer")
-        if state["step"]!=5:raise AssertionError("unexpected scripted turns")
+        if state["step"]!=13:raise AssertionError("unexpected scripted turns")
         print("STAGED_SCOPE_CODER_OFFICIAL_CPU_GATE="+json.dumps({
             "root":"SequentialAgent","stage_order":[c.name for c in children],
-            "compaction_configured":True,"compaction_interval":3,
+            "compaction_events":compaction_events,"compaction_interval":3,
             "events":events,"readonly_scope":True,
             "packet_reached_writer":True,
             "scripted_model":True,"real_gemma_31b":False,
