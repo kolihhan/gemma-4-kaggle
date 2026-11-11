@@ -1,0 +1,180 @@
+name: Gemma 4 real 12B vs 31B four-clean-issues private matched pilot once
+on:
+  push:
+    branches: [research/12b-vs-31b-frozen-capacity-20261112]
+    paths: [.github/workflows/real-matched-12b-31b-four-clean-once.yml]
+permissions:
+  contents: read
+concurrency:
+  group: gemma-real-12b-31b-clean-four-one-pilot
+  cancel-in-progress: false
+jobs:
+  real_clean_capacity:
+    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'GO_REAL_GEMMA_12B_VS_31B_CLEAN_FOUR_ONCE' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 155
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      SOURCE_DIR: /tmp/gemma-capacity-public-source
+      KERNEL_DIR: /tmp/gemma-capacity-kernels
+      PRIVATE_DIR: /tmp/gemma-capacity-private
+      SAFE_DIR: /tmp/gemma-capacity-safe
+      KERNEL_ROOT: kolihhan/gemma4-realclean-capacity-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile and synthetic-test private per-model official evaluator
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_build_matched_12b_31b_capacity tests.test_render_matched_12b_31b_private
+          python -m py_compile scripts/render_matched_12b_31b_private.py
+          echo "MODEL_CAPACITY_TWO_KERNEL_CPU_TESTS=PASS"
+      - name: Authenticate, ensure GPU balance and no existing equal experiment
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import json,subprocess
+          result=subprocess.run(["kaggle","quota","--format","json"],
+                                capture_output=True,text=True,check=True,timeout=90)
+          items=json.loads(result.stdout)
+          matches=[x for x in items if x.get("resource")=="GPU"]
+          if len(matches)!=1:raise RuntimeError("no unique authenticated GPU quota")
+          remaining=float(str(matches[0]["remaining"]).rstrip("h"))
+          print("MODEL_CAPACITY_GPU_REMAINING_HOURS="+str(remaining))
+          if remaining<8.0:raise SystemExit("STOP_GPU_REMAINING_BELOW_8H")
+          print("MODEL_CAPACITY_GPU_QUOTA_GATE=PASS")
+          PY
+          for arm in v2-12b v2-31b; do
+            ref="$KERNEL_ROOT-$arm"
+            if kaggle kernels status "$ref" >/tmp/capacity-existing.log 2>&1; then
+              echo "STOP_IDENTICAL_KERNEL_ALREADY_EXISTS"; exit 1
+            fi
+          done
+      - name: Build exact pinned public-source matched 5m model variants, never executing third-party notebook code
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$SOURCE_DIR" "$KERNEL_DIR" "$PRIVATE_DIR" "$SAFE_DIR"
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p "$SOURCE_DIR" -o >/tmp/capacity-v2-download.log 2>&1
+          test -s "$SOURCE_DIR/submission.zip"
+          for arm in v2_12b v2_31b; do
+            safe_arm="${arm//_/-}"
+            python -m scripts.render_matched_12b_31b_private \
+              --repo . \
+              --source-zip "$SOURCE_DIR/submission.zip" \
+              --arm "$arm" \
+              --out "$KERNEL_DIR/$arm" \
+              --kernel-ref "$KERNEL_ROOT-$safe_arm"
+            python -m py_compile "$KERNEL_DIR/$arm/frozen_model_capacity_runtime.py"
+          done
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from scripts.render_matched_12b_31b_private import EXPECTED,ARMS
+          from scripts.build_matched_12b_31b_capacity import candidate_files,archive
+          path=Path(os.environ["SOURCE_DIR"])/"submission.zip"
+          variants=candidate_files(path.read_bytes())
+          import hashlib
+          assert set(variants)==set(ARMS)
+          assert all(hashlib.sha256(archive(variants[k])).hexdigest()==EXPECTED[k] for k in ARMS)
+          assert all(variants["v2_31b"][k]==variants["v2_12b"][k] for k in variants["v2_31b"] if k!="agent.yaml")
+          for arm,model in ARMS.items():
+              meta=json.loads((Path(os.environ["KERNEL_DIR"])/arm/"kernel-metadata.json").read_text())
+              assert meta["is_private"] and meta["enable_gpu"] and not meta["enable_internet"]
+              assert meta["model_sources"]==[f"google/gemma-4/Other/{model}/2"]
+              assert meta["competition_sources"]==["gemma-4-developer-agent"]
+          print("MODEL_CAPACITY_TWO_REAL_PRIVATE_KERNEL_GATES=PASS")
+          PY
+      - name: Run 12B first, then 31B, on the same frozen four public tasks (one GPU kernel each)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for arm in v2_12b v2_31b; do
+            safe_arm="${arm//_/-}"
+            ref="$KERNEL_ROOT-$safe_arm"
+            out="$PRIVATE_DIR/$arm"
+            mkdir -p "$out"
+            echo "START_PRIVATE_MODEL_ARM=$arm"
+            if ! kaggle kernels push -p "$KERNEL_DIR/$arm" --accelerator NvidiaL4 -t 3600 >/tmp/gemma-capacity-push.log 2>&1; then
+              echo "STOP_PRIVATE_GPU_PUSH_FAILED_ARM=$arm"; exit 1
+            fi
+            terminal=""
+            for attempt in $(seq 1 146); do
+              status="$(kaggle kernels status "$ref" 2>&1 || true)"
+              lower="$(printf '%s' "$status" | tr '[:upper:]' '[:lower:]')"
+              if grep -Eq 'complete|completed' <<<"$lower"; then terminal=complete; break; fi
+              if grep -Eq 'failed|failure|error|cancelled|canceled' <<<"$lower"; then terminal=error; break; fi
+              if [ "$attempt" -eq 1 ] || [ $((attempt % 25)) -eq 0 ]; then
+                echo "MODEL_CAPACITY_PRIVATE_POLL_ARM=$arm COUNT=$attempt"
+              fi
+              sleep 25
+            done
+            echo "MODEL_CAPACITY_PRIVATE_TERMINAL_ARM=$arm STATUS=${terminal:-pending}"
+            if [ "$terminal" != complete ]; then
+              echo "STOP_MODEL_KERNEL_NOT_COMPLETE_ARM=$arm"; exit 1
+            fi
+            if ! kaggle kernels output "$ref" -p "$out" -o >/tmp/gemma-capacity-download.log 2>&1; then
+              echo "STOP_PRIVATE_MODEL_RESULT_DOWNLOAD_FAILED_ARM=$arm"; exit 1
+            fi
+            target="$out/capacity_${arm}_results.json"
+            test -s "$target"
+            ARM="$arm" INPUT="$target" SAFE="$SAFE_DIR" python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from scripts.render_matched_12b_31b_private import ARMS,FROZEN
+          arm=os.environ["ARM"]
+          data=json.loads(Path(os.environ["INPUT"]).read_text(encoding="utf-8"))
+          assert data["status"]=="completed"
+          assert data["model"]==ARMS[arm]
+          rows=data.get("results",[])
+          ids=[x[0] for x in FROZEN]
+          if len(rows)!=4 or [r.get("instance_id") for r in rows]!=ids:
+              raise RuntimeError("STOP_WRONG_FROZEN_DENOMINATOR")
+          clean=[]
+          for r in rows:
+              status=r.get("status")
+              if status not in ("completed","error"):raise RuntimeError("bad terminal result")
+              result={
+                  "instance_id":r["instance_id"],"status":status,
+                  "resolved":r.get("resolved") is True,
+                  "has_patch":r.get("has_patch") is True,
+                  "patch_chars":r.get("patch_chars") if isinstance(r.get("patch_chars"),int) else 0,
+                  "tool_calls":r.get("tool_calls") if isinstance(r.get("tool_calls"),int) else None,
+                  "duration_seconds":r.get("duration_seconds") if isinstance(r.get("duration_seconds"),(int,float)) else None,
+                  "test_exit_code":r.get("test_exit_code") if isinstance(r.get("test_exit_code"),int) else None,
+                  "error_type":r.get("error_type") if r.get("error_type") in ("TimeoutError","ValueError","TypeError","RuntimeError","FileNotFoundError","OSError","ExceptionGroup") else ("other" if status=="error" else None)
+              }
+              clean.append(result)
+          report={
+              "version":"real-clean-four-model-scale-capacity-v1",
+              "model":ARMS[arm], "arm":arm,"task_count":4,
+              "resolved":sum(r["resolved"] for r in clean),
+              "patched":sum(r["has_patch"] for r in clean),
+              "errors":sum(r["status"]=="error" for r in clean),
+              "records":clean,"official_competition_submission":False,
+              "training":False,"public_development_only":True,
+              "raw_private_task_or_patch_included":False,
+          }
+          path=Path(os.environ["SAFE"])/f"clean_capacity_{arm}_safe.json"
+          path.write_text(json.dumps(report,indent=2,sort_keys=True)+"\n")
+          print("SAFE_REAL_CAPACITY_ARM_RESULT="+json.dumps(report,sort_keys=True))
+          PY
+          done
+          echo "MODEL_CAPACITY_TWO_REAL_MODEL_ARMS_COMPLETE=TRUE"
+          echo "OFFICIAL_COMPETITION_SUBMISSIONS_CREATED=0"
+      - name: Upload metadata-safe result only; never any private raw Kaggle traces or patches
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemma-cleanfour-realmodel-size-comparison-${{ github.run_id }}
+          path: /tmp/gemma-capacity-safe/clean_capacity_*_safe.json
+          retention-days: 14
+          if-no-files-found: warn
