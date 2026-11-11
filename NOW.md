@@ -14,6 +14,13 @@
 - **Root SequentialAgent Scope→Coder: rejected for current wheelhouse.** ADK 1.36.1 session compaction fails with `No LlmAgent model available for event compaction summarizer` ([actual CPU failure](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42970282094)).
 - **Wrapped Scope→Coder: CPU runtime-valid, research-only.** Root `LlmAgent` offers one nested `AgentTool` enclosing read-only Scope and sole-write Coder. The official scripted-model CPU harness verified native edit/tool order, state handoff and **1 actual automatic session compaction event** ([runtime gate](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42972954885)). **No actual Gemma 31B tool uptake or independently resolved issues measured.** Exact experiment code is in the research branch, **not in `main/submission/`**. Do not call it “V5 winner.”
 
+## Private real-model adoption probe — initiated 2026-11-11 16:40 MYT
+
+- After the evidence review, the user authorized one **private** L4x4 notebook with a preselected public-development `requests` issue, no training and no official competition submission.
+- [Real Kaggle model probe Actions 42988852829](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42988852829): static tests, authenticated GPU gate, exact V2 source digest, and Kaggle private kernel push **PASSED**; asynchronous private kernel polling was in progress at the snapshot. No actual AgentTool uptake, success, task latency, or final score was established at the time of writing.
+- [CPU preflight 42988533131](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42988533131) PASS. Frozen single-task manifest and read-only instrumentation live on the research branch under `experiments/wrapped-scope-31b-adoption-v1/`.
+- This is a **one-task mechanism check**, not a matched baseline test or a claim that V5 beats V2. No second run should be launched while this private kernel remains active or queued.
+
 ## Active experiment decision
 
 1. Keep official V4 `58222227` frozen until scored; perform read-only status checks.
