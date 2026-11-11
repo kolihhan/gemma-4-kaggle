@@ -1,0 +1,59 @@
+name: Gemma 31B completed paired test feedback read-only v2
+on:
+  push:
+    branches: [research/31b-test-feedback-evidence-20261112]
+    paths: [.github/workflows/audit-paired-31b-feedback-readonly-v2.yml]
+permissions:
+  contents: read
+concurrency:
+  group: gemma4-31b-paired-feedback-readonly-v2
+  cancel-in-progress: false
+jobs:
+  audit:
+    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'GO_GEMMA_31B_FEEDBACK_READONLY_V2' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-prompt-v2-paired-43057377220
+      PRIVATE_ROOT: /tmp/gemma4-paired-feedback-private
+      SAFE_DIR: /tmp/gemma4-paired-feedback-safe
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify classification contract with synthetic commands
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_audit_paired_31b_feedback_v2 tests.test_audit_paired_31b_existing_traces
+          python -m py_compile scripts/audit_paired_31b_feedback_v2.py
+      - name: Read existing private Kaggle output without model inference or GPU
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p "$PRIVATE_ROOT" "$SAFE_DIR"
+          kaggle kernels output "$KERNEL_REF" -p "$PRIVATE_ROOT" -o >/tmp/paired-feedback-fetch.log 2>&1
+          test -s "$PRIVATE_ROOT/paired_prompt_v2_31b_results.json"
+          echo "PRIVATE_EXISTING_OUTPUT_READ_ONLY=TRUE"
+      - name: Sanitize feedback chronology without exposing commands or model responses
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.audit_paired_31b_feedback_v2 \
+            --root "$PRIVATE_ROOT" \
+            --output "$SAFE_DIR/paired_feedback_v2.json"
+          echo "NO_PRIVATE_RAW_TRACES_MESSAGES_COMMANDS_PATCHES_OR_GRADER_TEXT_PUBLIC=TRUE"
+          echo "NO_NEW_MODEL_GPU_OR_COMPETITION_SUBMIT=TRUE"
+      - name: Store safe summary only
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemma31b-paired-feedback-v2-safe-${{ github.run_id }}
+          path: /tmp/gemma4-paired-feedback-safe/paired_feedback_v2.json
+          if-no-files-found: error
+          retention-days: 14
