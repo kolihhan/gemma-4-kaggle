@@ -138,8 +138,9 @@ async def probe(source: bytes):
         root_tools=list(agent.tools)
         if len(root_tools)!=1 or "AgentTool" not in type(root_tools[0]).__name__:
             raise AssertionError("root must expose only one AgentTool")
-        if any(name in str(root_tools) for name in ("edit_file","run_command","submit_patch")):
-            raise AssertionError("root exposes a forbidden direct mutation tool")
+        root_tool_names={getattr(t,"name",None) for t in root_tools}
+        if root_tool_names!={"mandatory_scope_then_patch"}:
+            raise AssertionError("root exposes a forbidden or wrong tool: "+str(root_tool_names))
         app=App(name="wrappedcpu",root_agent=agent,
                 events_compaction_config=EventsCompactionConfig(
                     compaction_interval=3,overlap_size=1))
