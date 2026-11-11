@@ -1,0 +1,74 @@
+name: Compare exact scored 0.22 V10 ZIP to user's V2 and public prompt (CPU only)
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/compare-scored-v10-vs-v2-zip-cpu-once.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: SHA and semantic config comparison against actual scored V10 artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import difflib,hashlib,json,re,zipfile
+          from pathlib import Path
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          api=KaggleApi();api.authenticate()
+          cases=[
+              ("V2","lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2"),
+              ("SCORER_022_V10","flexonafft/gemma-4-budget-aware-coding-agent-v2/10"),
+          ]
+          parsed={}
+          for name,ref in cases:
+              dst=Path("/tmp/compare-"+name);dst.mkdir()
+              api.kernels_output(ref,str(dst),force=True,quiet=True)
+              path=dst/"submission.zip"
+              if not path.exists():raise FileNotFoundError("PINNED_PUBLIC_ZIP_MISSING_"+name)
+              with zipfile.ZipFile(path) as z:
+                  if z.testzip() is not None:raise RuntimeError("INVALID_PUBLIC_ZIP_"+name)
+                  parsed[name]={p:z.read(p).decode() for p in z.namelist()}
+              print("SCORED_V10_COMPARE_ARCHIVE="+json.dumps({
+                  "name":name,"source":ref,"archive_sha256":hashlib.sha256(path.read_bytes()).hexdigest(),
+                  "files":{n:hashlib.sha256(v.encode()).hexdigest() for n,v in parsed[name].items()}
+              },sort_keys=True),flush=True)
+          a,b=parsed["V2"],parsed["SCORER_022_V10"]
+          print("SCORED_V10_SOURCE_DIFF="+json.dumps({
+              "only_in_v2":sorted(set(a)-set(b)),
+              "only_in_v10":sorted(set(b)-set(a)),
+              "modified_files":sorted(n for n in a if n in b and a[n]!=b[n]),
+              "identical_files":sorted(n for n in a if n in b and a[n]==b[n]),
+          },sort_keys=True),flush=True)
+          for name in sorted(set(a)&set(b)):
+              if a[name]==b[name]:continue
+              if name!="prompts/system.md":
+                  sa=a[name].splitlines();sb=b[name].splitlines()
+                  # Only allowlisted scalar configuration, never dynamic code.
+                  selectors=("agent_class:","name:","model:","max_time_minutes:","max_tool_calls:","max_turns:","thinking_budget:","temperature:","top_p:","max_output_tokens:")
+                  out={"name":name,"v2":[x.strip() for x in sa if x.strip().startswith(selectors)],
+                       "scored_v10":[x.strip() for x in sb if x.strip().startswith(selectors)]}
+              else:
+                  import collections
+                  def features(x):
+                      text=x.lower()
+                      ks=["read_file","git grep","grep","search_similar_code","get_code_neighbors",
+                          "edit_file","write_file","submit_patch","pytest","test","within 6","call 12",
+                          "by your 12th","diagnos","reason","hypothesis","bug","fix","scope","minimal",
+                          "verify","validation","empty patch","patch size","early","direct","explor"]
+                      return {"chars":len(x),"lines":len(x.splitlines()),
+                              "keywords":{k:text.count(k) for k in ks}}
+                  out={"name":name,"v2":features(a[name]),"scored_v10":features(b[name]),
+                       "relative_prompt_similarity":round(difflib.SequenceMatcher(None,a[name],b[name]).ratio(),3)}
+              print("SCORED_V10_COMPARED_MEMBER="+json.dumps(out,sort_keys=True),flush=True)
+          print("SCORED_V10_CPU_ONLY_NO_MODEL_NO_SUBMISSION=TRUE")
+          PY
