@@ -1,0 +1,76 @@
+name: Extract public single-agent repair strategy and notebook score metadata (CPU)
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/public-gemma-single-agent-prompt-strategy-audit-once.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Read public Notebook source and compare actual prompt instruction structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import ast,hashlib,json,zipfile
+          from pathlib import Path
+          from kaggle.api.kaggle_api_extended import KaggleApi
+
+          ref="bliverrigpdoge/lb-0-22-4-config-files-no-training"
+          api=KaggleApi();api.authenticate()
+          d=Path("/tmp/gemma-public-candidate");d.mkdir()
+          api.kernels_pull(ref,str(d),metadata=True,quiet=True)
+          nb=json.loads(next(d.glob("*.ipynb")).read_text())
+          bundles=[]
+          for cell in nb.get("cells",[]):
+              if cell.get("cell_type")!="code":continue
+              t=cell.get("source",[])
+              t="".join(t) if isinstance(t,list) else t
+              try:tree=ast.parse(t)
+              except SyntaxError:continue
+              for node in ast.walk(tree):
+                  if not isinstance(node,ast.Dict):continue
+                  try:v=ast.literal_eval(node)
+                  except Exception:continue
+                  if isinstance(v,dict) and {"agent.yaml","eval_config.yaml","prompts/system.md"}.issubset(v):
+                      bundles.append(v)
+          if len(bundles)!=1:raise RuntimeError("PUBLIC_SOURCE_BUNDLE_NOT_UNIQUE")
+          candidate=bundles[0]
+          base=Path("/tmp/gemma-v2-reference");base.mkdir()
+          api.kernels_output("lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2",str(base),force=True,quiet=True)
+          with zipfile.ZipFile(base/"submission.zip") as z:
+              old={k:z.read(k).decode("utf-8") for k in z.namelist()}
+          assert set(candidate)==set(old)
+          assert all(candidate[k]==old[k] for k in candidate if k!="prompts/system.md")
+          print("PUBLIC_COMPETITOR_ONLY_PROMPT_DIFFERS=TRUE",flush=True)
+          print("PUBLIC_COMPETITOR_PROMPT_SHA256="+hashlib.sha256(candidate["prompts/system.md"].encode()).hexdigest(),flush=True)
+          print("PUBLIC_BASELINE_PROMPT_SHA256="+hashlib.sha256(old["prompts/system.md"].encode()).hexdigest(),flush=True)
+          for name,txt in (("PUBLIC_022_NOTEBOOK",candidate["prompts/system.md"]),("V2_REFERENCE",old["prompts/system.md"])):
+              # This is a PUBLIC notebook Apache-2.0 derived text: for
+              # analysis, keep a bounded and non-executable line-numbered
+              # list of its own instructions, no competition task content.
+              lines=[x.strip() for x in txt.splitlines() if x.strip()]
+              print("PUBLIC_STRATEGY_SECTION="+name+" total_lines="+str(len(lines)),flush=True)
+              for i,line in enumerate(lines[:80]):
+                  if len(line)>240:line=line[:240]+" [truncated]"
+                  print("PUBLIC_STRATEGY_LINE_"+name+"_"+str(i+1)+"="+json.dumps(line,ensure_ascii=False),flush=True)
+          try:
+              k=api.kernels_list(user="bliverrigpdoge",search="lb-0-22-4-config-files-no-training")
+              for record in list(k)[:6]:
+                  attrs={s:getattr(record,s,None) for s in (
+                      "ref","title","slug","versionNumber","version_number","score",
+                      "bestScore","best_score","totalVotes","total_votes") }
+                  print("PUBLIC_SCORE_DISCOVERY_FIELDS="+json.dumps(attrs,default=str,sort_keys=True),flush=True)
+          except Exception as err:
+              print("PUBLIC_SCORE_DISCOVERY_LIMITED="+type(err).__name__,flush=True)
+          print("PUBLIC_SOURCE_REVIEW_NO_EXEC_NO_GPU_NO_CONTEST_SUBMIT=TRUE",flush=True)
+          PY
