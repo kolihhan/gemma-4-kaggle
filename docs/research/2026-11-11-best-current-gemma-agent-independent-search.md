@@ -12,6 +12,7 @@
 | --- | --- | --- | --- |
 | Leader #1 (samson8) | CLIST 0.29 | Public ranking; no verified downloadable leading bundle | Competitor benchmark only, not replicable yet |
 | Multiple top teams | CLIST 0.24 | Individual implementations/scored ZIPs unverified | Do not guess their technique |
+| flexonafft v10, publicly tracked | **Version-specific Public 0.22** | SAME four-file SHA as seven other scored runs ranging **0.12–0.22**, average **0.15625** | Real high score, **no reliable evidence of better underlying configuration** |
 | bliverrigpdoge 4 config files, no training | **Notebook title says 0.22; notebook's exact official scored best was NOT independently verified** | Kaggle authenticated public Notebook source pulled, one literal four-file bundle; three files **byte-identical** to our frozen V2, only `prompts/system.md` differs; no multi-agent, Skill, adapter or training | Highest-information **publicly inspectable prompt-only challenger**; do not label as verified 0.22 result |
 | prvsiyan / Gemma and the Shape of Doubt | Kaggle page shows **Best Score 0.20 V32**, newest listed version scored 0.15 | Latest source pulled but no one-to-one attributable literal four-file ZIP; best V32 content not recovered | Real alternative, but avoid claiming latest code produces best score |
 | honghanhhh / Gemma 4 Baseline LB 0.24 | **Title says 0.24; actual Kaggle page Best Score 0.18 V3** | Latest public source pulled, but its declared bundle not verified as submitted version | Reject title-based claims |
@@ -19,6 +20,18 @@
 | Account V4 CGR | **Authenticated completed Public 0.15**, id 58222227 | Original ZIP SHA and official submission receipt | Demote; no identical resubmission |
 | Account wrapped V5 | **0/1 resolved** on private public-dev task `requests_7328` | Real 31B invoked nested AgentTool once, error once, no successful return and NO patch in 302.5s | Reject unchanged nested architecture |
 | Post-hoc V2 same task | **0/1 resolved, but produced 3454-character source patch** | Same 31B, same task, 5m/28 calls, 19 scorer tool calls; 377.9s total walltime including evaluator | Confirms direct root produced a patch; not statistical quality evidence |
+
+## Scored 0.22 independently cross-checked — but it is a stochastic outlier
+
+Following the first audit, I downloaded the public scored-version CSV from [Gemma 4 Agent: Public Config Draws](https://www.kaggle.com/dariushafshar/gemma-4-agent-public-config-draws) and verified its **VERSION 10** entry for [`flexonafft/gemma-4-budget-aware-coding-agent-v2`](https://www.kaggle.com/code/flexonafft/gemma-4-budget-aware-coding-agent-v2?scriptVersionId=357955943). That score is **0.22** with a concrete traced `files_sha256` of **`56010e9e9d4c7f33856ce49d12ec3edae5c912261986e999a4aa989b3cd463cb`**; unlike a title-only claim, this table records an actual version score. [Authenticated read-only public ledger cross-check](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43055057050).
+
+**Crucial:** eight scored rows share that **EXACT same four-file hash** (across authors and repeat submissions). Their Public scores are **0.13, 0.12, 0.17, 0.22, 0.17, 0.17, 0.12, 0.15** — mean **0.15625**, median **0.16**, min **0.12**, max **0.22**. This 0.10 within-config spread makes the high 0.22 **insufficient evidence of a superior method**. Source publication and selection effects mean the mean is descriptive, not a guaranteed expected score. It explains why chasing isolated maxima is dangerous and why a 0.18 scored baseline can be the most defensible fallback.
+
+The exact `flexonafft` v10 public Notebook was fetched successfully; simple `ast.literal_eval` found no unique literal four-file dict in that version's code, so our own static tool did **not** independently recover its bundle bytes. The published version-indexed CSV was compiled from source by its maintainer and supports the matching hash; preserve that **provenance distinction**. Do not silently attribute the unrelated `bliverrigpdoge` public prompt `475cc9...` to `flexonafft` v10.
+
+Additional false-title check: `jingshuifu/gemma-4-dev-agent-lb024` v1 was actually scored **0.15**, and `honghanhhh/gemma-4-baseline-lb-0-24` had a verified v3 best **0.18**, despite both titles implying 0.24. [Source rows](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43054776326). **No reproducible, version-specific public 0.24/0.29 agent bundle has been independently verified.**
+
+This **reinforces** the present decision: retain scored 0.18 V2, use the strictly controlled `bliverrigpdoge` prompt-only 5min candidate ONLY as an unscored experimental arm, and prioritize issue correctness + early source edit rather than raw leaderboard maximization. No new GPU inference was launched during these source investigations.
 
 ## The actually recovered public notebook — exact comparison
 
