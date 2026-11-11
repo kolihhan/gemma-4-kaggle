@@ -15,7 +15,7 @@ from scripts import build_two_stage_scope_coder_candidate as staged
 
 def fake_source():
     root=(
-        "agent_class: LlmAgent\n"
+        # The public V2 uses the ADK implicit default LlmAgent.
         "name: original\n"
         "model: "+staged.MODEL+"\n"
         "tools:\n"+ "".join(f"  - {name}\n" for name in staged.WRITER_TOOLS)
