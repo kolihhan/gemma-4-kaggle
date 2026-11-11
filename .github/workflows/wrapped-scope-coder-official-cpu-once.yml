@@ -1,3 +1,4 @@
+# Required official ADK sliding-window compaction event on acquired five-invocation session.
 # ADK default LlmAgent summarizer resolver gate (do not conflate configured with actual compaction events).
 name: Compaction-safe wrapped Scope-Coder official ADK CPU gate
 on:
