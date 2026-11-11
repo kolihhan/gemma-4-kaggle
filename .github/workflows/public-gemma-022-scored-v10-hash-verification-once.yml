@@ -1,0 +1,86 @@
+name: Verify scored Gemma 0.22 v10 static files and repeated-score variance (CPU once)
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/public-gemma-022-scored-v10-hash-verification-once.yml"]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Match version-specific public 0.22 to immutable file hash, never run notebook
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p /tmp/gemma-scored-v10 /tmp/gemma-public-csv
+          kaggle datasets download -d dariushafshar/gemma-4-agent-public-config-draws \
+            -f public_config_draws.csv -p /tmp/gemma-public-csv --unzip >/dev/null
+          python - <<'PY'
+          import csv,hashlib,json,statistics,ast,zipfile
+          from pathlib import Path
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          ref="flexonafft/gemma-4-budget-aware-coding-agent-v2"
+          data=list(csv.DictReader((Path("/tmp/gemma-public-csv")/"public_config_draws.csv").open(encoding="utf-8-sig")))
+          hits=[r for r in data if r["notebook_ref"]==ref and r["version"]=="10"]
+          if len(hits)!=1: raise RuntimeError("PUBLIC_022_VERSION_10_NOT_UNIQUE")
+          v=hits[0]
+          matched=[r for r in data if r["files_sha256"] and r["files_sha256"]==v["files_sha256"] and r["hash_kind"]=="files"]
+          scores=[float(x["public_score"]) for x in matched if x["public_score"]]
+          print("VERIFIED_PUBLIC_022_V10_ROW="+json.dumps({
+              k:v.get(k) for k in ("notebook_ref","version","version_url","public_score",
+                                  "hash_kind","files_sha256","files_in_bundle")},sort_keys=True),flush=True)
+          print("VERIFIED_PUBLIC_022_V10_IDENTICAL_FILES_DRAWS="+json.dumps({
+              "same_sha_count":len(matched),"scored_n":len(scores),
+              "min":min(scores) if scores else None,
+              "max":max(scores) if scores else None,
+              "mean":round(statistics.mean(scores),4) if scores else None,
+              "median":statistics.median(scores) if scores else None,
+              "versions":[{"ref":x["notebook_ref"],"v":x["version"],"score":x["public_score"]} for x in matched[:25]]
+          },sort_keys=True),flush=True)
+          api=KaggleApi();api.authenticate()
+          d=Path("/tmp/gemma-scored-v10")
+          try:
+              api.kernels_pull(ref+"/10",str(d),metadata=True,quiet=True)
+              books=list(d.glob("*.ipynb"))
+              print("VERIFIED_PUBLIC_022_V10_PULL_NOTEBOOK_COUNT="+str(len(books)),flush=True)
+              candidates=[]
+              for book in books:
+                  payload=json.loads(book.read_text())
+                  for c in payload.get("cells",[]):
+                      if c.get("cell_type")!="code":continue
+                      body=c.get("source",[])
+                      body="".join(body) if isinstance(body,list) else body
+                      try: tree=ast.parse(body)
+                      except SyntaxError:continue
+                      for node in ast.walk(tree):
+                          if not isinstance(node,ast.Dict):continue
+                          try:bundle=ast.literal_eval(node)
+                          except Exception:continue
+                          if isinstance(bundle,dict) and "agent.yaml" in bundle and
+                             "eval_config.yaml" in bundle and all(isinstance(x,str) for x in bundle.values()):
+                              candidates.append(bundle)
+              print("VERIFIED_PUBLIC_022_V10_LITERAL_CANDIDATES="+str(len(candidates)),flush=True)
+              matches=[b for b in candidates if hashlib.sha256(
+                json.dumps(b,sort_keys=True).encode()).hexdigest()==v["files_sha256"]]
+              print("VERIFIED_PUBLIC_022_V10_HASH_MATCH_COUNT="+str(len(matches)),flush=True)
+              if matches:
+                  b=matches[0]
+                  print("VERIFIED_PUBLIC_022_V10_SOURCE_CONFIG="+json.dumps({
+                      "files":sorted(b),
+                      "model":next((x.strip() for x in b["agent.yaml"].splitlines() if x.strip().startswith("model:")),"unknown"),
+                      "eval_lines":[x.strip() for x in b["eval_config.yaml"].splitlines() if x.strip().startswith(("max_time_minutes:","max_tool_calls:","max_turns:"))],
+                      "prompt_sha256":hashlib.sha256(b.get("prompts/system.md","").encode()).hexdigest(),
+                      "prompt_chars":len(b.get("prompts/system.md",""))
+                  },sort_keys=True),flush=True)
+          except Exception as e:
+              print("VERIFIED_PUBLIC_022_V10_PULL_LIMITED="+type(e).__name__,flush=True)
+          print("VERIFIED_PUBLIC_022_NO_UNTRUSTED_EXEC_NO_GPU_NO_CONTEST_SUBMIT=TRUE",flush=True)
+          PY
