@@ -1,11 +1,10 @@
-name: Kaggle V4 58222227 official ledger check once
+name: Kaggle V4 58222227 normalized official ledger check
 on:
   push:
     branches:
       - research/dual-agent-recovery-v0-20261108
     paths:
       - .github/workflows/v4-submission-58222227-ledger-check-once.yml
-
 permissions:
   contents: read
 jobs:
@@ -18,34 +17,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Read authoritative Kaggle V4 submission ID, status and score
+      - name: Use Kaggle CLI verbose CSV normalized status, score, and ID
         shell: bash
         run: |
           set -euo pipefail
           python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
           python - <<'PY'
-          import json
-          from kaggle.api.kaggle_api_extended import KaggleApi
-          api=KaggleApi()
-          api.authenticate()
-          entries=api.competition_submissions("gemma-4-developer-agent")
-          target=[]
-          for entry in entries:
-              row=entry.to_dict() if hasattr(entry,"to_dict") else entry
-              ref=str(row.get("ref") or "")
-              if ref=="58222227":
-                  target.append({
-                      "ref":ref,
-                      "description":str(row.get("description") or ""),
-                      "status":str(row.get("status") or ""),
-                      "publicScore":str(row.get("publicScore") or ""),
-                      "privateScore":str(row.get("privateScore") or ""),
-                      "date":str(row.get("date") or ""),
-                  })
-          if len(target)!=1:
-              raise RuntimeError("V4_OFFICIAL_SUBMISSION_NOT_UNIQUELY_FOUND")
-          if target[0]["description"]!="solver-v4-cgr-one-shot-20261110":
-              raise RuntimeError("V4_MARKER_MISMATCH")
-          print("V4_58222227_AUTHENTICATED_LEDGER="+json.dumps(target[0],sort_keys=True),flush=True)
-          print("V4_58222227_READ_ONLY_NO_GPU_NO_NEW_SUBMISSION=TRUE",flush=True)
+          import csv,io,json,subprocess
+          cmd=["kaggle","competitions","submissions","gemma-4-developer-agent","-v"]
+          result=subprocess.run(cmd,capture_output=True,text=True,check=True,timeout=120)
+          rows=list(csv.DictReader(io.StringIO(result.stdout.lstrip("\ufeff"))))
+          hits=[r for r in rows if (r.get("ref") or "").strip()=="58222227"]
+          if len(hits)!=1:
+              raise RuntimeError("AUTHENTICATED_V4_REF_NOT_UNIQUE")
+          x=hits[0]
+          if x.get("description")!="solver-v4-cgr-one-shot-20261110":
+              raise RuntimeError("AUTHENTICATED_V4_DESCRIPTION_MISMATCH")
+          entry={k:x.get(k,"") for k in ("ref","description","status","publicScore","privateScore","date")}
+          print("V4_58222227_OFFICIAL_NORMALIZED_LEDGER="+json.dumps(entry,sort_keys=True),flush=True)
+          print("V4_58222227_READ_ONLY_NO_GPU_NO_SUBMISSION=TRUE",flush=True)
           PY
