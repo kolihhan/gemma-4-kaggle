@@ -1,0 +1,57 @@
+name: Gemma 31B six-failure existing private traces read-only diagnostic
+on:
+  push:
+    branches: [research/paired-failure-diagnostic-20261112]
+    paths: [.github/workflows/audit-paired-31b-existing-traces-once-20261112.yml]
+permissions:
+  contents: read
+concurrency:
+  group: gemma4-existing-paired-private-trace-43057377220-readonly
+  cancel-in-progress: false
+jobs:
+  audit:
+    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'RUN_GEMMA_PAIRED_TRACE_READONLY_20261112' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-prompt-v2-paired-43057377220
+      PRIVATE_ROOT: /tmp/gemma4-paired-private-output
+      SAFE_DIR: /tmp/gemma4-paired-safe-output
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate private read-only reducer with synthetic data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_audit_paired_31b_existing_traces
+          python -m py_compile scripts/audit_paired_31b_existing_traces.py
+      - name: Fetch ONLY existing completed Kaggle private output (no GPU)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p "$PRIVATE_ROOT" "$SAFE_DIR"
+          kaggle kernels output "$KERNEL_REF" -p "$PRIVATE_ROOT" -o >/tmp/gemma4-paired-download.log 2>&1
+          test -s "$PRIVATE_ROOT/paired_prompt_v2_31b_results.json"
+          echo "EXISTING_PRIVATE_PAIRED_KERNEL_OUTPUT_DOWNLOADED=TRUE"
+      - name: Derive safe tool action chronology without raw text
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.audit_paired_31b_existing_traces --root "$PRIVATE_ROOT" --output "$SAFE_DIR/paired_trace_audit.json"
+          echo "NO_RAW_TASKS_PROMPTS_PATCHES_COMMANDS_OR_REFERENCE_PUBLIC=TRUE"
+          echo "NO_GPU_OR_OFFICIAL_COMPETITION_SUBMISSION=TRUE"
+      - name: Upload safe derived metrics only
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemma4-existing-paired-trace-readonly-safe-summary-${{ github.run_id }}
+          path: /tmp/gemma4-paired-safe-output/paired_trace_audit.json
+          if-no-files-found: error
+          retention-days: 14
