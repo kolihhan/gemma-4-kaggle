@@ -1,4 +1,4 @@
-# NOW — Verified Gemma 4 project state (2026-11-11 23:38 MYT)
+# NOW — Verified Gemma 4 project state (2026-11-12 paired pilot initiated)
 
 > **This short default-branch entrypoint is a status index, not a replacement for experiment provenance.** Every changing Kaggle state must be re-checked using the authenticated submission ledger; do not treat this snapshot as live. The detailed, actively updated research and execution history currently resides on [`research/dual-agent-recovery-v0-20261108`](https://github.com/kolihhan/gemma-4-kaggle/tree/research/dual-agent-recovery-v0-20261108). Historical versions of this file remain in Git history.
 
@@ -22,17 +22,23 @@
 - The exact exception thrown by `AgentTool.run_async` was not captured, so **do not assert definitively that it was TimeoutError**. Runtime and behavior support an investigation-heavy, deadline-sensitive failure.
 - [Detailed preregistered experiment decision and outcomes](https://github.com/kolihhan/gemma-4-kaggle/blob/research/dual-agent-recovery-v0-20261108/docs/research/2026-11-11-v4-official-v5-real-31b-results.md).
 
-## Same-task V2 diagnostic control — launched, not yet scored
+## Same-task V2 diagnostic — completed; still failed correctness
 
-- [One-time private Kaggle V2 31B control Action 43051007173](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43051007173) is executing exactly **one post-hoc `requests_7328` task** under a **5-minute Agent budget, 28 tool calls, 80 turns**. Same fixed 31B model, third-party baseline Prompt/tools/sampling, only V2's original `max_time_minutes: 8` changed to `5`.
-- Static tests, live GPU quota gate, Kaggle private kernel preparation and **single private push passed**. Await actual independent V2 task result. This is **post-hoc diagnostic** (chosen after observing V5 failure), **not a clean holdout nor evidence of generalized performance**, with no official Kaggle competition submission or training.
-- [Frozen comparison manifest](https://github.com/kolihhan/gemma-4-kaggle/blob/research/dual-agent-recovery-v0-20261108/experiments/v2-5min-requests7328-posthoc-control/manifest.json). Do not rerun while kernel exists.
+- [Actual V2 5-minute post-hoc control Action 43051007173](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43051007173): task `requests_7328`, **non-empty source patch 3,454 characters**, `test_exit_code=1`, `resolved=false`, `tool_calls=19`, total `377.92s` including evaluation overhead. The exact original V2 prompt/tools/sampling were preserved; only original `8min → 5min` cap changed. V5 on this same task made **zero edits**. Nonempty patch is not a correct fix; this **post-hoc** pair is not an independent accuracy estimate.
+- [Frozen control manifest](https://github.com/kolihhan/gemma-4-kaggle/blob/research/dual-agent-recovery-v0-20261108/experiments/v2-5min-requests7328-posthoc-control/manifest.json).
+
+## New clean public-development prompt-only paired pilot — private Kaggle running
+
+- [Action 43057377220](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43057377220) launched a **single private L4x4 kernel** comparing original V2 5min versus an **attributed public single-Agent System Prompt** with everything else unchanged: one Gemma 31B, 28 tool calls, 80 turns and matched 5-minute task cap.
+- Three preselected public-development issues (one each FastAPI/Rich/Requests), deterministic ID-only salted selection, six total model-task evaluations. Both arms see the same tasks; run order alternated. CPU source/ZIP SHA, five static tests, official `swegemma` `EvalConfig` type, live GPU quota and single private kernel push passed. **Actual private resolved results are not yet known**. No official Kaggle submission or training.
+- [Pre-registered manifest](https://github.com/kolihhan/gemma-4-kaggle/blob/research/dual-agent-recovery-v0-20261108/experiments/public-prompt-vs-v2-disjoint-paired-20261112/manifest.json) and [study caveats](https://github.com/kolihhan/gemma-4-kaggle/blob/research/dual-agent-recovery-v0-20261108/docs/research/2026-11-12-public-prompt-only-clean-paired-pilot.md).
+- **Public 0.22 is not a proven advantage for this prompt.** A real `flexonafft` v10 0.22 entry exists, but its same-config 8 scored observations were `0.12–0.22`. The `bliverrigpdoge` public prompt tested here has a title mentioning 0.22 but **no independently verified matching score**. Do not conflate the two.
 
 ## Active research decision
 
 1. **V4 0.15: close as no demonstrated gain; no duplicate official submission.** Keep best scored V2 bounded configuration at `0.18`.
 2. **Current V5 wrapped Scope→Coder: freeze/demote.** Real model used the only workflow, but no patch after ~300 seconds. Do not burn more GPU on this identical topology or claim a success-rate gain from one negative task.
-3. **Next hypothesis:** improve *time to first materialized edit* while preserving enough task evidence. Prefer simpler native-root model or demonstrably bounded analysis rather than a new cascade of model-mediated investigators. A true per-stage time/call budget must be enforceable, not only requested in prompt.
+3. **Current discriminating test:** prompt-only, single-native-root agent versus time-matched V2. Compare real resolved task count, no-op/failures, valid patches and runtime on three preselected disjoint public-development issues. Do not claim a win while the private scorer is still running.
 4. Before any next private 31B pilot: verify remaining GPU quota, predeclared distinct public-dev tasks, official task model/metrics, **same 5-minute baseline and treatment budget**, specific uptake/first-edit observables, and fail-stop logic. A clean matched V2 test is required for comparative claims.
 5. Keep competition task contents/reference patches/private logs out of this PUBLIC repo. Do not modify solver artifacts via documentation changes.
 
