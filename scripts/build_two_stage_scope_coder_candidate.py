@@ -107,8 +107,12 @@ def files(source: bytes) -> dict[str, str]:
     if set(baseline) != BASE:
         raise ValueError("unexpected V2 base payload")
     original = baseline["agent.yaml"]
+    # The official ADK config defaults to LlmAgent when agent_class is absent.
+    # The external V2 root uses that default; explicit declarations are optional.
+    classes = [line.strip() for line in original.splitlines()
+               if line.strip().startswith("agent_class:")]
     if (original.count("model: "+MODEL) != 1 or
-        "agent_class: LlmAgent" not in original or
+        classes not in ([], ["agent_class: LlmAgent"]) or
         "skills:" in original or "agent_tool:" in original or
         "sub_agents:" in original):
         raise ValueError("unexpected V2 root agent")
