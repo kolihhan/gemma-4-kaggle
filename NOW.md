@@ -22,6 +22,12 @@
 - The exact exception thrown by `AgentTool.run_async` was not captured, so **do not assert definitively that it was TimeoutError**. Runtime and behavior support an investigation-heavy, deadline-sensitive failure.
 - [Detailed preregistered experiment decision and outcomes](https://github.com/kolihhan/gemma-4-kaggle/blob/research/dual-agent-recovery-v0-20261108/docs/research/2026-11-11-v4-official-v5-real-31b-results.md).
 
+## Same-task V2 diagnostic control — launched, not yet scored
+
+- [One-time private Kaggle V2 31B control Action 43051007173](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43051007173) is executing exactly **one post-hoc `requests_7328` task** under a **5-minute Agent budget, 28 tool calls, 80 turns**. Same fixed 31B model, third-party baseline Prompt/tools/sampling, only V2's original `max_time_minutes: 8` changed to `5`.
+- Static tests, live GPU quota gate, Kaggle private kernel preparation and **single private push passed**. Await actual independent V2 task result. This is **post-hoc diagnostic** (chosen after observing V5 failure), **not a clean holdout nor evidence of generalized performance**, with no official Kaggle competition submission or training.
+- [Frozen comparison manifest](https://github.com/kolihhan/gemma-4-kaggle/blob/research/dual-agent-recovery-v0-20261108/experiments/v2-5min-requests7328-posthoc-control/manifest.json). Do not rerun while kernel exists.
+
 ## Active research decision
 
 1. **V4 0.15: close as no demonstrated gain; no duplicate official submission.** Keep best scored V2 bounded configuration at `0.18`.
