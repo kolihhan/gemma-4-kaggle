@@ -58,8 +58,8 @@ jobs:
                           except (ValueError,TypeError,OverflowError,RecursionError):continue
                           if not isinstance(value,dict):continue
                           keys=set(value)
-                          if {"agent.yaml","eval_config.yaml"}.issubset(keys) and
-                             all(isinstance(x,str) for x in value.values()):
+                          if ({"agent.yaml","eval_config.yaml"}.issubset(keys) and
+                              all(isinstance(x,str) for x in value.values())):
                               candidates.append(value)
               report={"ref":ref,"status":"static_only",
                       "literal_bundle_count":len(candidates)}
