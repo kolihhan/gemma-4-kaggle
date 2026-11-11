@@ -1,0 +1,151 @@
+name: Gemma clean four-issue current gold/noop CPU integrity once
+on:
+  push:
+    branches: [research/clean-four-repair-cohort-20261112]
+    paths: [.github/workflows/clean-four-integrity-cpu-once-20261112.yml]
+permissions:
+  contents: read
+concurrency:
+  group: gemma4-clean-four-gold-noop-cpu-once-20261112
+  cancel-in-progress: false
+jobs:
+  clean_four:
+    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'GO_CLEAN_FOUR_GOLD_NOOP_CPU_20261112' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-cleanfour-cpu-${{ github.run_id }}
+      KERNEL_DIR: /tmp/clean-four-kernel
+      PRIVATE_DIR: /tmp/clean-four-private
+      SAFE_DIR: /tmp/clean-four-safe
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify historical cohort and synthetic CPU-only private kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_render_clean_four_integrity_cpu
+          python -m py_compile scripts/render_clean_four_integrity_cpu.py
+          python -m scripts.render_clean_four_integrity_cpu \
+            --repo . --out "$KERNEL_DIR" --kernel-ref "$KERNEL_REF"
+          python - <<'PY'
+          from pathlib import Path
+          import json,os
+          d=Path(os.environ["KERNEL_DIR"])
+          m=json.loads((d/"kernel-metadata.json").read_text())
+          assert m["is_private"] and not m["enable_gpu"] and not m["enable_internet"]
+          assert m["model_sources"]==[] and m["kernel_sources"]==[]
+          assert m["competition_sources"]==["gemma-4-developer-agent"]
+          assert m["dataset_sources"]==["metric/gemma-4-developer-agent-wheelhouse"]
+          print("CLEAN_FOUR_CPU_PREFLIGHT=PASS")
+          PY
+      - name: Launch exactly one private CPU kernel, no GPU or contest submit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          if kaggle kernels status "$KERNEL_REF" >/tmp/clean-four-existing.log 2>&1; then
+            echo "STOP_ALREADY_EXISTS"; exit 1
+          fi
+          kaggle kernels push -p "$KERNEL_DIR" -t 5400 >/tmp/clean-four-push.log 2>&1 || {
+            echo "STOP_PRIVATE_CPU_PUSH_FAILED"; exit 1;
+          }
+          echo "CLEAN_FOUR_ONE_CPU_KERNEL_PUSHED=TRUE"
+          echo "KAGGLE_COMPETITION_SUBMISSION=FALSE"
+      - name: Poll only this private CPU kernel until terminal
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 145); do
+            output="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            lower="$(printf '%s' "$output" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal=complete; break; fi
+            if grep -Eq 'failed|failure|error|cancelled|canceled' <<<"$lower"; then terminal=error; break; fi
+            if [ "$attempt" -eq 1 ] || [ $((attempt % 20)) -eq 0 ]; then echo "CLEAN_FOUR_POLL=$attempt"; fi
+            sleep 25
+          done
+          test -n "$terminal" || terminal=pending
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          echo "CLEAN_FOUR_PRIVATE_CPU_TERMINAL=$terminal"
+      - name: Read only allowed safe flags, never model inputs or reference patches
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$PRIVATE_DIR" "$SAFE_DIR"
+          kaggle kernels output "$KERNEL_REF" -p "$PRIVATE_DIR" -o >/tmp/clean-four-download.log 2>&1 || {
+            echo "CLEAN_FOUR_OUTPUT_UNAVAILABLE"; exit 1;
+          }
+          test -s "$PRIVATE_DIR/clean_four_integrity_cpu.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ["PRIVATE_DIR"])
+          d=json.loads((root/"clean_four_integrity_cpu.json").read_text())
+          assert d.get("version")=="gemma4-clean-four-integrity-v1"
+          assert d.get("no_model_inference") is True
+          assert d.get("no_gpu") is True
+          assert d.get("no_official_submission") is True
+          assert d.get("no_raw_issue_patch_or_grader_output_export") is True
+          rows=d.get("results")
+          ids=("fastapi_14458","fastapi_15589","rich_3894","rich_3905")
+          assert isinstance(rows,list) and [r.get("instance_id") for r in rows]==list(ids)
+          allowed={"informative_gold_pass_noop_fail","unhelpful_noop_already_passes",
+                   "confounded_gold_fails","confounded_other","evaluation_error"}
+          safe=[]
+          for r in rows:
+            assert r.get("integrity_category") in allowed
+            f=r["input_features"]
+            safe.append({
+              "instance_id":r["instance_id"],
+              "statement_chars":f["statement_chars"],
+              "hint_chars":f["hint_chars"],
+              "has_external_url":f["has_external_url"],
+              "short_link_pointer_risk":f["short_link_pointer_risk"],
+              "noop_status":r["noop"]["status"],
+              "noop_resolved":r["noop"]["resolved"],
+              "noop_test_exit_code":r["noop"]["test_exit_code"],
+              "gold_status":r["gold"]["status"],
+              "gold_resolved":r["gold"]["resolved"],
+              "gold_test_exit_code":r["gold"]["test_exit_code"],
+              "integrity_category":r["integrity_category"],
+            })
+          good=sum(r["integrity_category"]=="informative_gold_pass_noop_fail" for r in safe)
+          by_repo={
+            "fastapi":sum(r["instance_id"].startswith("fastapi_") and
+                     r["integrity_category"]=="informative_gold_pass_noop_fail" for r in safe),
+            "rich":sum(r["instance_id"].startswith("rich_") and
+                  r["integrity_category"]=="informative_gold_pass_noop_fail" for r in safe),
+          }
+          report={
+            "version":d["version"], "source_action":int(os.environ["GITHUB_RUN_ID"]),
+            "no_gpu":True,"no_inference":True,"official_submission":False,
+            "clean_count":good,"clean_by_repo":by_repo,"records":safe,
+          }
+          (Path(os.environ["SAFE_DIR"])/"clean_four_safe.json").write_text(
+            json.dumps(report,sort_keys=True,indent=2)+"\n")
+          print("SAFE_CLEAN_FOUR_RESULT="+json.dumps(report,sort_keys=True))
+          print("NO_RAW_TASK_PATCH_TRACE_OR_GRADER_TEXT_PUBLIC=TRUE")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gemma-clean-four-current-integrity-${{ github.run_id }}
+          path: /tmp/clean-four-safe/clean_four_safe.json
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Require terminal valid metrics
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.poll.outputs.terminal }}" = complete
+          test -s "$SAFE_DIR/clean_four_safe.json"
