@@ -1,0 +1,94 @@
+# Exact one-off date-gated Kaggle submission authorized by user request.
+# Cron is UTC: 2026-11-12 00:30 UTC = 2026-11-12 08:30 MYT.
+# A UTC date guard below makes this INERT in later years.
+# Never alter candidate bytes, bypass quota, or retry an ambiguous API response.
+name: Gemma scored public V10 one-off official entry after quota reset
+on:
+  schedule:
+    - cron: "30 0 12 11 *"
+  workflow_dispatch:
+    inputs:
+      submit_official:
+        description: "Submit exactly once to Kaggle only if quota currently allows it"
+        required: true
+        default: false
+        type: boolean
+      confirm:
+        description: "Type SUBMIT to permit actual Kaggle official entry"
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: gemma4-scored-public-v10-exact-official-one-shot-20261112
+  cancel-in-progress: false
+jobs:
+  once:
+    if: "${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.submit_official && inputs.confirm == 'SUBMIT') }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      LOCKED_SOURCE_SHA: "69fba2905f49a834a7c4f126dd8e2ee68c80d04c"
+    steps:
+      - name: Date-gate only intended one-day schedule (future years inert)
+        if: "${{ github.event_name == 'schedule' }}"
+        shell: bash
+        run: |
+          set -euo pipefail
+          today="$(date -u +%Y-%m-%d)"
+          echo "ONE_SHOT_SCHEDULED_UTC_DATE=$today"
+          test "$today" = "2026-11-12" || {
+            echo "ONE_SHOT_NOT_AUTHORIZED_OUTSIDE_2026_11_12"; exit 1;
+          }
+      - uses: actions/checkout@v4
+        with:
+          ref: "69fba2905f49a834a7c4f126dd8e2ee68c80d04c"
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify immutable code, attributed scored source and SDK fail-closed tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$LOCKED_SOURCE_SHA"
+          python -m unittest -v tests.test_submit_public_scored_v10_once
+          python -m py_compile scripts/submit_public_scored_v10_once.py
+          echo "DATE_GATED_SCORED_V10_EXACT_SOURCE_GATE=PASS"
+      - name: Authenticate Kaggle and reject a blocked daily quota or active entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python -m scripts.submit_public_scored_v10_once quota
+          echo "DATE_GATED_KAGGLE_QUOTA_VERIFIED=TRUE"
+      - name: Install EXACT official scorer compiler and CPU builder dependency versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "nbformat==5.10.4"
+          mkdir -p /tmp/v10-locked-wheels
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse \
+              -f "$wheel" -p /tmp/v10-locked-wheels --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check /tmp/v10-locked-wheels/*.whl
+      - name: Freeze and verify authentic public scored 0.22 v10 ZIP, official validator
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_public_scored_v10_once preflight
+          echo "DATE_GATED_PUBLIC_V10_SHA_AND_COMPILER=PASS"
+      - name: Authenticate CPU roundtrip and submit EXACTLY ONCE with official receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_public_scored_v10_once submit
+          echo "DATE_GATED_PUBLIC_V10_ONE_OFFICIAL_ATTEMPT_RETURNED=TRUE"
+      - name: Preserve explicit score uncertainty until Kaggle finishes
+        shell: bash
+        run: |
+          echo "NO_PUBLIC_SCORE_CLAIM_UNTIL_TERMINAL_KAGGLE_LEDGER=TRUE"
+          echo "NO_TRAINING_NO_USER_GPU_NO_COMPETITION_DATA_EXPORT=TRUE"
