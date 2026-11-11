@@ -36,6 +36,14 @@
 4. Before any next private 31B pilot: verify remaining GPU quota, predeclared distinct public-dev tasks, official task model/metrics, **same 5-minute baseline and treatment budget**, specific uptake/first-edit observables, and fail-stop logic. A clean matched V2 test is required for comparative claims.
 5. Keep competition task contents/reference patches/private logs out of this PUBLIC repo. Do not modify solver artifacts via documentation changes.
 
+## Current-best public-source audit — 2026-11-11
+
+- [Independent shortlist and reproducible bundles](https://github.com/kolihhan/gemma-4-kaggle/blob/research/dual-agent-recovery-v0-20261108/docs/research/2026-11-11-best-current-gemma-agent-independent-search.md). Third-party public leaderboard snapshot reaches **0.29**, but the corresponding top agent's exact runnable bundle was **not publicly recovered**; this is not our score.
+- **Version-specific Public 0.22** for an externally published `flexonafft` v10 is documented in the public Kaggle scored-version table. **Eight version rows with its exact same four-file SHA score 0.12–0.22 (mean 0.15625)**; maximum score alone is weak evidence of superiority. [Exact SHA and version audit](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43055057050).
+- [`bliverrigpdoge` public prompt-only source](https://www.kaggle.com/code/bliverrigpdoge/lb-0-22-4-config-files-no-training) was independently pulled: exactly the same 31B model, tool list, sampling and 8min/28-call budget as V2; **only `prompts/system.md` differs**, SHA `475cc9b7...`. Notebook's **0.22 TITLE is not independently confirmed as a scored version**.
+- [CPU build](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43054075167) PASS: original-public 8min `ca4869ea...`; fair-comparison 5min `fdb862b0...`. These are frozen **unscored** candidates, not a new best or a new official submission.
+- **Action:** retain official best **V2 0.18**. Do not adopt expensive multi-agent V5, lucky 0.22 reruns or unverified 0.24 titles. Model rules now also permit 12B/E4B/E2B, but smaller-variant speed/correctness is unmeasured here. Next valuable work is a small disjoint 5min direct-agent comparison with first-edit, actual resolved issues and full cost instrumentation before any official submission.
+
 ## Public repository and navigation
 
 - The repo is **PUBLIC**, not private; [PUBLIC_VISIBILITY.md](PUBLIC_VISIBILITY.md) documents unresolved historical competition-data exposure. No new public raw tasks, reference patches, hidden grader content, private traces, or credentials.
