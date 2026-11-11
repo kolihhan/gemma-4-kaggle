@@ -45,3 +45,25 @@ Even if gold passes and no-op fails, this does **not** rule out installed-wheel 
 2. For sufficient and informative tasks, inspect full failure semantics privately. Attribute a model-limited repair problem only if actionable requirements/verification exist.
 3. Prefer a small paired controlled experiment that changes a real mechanism (e.g. a structured, tool-observed repair loop) over generic prompt rewrites or nested agents.
 4. Reopen PPO/GRPO **only** after independently checkable rewards and a clean train/eval split are demonstrated. No claim that RL is inherently inferior to prompt-only methods.
+
+## Completed experimental result — official public-dev wheelhouse CPU runtime
+
+[Authenticated one-shot private CPU Action 43070401519](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43070401519) finished **SUCCESS** at 2026-11-11 17:44 UTC. The exact preregistered three issues were tested; 6 total `verify_task` calls: noop + gold per issue. No GPU, inference, or official Kaggle submission. Static gate and synthetic unit tests passed.
+
+| ID | Model-visible statement length | External URL / hints | No-op | Gold | Preregistered category |
+| --- | --- | --- | --- | --- | --- |
+| `fastapi_14487` | 204 characters | no URL, 0 hint chars | unresolved, exit 1 | **resolved, exit 0** | **informative_gold_pass_noop_fail** |
+| `rich_3782` | 68 characters | URL present, 0 hint chars | unresolved, exit 1 | **resolved, exit 0** | **informative_gold_pass_noop_fail**, short pointer-risk |
+| `requests_7427` | 394 characters | URL present, 0 hint chars | unresolved, exit 1 | **unresolved, exit 1** | **confounded_gold_fails** |
+
+### Adversarial implications
+
+1. **Requests_7427 is an invalid correctness datapoint for this scorer epoch.** The bundled official gold fix failed, so we cannot blame the two models' failures on their edits. This does **not** identify why gold failed (wheel shadow, missing dependencies, tests, or other); do not assert the specific community-described empty-patch behavior occurred in our current runtime. Our no-op also failed, unlike one documented community epoch.
+2. **Rich_3782 is verifier-informative but spec-short.** The model received only 68 characters including a URL, with no hints. Upstream PR refers to rich Issue #3727 for the real padding/wrapping reproduction. Because Kaggle's sandbox is offline, the model may not receive the issue body; this is a strong **information-sufficiency risk**, not formal proof no local evidence exists.
+3. **FastAPI_14487 is locally informative** (gold pass, no-op fail) and has a 204-character statement with no external URL. It is the cleanest *of these three* for post-hoc patch-synthesis diagnosis, not a sufficient denominator for generalization.
+4. The earlier 31B paired prompt comparison has **0/3 vs 0/3 observed** but its actionable clean-and-specified effective denominator is at most **1** without a detailed issue-text audit. No causal model-quality conclusion or optimizer promotion follows.
+5. Older [discriminating-evidence gold screen](https://github.com/kolihhan/gemma-4-kaggle/blob/research/dual-agent-recovery-v0-20261108/docs/evaluation/discriminating-evidence-v0-gold-screen-2026-11-06.json) had `fastapi_14487` gold-pass as well; this checks consistency on that case, not broad scorer stability.
+
+### Decision after completing the gate
+
+**Stop deriving prompt superiority, model capability, or PPO training reward from this three-task panel.** Retain the scored account best 0.18 V2, freeze the no-gain prompt-only challenger and the failed V5 nested topology. Prefer deeper root-cause analysis on a separate preselected sample that passes both gold and noop gates; do not rerun training or move to PPO until reliable reward and issue-information availability are established. Preserve the existing independent V10 schedule and do not call its public 0.22 observation a new user-account score.
