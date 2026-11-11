@@ -1,7 +1,7 @@
 name: Gemma 31B completed paired test feedback read-only v2 (error follow-up)
 on:
   push:
-    branches: [research/31b-test-feedback-evidence-20261112]
+    branches: [research/dual-agent-recovery-v0-20261108]
     paths: [.github/workflows/audit-paired-31b-feedback-readonly-v2.yml]
 permissions:
   contents: read
