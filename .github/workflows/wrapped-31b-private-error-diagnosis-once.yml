@@ -1,0 +1,95 @@
+name: Read-only Gemma 31B wrapped adoption private error classification once
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/wrapped-31b-private-error-diagnosis-once.yml"]
+permissions:
+  contents: read
+jobs:
+  diagnosis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-wrapped-uptake-42988852829
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Read the completed private kernel output without GPU or submit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p /tmp/wrapped-private-diagnostic
+          kaggle kernels status "$KERNEL_REF" > /tmp/private-status.txt 2>&1
+          kaggle kernels output "$KERNEL_REF" -p /tmp/wrapped-private-diagnostic -o > /tmp/private-download-log.txt 2>&1
+          test -s /tmp/wrapped-private-diagnostic/wrapped_scope_31b_adoption_results.json
+      - name: Safely classify failure from private traces, no raw text or patch disclosure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import collections,json,re
+          from pathlib import Path
+          root=Path("/tmp/wrapped-private-diagnostic")
+          report=json.loads((root/"wrapped_scope_31b_adoption_results.json").read_text())
+          records=report.get("results",[])
+          if len(records)!=1: raise RuntimeError("UNEXPECTED_ONE_TASK_DENOMINATOR")
+          a=records[0]
+          fields=("instance_id","status","resolved","test_exit_code","has_patch","patch_chars","tool_calls",
+                  "duration_seconds","error_type","agenttool_calls","agenttool_returns",
+                  "agenttool_errors","agenttool_seconds")
+          result={k:a.get(k) for k in fields}
+          print("PRIVATE_31B_SAFE_TASK_SUMMARY="+json.dumps(result,sort_keys=True))
+          files=[p for p in root.rglob("*") if p.is_file()]
+          print("PRIVATE_31B_OUTPUT_FILECOUNT="+str(len(files)))
+          print("PRIVATE_31B_OUTPUT_EXTENSIONS="+json.dumps(dict(collections.Counter(p.suffix.lower() for p in files)),sort_keys=True))
+          names=collections.Counter()
+          error_classes=collections.Counter()
+          tool_names=collections.Counter()
+          # Include only constrained JSON key names and known official tool function names.
+          allowtools={"read_file","edit_file","write_file","run_command","submit_patch","get_status",
+                      "get_code_neighbors","search_similar_code","get_code_subgraph",
+                      "mandatory_scope_then_patch"}
+          known_errors=("CancelledError","TimeoutError","TimeoutException","ToolError","ValidationError",
+                        "TypeError","ValueError","RuntimeError","KeyError","AttributeError",
+                        "AssertionError","ExceptionGroup","ConnectionError","APIError",
+                        "RecursionError","OSError","PermissionError","FileNotFoundError")
+          for path in files:
+              if path.suffix.lower() not in (".json",".jsonl",".log",".txt",".out",".err"): continue
+              if path.stat().st_size>12_000_000:continue
+              try: content=path.read_text(errors="ignore")
+              except OSError: continue
+              for e in known_errors:
+                  count=len(re.findall(r"\b"+re.escape(e)+r"\b",content))
+                  if count:error_classes[e]+=count
+              for tool in allowtools:
+                  count=len(re.findall(r"\b"+re.escape(tool)+r"\b",content))
+                  if count:tool_names[tool]+=count
+              if path.suffix.lower() in (".json",".jsonl"):
+                  try:
+                      objs=[json.loads(content)] if path.suffix.lower()==".json" else [
+                          json.loads(line) for line in content.splitlines() if line.strip()
+                      ]
+                      for obj in objs:
+                          q=[(obj,0)]
+                          while q:
+                              cur,dep=q.pop()
+                              if dep>6:continue
+                              if isinstance(cur,dict):
+                                  for key,v in cur.items():
+                                      if isinstance(key,str) and re.fullmatch(r"[a-zA-Z_]{2,80}",key):
+                                          if key in ("error_type","status","finish_reason","event_type","role","tool_name"):
+                                              names[key]+=1
+                                      if isinstance(v,(dict,list)):q.append((v,dep+1))
+                              elif isinstance(cur,list):
+                                  for v in cur[:1000]:
+                                      if isinstance(v,(dict,list)):q.append((v,dep+1))
+                  except (ValueError,TypeError):pass
+          print("PRIVATE_31B_ERROR_CLASS_HITS="+json.dumps(dict(error_classes),sort_keys=True))
+          print("PRIVATE_31B_KNOWN_TOOL_NAME_HITS="+json.dumps(dict(tool_names),sort_keys=True))
+          print("PRIVATE_31B_STRUCTURED_FIELDS_SEEN="+json.dumps(dict(names),sort_keys=True))
+          print("PRIVATE_31B_NO_RAW_TASKS_PATCHES_TRACES_OR_PROMPTS_PUBLIC=TRUE")
+          PY
