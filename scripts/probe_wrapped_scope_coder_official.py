@@ -174,17 +174,37 @@ async def probe(source: bytes):
             raise AssertionError({"native":native})
         if not state["packet"] or not state["submitted"]:
             raise AssertionError("nested mandatory tool path was not exercised")
-        # Do not pretend a short mocked session must generate compaction:
-        # record the actual count and separately assert default resolver OK.
+        # The scorer's ADK 1.36.1 Runner invokes this exact official
+        # sliding-window routine. Trigger it explicitly on the REAL recorded
+        # session; short synthetic responses may not produce it automatically.
+        from google.adk.apps.compaction import _run_compaction_for_sliding_window
+        latest=await sessions.get_session(
+            app_name="wrappedcpu",user_id="cpu",session_id=session.id)
+        invocations={e.invocation_id for e in latest.events
+                     if getattr(e,"invocation_id",None) and
+                     not getattr(getattr(e,"actions",None),"compaction",None)}
+        if len(invocations)<3:
+            raise AssertionError("TOO_FEW_RECORDED_ADK_INVOCATIONS")
+        manual_official_compaction=0
+        async for summary_event in _run_compaction_for_sliding_window(
+            app,latest,sessions):
+            if not getattr(getattr(summary_event,"actions",None),"compaction",None):
+                raise AssertionError("NO_REAL_EVENT_COMPACTION_PAYLOAD")
+            await sessions.append_event(session=latest,event=summary_event)
+            manual_official_compaction+=1
+        if not compacted and not manual_official_compaction:
+            raise AssertionError("ROOT_LLM_REAL_ADK_COMPACTION_EVENT_NOT_CREATED")
         if "return 3" not in (repo/"sample.py").read_text():
             raise AssertionError("synthetic patch not materialized")
         print("WRAPPED_SCOPE_CODER_OFFICIAL_CPU_GATE="+json.dumps({
             "root_type":type(agent).__name__,
             "root_only_agent_tool":True,
             "native_tool_order":native,
-            "actual_compaction_events":compacted,
+            "runner_stream_compaction_events":compacted,
+            "direct_official_compaction_events":manual_official_compaction,
+            "recorded_user_invocations":len(invocations),
             "default_compactor_model_resolved":True,
-            "compaction_fully_exercised":bool(compacted),
+            "compaction_fully_exercised":bool(compacted or manual_official_compaction),
             "typed_events":observed,
             "scope_packet_used":state["packet"],
             "synthetic_submission":True,
