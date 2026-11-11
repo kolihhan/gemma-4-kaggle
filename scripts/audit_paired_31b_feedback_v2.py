@@ -196,6 +196,15 @@ def reduce_feedback(trace: dict) -> dict:
     explicit_test_exit = Counter(calls[i]["exit"] for i in test_positions)
     command_indices = [i for i,c in enumerate(calls) if c["category"] in CATEGORIES]
     command_exits = Counter(calls[i]["exit"] for i in command_indices)
+    nonzero = [i for i in command_indices if calls[i]["exit"] == "nonzero"]
+    nonzero_kinds = Counter(calls[i]["category"] for i in nonzero)
+    nonzero_followed_by_edit = sum(any(j>i for j in edit_positions) for i in nonzero)
+    nonzero_after_last_edit = sum(bool(edit_positions and i>edit_positions[-1]) for i in nonzero)
+    nonzero_followed_by_submit_without_edit = sum(
+        any(j>i and calls[j]["category"]=="submit" for j in range(i+1,len(calls)))
+        and not any(j>i for j in edit_positions)
+        for i in nonzero
+    )
     return {
         "trace_found": True,
         "recorded_action_count": len(calls),
@@ -208,6 +217,10 @@ def reduce_feedback(trace: dict) -> dict:
         "tests_with_structured_exit": dict(sorted(explicit_test_exit.items())),
         "nonzero_test_then_edit": sum(any(j>i for j in edit_positions) for i in fail_test_positions),
         "all_command_structured_exit": dict(sorted(command_exits.items())),
+        "nonzero_command_classes": dict(sorted(nonzero_kinds.items())),
+        "nonzero_commands_followed_by_edit": nonzero_followed_by_edit,
+        "nonzero_commands_after_last_edit": nonzero_after_last_edit,
+        "nonzero_commands_followed_by_submit_without_edit": nonzero_followed_by_submit_without_edit,
         "last_observed_test_exit": calls[test_positions[-1]]["exit"] if test_positions else "no_explicit_test",
         "unclassified_opaque_commands": shell_classes["opaque_python"]+shell_classes["other"]+shell_classes["unavailable"],
         "submit_tool_calls": counter["submit"],
