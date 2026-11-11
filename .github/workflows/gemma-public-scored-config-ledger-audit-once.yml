@@ -1,0 +1,65 @@
+name: Public scored Gemma notebook version CSV cross-check (CPU only)
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/gemma-public-scored-config-ledger-audit-once.yml"]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Download PUBLIC scored-version metadata, never training tasks
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p /tmp/gemma-score-csv
+          kaggle datasets download -d dariushafshar/gemma-4-agent-public-config-draws \
+            -f public_config_draws.csv -p /tmp/gemma-score-csv --unzip >/dev/null
+          test -s /tmp/gemma-score-csv/public_config_draws.csv
+          python - <<'PY'
+          import csv,json,collections
+          from pathlib import Path
+          path=Path("/tmp/gemma-score-csv/public_config_draws.csv")
+          rows=list(csv.DictReader(path.open(encoding="utf-8-sig",newline="")))
+          refs=["jingshuifu/gemma-4-dev-agent-lb024",
+                "bliverrigpdoge/lb-0-22-4-config-files-no-training",
+                "honghanhhh/gemma-4-baseline-lb-0-24",
+                "prvsiyan/gemma-and-the-shape-of-doubt",
+                "lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue"]
+          print("GEMMA_PUBLIC_SCORE_CSV_HEADERS="+json.dumps(list(rows[0]) if rows else []),flush=True)
+          print("GEMMA_PUBLIC_SCORE_CSV_ROWS="+str(len(rows)),flush=True)
+          for ref in refs:
+              hits=[x for x in rows if x.get("notebook_ref")==ref]
+              safe=[{k:x.get(k) for k in (
+                  "notebook_ref","version","public_score","files_sha256",
+                  "hash_kind","source","version_url")} for x in hits]
+              print("GEMMA_PUBLIC_SCORE_CSV_MATCH="+json.dumps(
+                {"ref":ref,"versions":safe[:30]},sort_keys=True),flush=True)
+          top=sorted(rows,key=lambda x:float(x.get("public_score") or -1),reverse=True)
+          print("GEMMA_PUBLIC_SCORE_CSV_TOP="+json.dumps([{
+              k:x.get(k) for k in ("notebook_ref","version","public_score","hash_kind")
+          } for x in top[:16]],sort_keys=True),flush=True)
+          repeats=collections.defaultdict(list)
+          for x in rows:
+              if x.get("hash_kind")=="files" and x.get("files_sha256"):
+                  repeats[x["files_sha256"]].append(x)
+          stats=[]
+          for sha,items in repeats.items():
+              if len(items)<2:continue
+              scores=[float(i["public_score"]) for i in items if i.get("public_score")]
+              if len(scores)>1:stats.append({"runs":len(scores),
+                "range":round(max(scores)-min(scores),2),
+                "min":min(scores),"max":max(scores),
+                "config_sha256_prefix":sha[:10]})
+          stats.sort(key=lambda x:(-x["range"],-x["runs"]))
+          print("GEMMA_PUBLIC_SAME_FILES_SCORE_VARIANCE="+json.dumps(stats[:12]),flush=True)
+          print("GEMMA_PUBLIC_VERSION_CSV_NO_GPU_NO_PRIVATE_TASKS_NO_SUBMISSION=TRUE",flush=True)
+          PY
