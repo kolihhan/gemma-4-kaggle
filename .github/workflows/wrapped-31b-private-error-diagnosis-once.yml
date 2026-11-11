@@ -91,5 +91,42 @@ jobs:
           print("PRIVATE_31B_ERROR_CLASS_HITS="+json.dumps(dict(error_classes),sort_keys=True))
           print("PRIVATE_31B_KNOWN_TOOL_NAME_HITS="+json.dumps(dict(tool_names),sort_keys=True))
           print("PRIVATE_31B_STRUCTURED_FIELDS_SEEN="+json.dumps(dict(names),sort_keys=True))
+          # Read only allow-listed structured action metadata (never prompt,
+          # issue text, tool arguments, tool results, raw code or exception msg).
+          trace_records=[]
+          phase_counter=collections.Counter()
+          allowed_phases={"read_file","get_status","get_code_neighbors","search_similar_code",
+                          "get_code_subgraph","edit_file","write_file","run_command",
+                          "submit_patch","mandatory_scope_then_patch"}
+          seen_trace_json=0
+          for p in files:
+              if p.suffix.lower() not in (".json",".jsonl") or p.stat().st_size>12000000:continue
+              if p.name=="wrapped_scope_31b_adoption_results.json":continue
+              try:
+                  objects=[json.loads(p.read_text())] if p.suffix.lower()==".json" else [
+                      json.loads(line) for line in p.read_text().splitlines() if line.strip()
+                  ]
+              except (ValueError,OSError):continue
+              seen_trace_json+=1
+              def scan(value,level=0):
+                  if level>8 or len(trace_records)>=300:return
+                  if isinstance(value,dict):
+                      event_type=value.get("event_type")
+                      tool_name=value.get("tool_name")
+                      if isinstance(tool_name,str) and tool_name in allowed_phases:
+                          phase_counter[tool_name]+=1
+                          trace_records.append({"event_type":
+                              event_type if isinstance(event_type,str) and
+                              re.fullmatch("[A-Za-z_]{2,40}",event_type) else "unknown",
+                              "tool":tool_name})
+                      for key,v in value.items():
+                          if isinstance(v,(dict,list)):
+                              scan(v,level+1)
+                  elif isinstance(value,list):
+                      for item in value[:400]:scan(item,level+1)
+              for obj in objects:scan(obj)
+          print("PRIVATE_31B_TRACE_JSONS="+str(seen_trace_json))
+          print("PRIVATE_31B_STRUCTURED_TOOL_SEQUENCE="+json.dumps(trace_records[:45],sort_keys=True))
+          print("PRIVATE_31B_STRUCTURED_TOOL_COUNTS="+json.dumps(dict(phase_counter),sort_keys=True))
           print("PRIVATE_31B_NO_RAW_TASKS_PATCHES_TRACES_OR_PROMPTS_PUBLIC=TRUE")
           PY
