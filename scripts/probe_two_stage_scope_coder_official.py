@@ -17,6 +17,7 @@ MODEL="gemma-4-31b-it-qat-w4a16-ct"
 
 async def probe(archive: bytes):
     from adk_submission import compile_submission, validate_directory, ModelRegistry, ToolRegistry
+    from google.adk.apps.app import App, EventsCompactionConfig
     from google.adk.models.base_llm import BaseLlm
     from google.adk.models.llm_response import LlmResponse
     from google.adk.runners import Runner
@@ -139,7 +140,15 @@ async def probe(archive: bytes):
 
         session_service=InMemorySessionService()
         session=await session_service.create_session(app_name="stagedcpu",user_id="cpu")
-        runner=Runner(agent=agent,app_name="stagedcpu",session_service=session_service)
+        # The competition installs compaction on its App. A naked Runner
+        # passing a simple 5-turn sequence is NOT sufficient to validate
+        # the historically failing SequentialAgent root lifecycle.
+        # Stress at interval 3 to force the summarization path on this
+        # tiny synthetic session; the scorer uses a larger interval.
+        app=App(name="stagedcpu",root_agent=agent,
+                events_compaction_config=EventsCompactionConfig(
+                    compaction_interval=3,overlap_size=1))
+        runner=Runner(app=app,session_service=session_service)
         events=[]
         async for event in runner.run_async(
             user_id="cpu",session_id=session.id,new_message=types.Content(
@@ -158,6 +167,7 @@ async def probe(archive: bytes):
         if state["step"]!=5:raise AssertionError("unexpected scripted turns")
         print("STAGED_SCOPE_CODER_OFFICIAL_CPU_GATE="+json.dumps({
             "root":"SequentialAgent","stage_order":[c.name for c in children],
+            "compaction_configured":True,"compaction_interval":3,
             "events":events,"readonly_scope":True,
             "packet_reached_writer":True,
             "scripted_model":True,"real_gemma_31b":False,
