@@ -64,8 +64,9 @@ jobs:
                           if not isinstance(node,ast.Dict):continue
                           try:bundle=ast.literal_eval(node)
                           except Exception:continue
-                          if isinstance(bundle,dict) and "agent.yaml" in bundle and
-                             "eval_config.yaml" in bundle and all(isinstance(x,str) for x in bundle.values()):
+                          if (isinstance(bundle,dict) and "agent.yaml" in bundle and
+                              "eval_config.yaml" in bundle and
+                              all(isinstance(x,str) for x in bundle.values())):
                               candidates.append(bundle)
               print("VERIFIED_PUBLIC_022_V10_LITERAL_CANDIDATES="+str(len(candidates)),flush=True)
               matches=[b for b in candidates if hashlib.sha256(
