@@ -1,5 +1,15 @@
 # Mandatory Scope → Coder — new structural architecture, 2026-11-11
 
+## Final wrapped-root compaction gate — 2026-11-11 14:33 MYT
+
+**PASS on official ADK 1.36.1; actual automatic EventCompaction verified.** [Actions 42972954885](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42972954885) passed six focused static tests, generated the unchanged wrapped candidate SHA256 `25a656d65d580d3ed1bf4c54ab5a622a05afe231f1dd46fb2d861749fd08a1bd`, exercised the typed root `mandatory_scope_then_patch` AgentTool call, actual nested `read_file → edit_file → submit_patch` in a synthetic workspace, and observed the `scope_packet` arrive at the Coder.
+
+**Compaction evidence:** `5` user invocation IDs, `1` EventCompaction **already stored in ADK's session** before the direct diagnostic call to its official sliding-window function, and still `1` afterward. Thus it was **automatically created by the actual runner**, not manufactured by the test. The Runner's returned event stream contained zero compaction events; treating that stream as the authoritative session ledger was a measurement bug. The official v1.36.1 `_run_compaction_for_sliding_window` is a coroutine which appends to `session_service`, not an async generator. [Earlier test 42972449767](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42972449767) failed incorrectly because it required a *new* event after one already existed; latest test counts stored events both before and after. No further compaction summary was forced.
+
+**Decision:** Keep the **wrapped-root** structural candidate for consideration. The **direct root SequentialAgent** remains **REJECTED** because it deterministically threw `No LlmAgent model available for event compaction summarizer` on the same official ADK release. Root `LlmAgent` provides compatible compaction and confines mutation capabilities to the mandatory nested workflow *if called*. Model compliance is still optional at the root, and correctness remains **UNMEASURED**. No real 31B inference, GPU training or Kaggle code submission occurred during these CPU gates. Any future private clean-task paired 31B pilot must directly record root AgentTool uptake and actual independent resolved issues under matched total time/call budget; failing uptake or no gain rejects the topology.
+
+---
+
 ## Measured official ADK outcome — root SequentialAgent REJECTED (2026-11-11 14:11 MYT)
 
 - [CPU run 42969323985](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42969323985) **SUCCESS** with a scripted one-turn ADK Runner: `read_file → edit_file → submit_patch`; the `scope_packet` reached the writer; candidate SHA256 `dbf2ae3a536edc322dd827194ea548d9ae9f2ec7ec92b2e5251086229ad7b27f`. **This was NOT a proof of root app compaction.**
@@ -12,7 +22,7 @@
 ---
 
 
-**Status:** executable experimental builder, structural tests passed. Official ADK CPU lifecycle gate running; no real 31B repair-rate result, no scoring submission, no extra GPU. See the final GitHub Actions result before treating this as compiler-verified.
+**Historical original design context:** The direct root `SequentialAgent` candidate failed real compaction, and the separately wrapped root `LlmAgent` candidate now passes actual official CPU auto-compaction as recorded above. Neither candidate has measured independent Gemma 31B issue-resolution gains.
 
 ## Correct the older research inference first
 
