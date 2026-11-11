@@ -1,0 +1,83 @@
+{
+  "version": "public-prompt-v2-paired-clean-v1",
+  "preregistered_date": "2026-11-12",
+  "purpose": "Test prompt-only difference in ACTUAL Gemma 4 31B issue repair; never infer 0.22 score transfer from a single public submission",
+  "source_notebook": "bliverrigpdoge/lb-0-22-4-config-files-no-training",
+  "source_prompt_sha256": "475cc9b7fcc0dc295532f5cb5e1928f26a491f501837ad08b1c79bdbe1a3eaa4",
+  "baseline_notebook": "lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2",
+  "baseline_zip_sha256": "a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3",
+  "prompt_only_5min_zip_sha256": "fdb862b0f8391b0596f200ccb8e3bece40d9dc8f1e3d60e63537277ac626649d",
+  "model": "gemma-4-31b-it-qat-w4a16-ct",
+  "shared_budget": {
+    "max_time_minutes": 5,
+    "max_tool_calls": 28,
+    "max_turns": 80,
+    "timeout_seconds": 240
+  },
+  "change_between_arms": "prompts/system.md content only; both arms have original V2 model/agent.yaml/sampling/tools and identical 5min eval config",
+  "selection": {
+    "salt": "gemma-prompt-paired-nov12-2026-v1-g8b1d32",
+    "repo_prefixes": [
+      "fastapi_",
+      "rich_",
+      "requests_"
+    ],
+    "count_per_repo": 1,
+    "exclude_instance_ids": [
+      "requests_7328",
+      "requests_6592",
+      "requests_7502",
+      "requests_6757",
+      "fastapi_13920",
+      "fastapi_14448",
+      "fastapi_14463",
+      "fastapi_14873",
+      "fastapi_14986",
+      "fastapi_5077",
+      "fastapi_9425",
+      "fastapi_9555",
+      "fastapi_15280",
+      "fastapi_15661",
+      "fastapi_14303",
+      "fastapi_14361",
+      "fastapi_14266",
+      "fastapi_14609",
+      "rich_3052",
+      "rich_3061",
+      "rich_3067",
+      "rich_3105",
+      "rich_3278",
+      "rich_3777",
+      "rich_3934",
+      "rich_3942",
+      "rich_4079",
+      "rich_3180",
+      "rich_3064",
+      "rich_2725",
+      "rich_3930"
+    ],
+    "policy": "In private Kaggle after mounting public tasks, choose SHA256(salt+'|'+instance_id) minimum within each repo; selection uses IDs only, never issue text or reference patches"
+  },
+  "experiment": {
+    "arms": [
+      "v2_5min",
+      "public_prompt_5min"
+    ],
+    "tasks": 3,
+    "model_task_evaluations": 6,
+    "order": "alternate order by task index: 0 V2 first, 1 competitor first, 2 V2 first",
+    "primary": "resolved count by arm under the official private public-dev scorer",
+    "secondary": [
+      "patch existence and characters",
+      "test exit",
+      "native tool calls",
+      "task duration",
+      "error and timeout rates"
+    ],
+    "failure_handling": "Do not drop or replace failures, errors, empty patches or timeouts"
+  },
+  "decision": "On 3 pairs, if public prompt cannot resolve any more than V2, do not promote or spend official submission. Positive signal is preliminary: seek independent preselected further tasks before claiming gain; no automatic competition submit.",
+  "context": "Prior V2 requests_7328 posthoc generated 3454 char patch but failed tests; V5 nested agent 0 patch. Public 0.22 V10 is genuine but same-files public scores range 0.12–0.22 so not generalizable.",
+  "privacy": "Public GitHub stores only code/config/hash/task identifiers and summarized results; private Kaggle runtime mounts official data; no raw tasks, reference patches, model traces or secrets.",
+  "resources": "one PRIVATE L4x4 kernel only, check remaining GPU >=4 hours and no live equivalent kernel, hard total task budget 6*5min plus model startup, no training and no official competition submission"
+}
