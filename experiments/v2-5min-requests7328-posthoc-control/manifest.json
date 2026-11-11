@@ -1,0 +1,26 @@
+{
+  "version": "v2-5min-requests7328-posthoc-v1",
+  "preregistered_on": "2026-11-11 (MYT), before V2 control inference",
+  "classification": "POST-HOC DIAGNOSTIC. Task selected after learning V5's outcome; not untouched or independent holdout",
+  "task": "requests_7328",
+  "comparator": "kolihhan/gemma4-wrapped-uptake-42988852829",
+  "model": "gemma-4-31b-it-qat-w4a16-ct",
+  "baseline": "lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2",
+  "source_zip_sha256": "a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3",
+  "max_time_minutes": 5,
+  "max_tool_calls": 28,
+  "max_turns": 80,
+  "evaluations": 1,
+  "intervention": "Only change original source V2 eval_config.yaml max_time_minutes 8 -> 5. All other agent model/prompt/tools/sampling/turn caps stay identical to V2.",
+  "diagnostic_question": "Does a simpler direct root coder produce a materialized patch on the exact issue where nested wrapped Scope/Coder consumed 289.911s without returning?",
+  "primary_metrics": [
+    "resolved",
+    "has_patch",
+    "tool_calls",
+    "duration_seconds",
+    "test_exit_code"
+  ],
+  "decision_logic": "If V2 makes an edit/resolves while V5 did not, investigate nested-overhead/read-search tradeoff. If neither edits, the issue or model capacity may be the bottleneck. Do not infer broad success-rate effect from one selected task.",
+  "safety": "One PRIVATE GPU kernel, no training, no official Kaggle competition submission, private task/snapshot/reference remain inside Kaggle; only sanitized metrics may leave private run.",
+  "stop": "One evaluator call then terminal; no duplicates on same candidate; do not rerun V5"
+}
