@@ -43,6 +43,11 @@ jobs:
                   "files":{n:hashlib.sha256(v.encode()).hexdigest() for n,v in parsed[name].items()}
               },sort_keys=True),flush=True)
           a,b=parsed["V2"],parsed["SCORER_022_V10"]
+          scored_files_sha=hashlib.sha256(json.dumps(b,sort_keys=True).encode()).hexdigest()
+          expected="56010e9e9d4c7f33856ce49d12ec3edae5c912261986e999a4aa989b3cd463cb"
+          if scored_files_sha!=expected:
+              raise RuntimeError("SCORED_022_PUBLIC_VERSION_SOURCE_AND_SCORE_LEDGER_DIFFER")
+          print("SCORED_V10_ACTUAL_OUTPUT_FILEHASH_MATCHES_SCORE_CSV="+scored_files_sha,flush=True)
           print("SCORED_V10_SOURCE_DIFF="+json.dumps({
               "only_in_v2":sorted(set(a)-set(b)),
               "only_in_v10":sorted(set(b)-set(a)),
