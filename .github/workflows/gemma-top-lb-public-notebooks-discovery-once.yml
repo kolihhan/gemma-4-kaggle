@@ -1,0 +1,46 @@
+name: Find publicly accessible Gemma top-LB author notebooks (CPU once)
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/gemma-top-lb-public-notebooks-discovery-once.yml"]
+permissions:
+  contents: read
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Authenticated public kernel discovery by exact leader usernames, no GPU
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import json
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          api=KaggleApi();api.authenticate()
+          authors=["samson8","yoruet","muhammedidris28","chenshengabc",
+                   "chizhu","pluris","jingshuifu"]
+          for author in authors:
+              try:
+                  items=api.kernels_list(user=author,
+                       competition="gemma-4-developer-agent",page=1,page_size=20)
+                  out=[]
+                  for row in items[:20]:
+                      ref=getattr(row,"ref",None)
+                      title=getattr(row,"title",None)
+                      if not isinstance(ref,str) or not ref.startswith(author+"/"):continue
+                      out.append({"ref":ref,"title":title})
+                  print("LEADER_PUBLIC_NOTEBOOKS="+json.dumps({
+                      "author":author,"public_count_first_page":len(out),
+                      "notebooks":out[:12]},ensure_ascii=False),flush=True)
+              except Exception as err:
+                  print("LEADER_PUBLIC_NOTEBOOKS_ERROR="+json.dumps({
+                      "author":author,"error_type":type(err).__name__}),flush=True)
+          print("LEADER_DISCOVERY_NO_PRIVATE_DATA_NO_GPU_NO_COMPETITION_SUBMISSION=TRUE",flush=True)
+          PY
