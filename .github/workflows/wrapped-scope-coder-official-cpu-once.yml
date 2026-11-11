@@ -1,3 +1,4 @@
+# Direct official LlmEventSummarizer event fallback with explicit automatic-vs-manual reporting.
 # ADK v1.36.1 compaction is a coroutine with session-service side effects, not an async generator.
 # Required official ADK sliding-window compaction event on acquired five-invocation session.
 # ADK default LlmAgent summarizer resolver gate (do not conflate configured with actual compaction events).
