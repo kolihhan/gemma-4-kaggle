@@ -1,4 +1,4 @@
-name: Gemma clean four-issue current gold/noop CPU integrity once
+name: Gemma clean four-issue current gold/noop CPU integrity once (render gate fixed)
 on:
   push:
     branches: [research/clean-four-repair-cohort-20261112]
