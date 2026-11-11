@@ -1,0 +1,64 @@
+name: Paired public-prompt versus V2 fixed budget independent CPU preflight
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths:
+      - .github/workflows/public-prompt-vs-v2-paired-cpu-preflight-20261112.yml
+
+permissions:
+  contents: read
+
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Static paired experiment tests and Python compilation (NO GPU)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_render_public_prompt_vs_v2_paired_31b
+          python -m py_compile scripts/render_public_prompt_vs_v2_paired_31b.py
+          echo "PUBLIC_PROMPT_PAIR_CPU_STATIC_GATE=PASS"
+      - name: Fetch immutable public files through Kaggle API (never execute notebook)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p /tmp/prompt-pair-ref /tmp/prompt-pair-public
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p /tmp/prompt-pair-ref -o >/dev/null
+          kaggle kernels pull bliverrigpdoge/lb-0-22-4-config-files-no-training -p /tmp/prompt-pair-public -m >/dev/null
+      - name: Compile actual pinned pair runtime using source-only AST extraction
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.render_public_prompt_vs_v2_paired_31b \
+            --repo . \
+            --source-zip /tmp/prompt-pair-ref/submission.zip \
+            --public-ipynb /tmp/prompt-pair-public/lb-0-22-4-config-files-no-training.ipynb \
+            --out /tmp/prompt-pair-kernel \
+            --kernel-ref kolihhan/prompt-v2-cpu-preflight-only
+          python -m py_compile /tmp/prompt-pair-kernel/paired_prompt_vs_v2_31b_runtime.py
+          python - <<'PY'
+          import ast,json
+          from pathlib import Path
+          p=Path("/tmp/prompt-pair-kernel")
+          meta=json.loads((p/"kernel-metadata.json").read_text())
+          code=(p/"paired_prompt_vs_v2_31b_runtime.py").read_text()
+          assert meta["is_private"] and meta["enable_gpu"] and not meta["enable_internet"]
+          assert meta["model_sources"]==["google/gemma-4/Other/gemma-4-31b-it-qat-w4a16-ct/2"]
+          tree=ast.parse(code)
+          assert any(getattr(n,"name","")=="materialize_treatment" for n in ast.walk(tree))
+          assert any(getattr(n,"name","")=="load_holdout_ids" for n in ast.walk(tree))
+          assert "competition_submit_code" not in code
+          assert "selected_public_dev_ids" in code
+          print("PUBLIC_PROMPT_PAIR_REAL_SOURCE_PINNED_CPU_GATE=PASS")
+          print("NO_GPU_NO_TRAINING_NO_KAGGLE_PUSH_NO_COMPETITION_SUBMISSION=TRUE")
+          PY
