@@ -185,14 +185,18 @@ async def probe(source: bytes):
                      not getattr(getattr(e,"actions",None),"compaction",None)}
         if len(invocations)<3:
             raise AssertionError("TOO_FEW_RECORDED_ADK_INVOCATIONS")
-        manual_official_compaction=0
-        async for summary_event in _run_compaction_for_sliding_window(
-            app,latest,sessions):
-            if not getattr(getattr(summary_event,"actions",None),"compaction",None):
-                raise AssertionError("NO_REAL_EVENT_COMPACTION_PAYLOAD")
-            await sessions.append_event(session=latest,event=summary_event)
-            manual_official_compaction+=1
-        if not compacted and not manual_official_compaction:
+        # ADK 1.36.1 implements this as a coroutine and appends its event
+        # to session_service itself; it does NOT yield events.
+        def count_compactions(events):
+            return sum(bool(getattr(getattr(e,"actions",None),"compaction",None))
+                       for e in events)
+        before=count_compactions(latest.events)
+        await _run_compaction_for_sliding_window(app,latest,sessions)
+        after_session=await sessions.get_session(
+            app_name="wrappedcpu",user_id="cpu",session_id=session.id)
+        after=count_compactions(after_session.events)
+        manual_official_compaction=after-before
+        if not compacted and manual_official_compaction<1:
             raise AssertionError("ROOT_LLM_REAL_ADK_COMPACTION_EVENT_NOT_CREATED")
         if "return 3" not in (repo/"sample.py").read_text():
             raise AssertionError("synthetic patch not materialized")
