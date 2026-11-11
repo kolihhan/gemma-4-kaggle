@@ -1,6 +1,6 @@
 {
   "version": "wrapped-scope-31b-adoption-v1",
-  "preregistered_on": "2026-11-11 16:40 MYT",
+  "preregistered_on": "2026-11-11 (MYT), frozen before any model inference",
   "goal": "mechanism uptake / feasibility only; NOT causal correctness gain",
   "agent": "wrapped_scope_coder",
   "base_model": "gemma-4-31b-it-qat-w4a16-ct",
