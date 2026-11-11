@@ -1,0 +1,81 @@
+name: Scored public Gemma 0.22 V10 exact-byte candidate manual one-shot official submit
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/submit-scored-public-v10-one-official-20261112.yml"]
+  workflow_dispatch:
+    inputs:
+      submit_official:
+        description: "Make one actual Kaggle competition submission if quota legally available"
+        required: true
+        default: false
+        type: boolean
+      confirm:
+        description: "Enter SUBMIT to authorize one real competition submit"
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: gemma4-scored-public-v10-exact-official-one-shot-20261112
+  cancel-in-progress: false
+
+jobs:
+  verify_and_maybe_submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 48
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      SOURCE_SHA: "69fba2905f49a834a7c4f126dd8e2ee68c80d04c"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: "69fba2905f49a834a7c4f126dd8e2ee68c80d04c"
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Confirm pinned author-attributed original public bundle and source code
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          python -m unittest -v tests.test_submit_public_scored_v10_once
+          python -m py_compile scripts/submit_public_scored_v10_once.py
+          echo "ATTRIBUTED_SCORED_V10_SOURCE_CPU_TESTS=PASS"
+      - name: Authenticate and fail closed on existing official quota before any spend
+        if: "${{ (github.event_name == 'push' && github.event.head_commit.message == 'GO_PUBLIC_V10_KAGGLE_SUBMIT_ONE_SHOT_20261112') || (github.event_name == 'workflow_dispatch' && inputs.submit_official && inputs.confirm == 'SUBMIT') }}"
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python -m scripts.submit_public_scored_v10_once quota
+          echo "ATTRIBUTED_SCORED_V10_LEGAL_SLOT_GATE=PASS"
+      - name: Install pinned official validator and Kaggle CPU builder deps
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0" "nbformat==5.10.4"
+          mkdir -p /tmp/public-scored-v10-official-wheels
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse \
+              -f "$wheel" -p /tmp/public-scored-v10-official-wheels --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check /tmp/public-scored-v10-official-wheels/*.whl
+      - name: Verify exact 0.22-scored public original ZIP, source SHA and official compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_public_scored_v10_once preflight
+          echo "ATTRIBUTED_SCORED_V10_OFFICIAL_COMPILER_GATE=PASS"
+      - name: Submit ONE actual Kaggle code entry, verify remote kernel SHA and official receipt
+        if: "${{ (github.event_name == 'push' && github.event.head_commit.message == 'GO_PUBLIC_V10_KAGGLE_SUBMIT_ONE_SHOT_20261112') || (github.event_name == 'workflow_dispatch' && inputs.submit_official && inputs.confirm == 'SUBMIT') }}"
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_public_scored_v10_once submit
+          echo "ATTRIBUTED_SCORED_V10_OFFICIAL_ONE_SHOT_FUNCTION_RETURNED=TRUE"
+      - name: Distinguish preflight-only runs from actual Kaggle entries
+        if: "${{ (github.event_name == 'push' && github.event.head_commit.message != 'GO_PUBLIC_V10_KAGGLE_SUBMIT_ONE_SHOT_20261112') || (github.event_name == 'workflow_dispatch' && (!inputs.submit_official || inputs.confirm != 'SUBMIT')) }}"
+        run: echo "ATTRIBUTED_SCORED_V10_NO_COMPETITION_SUBMISSION_TRIGGERED=TRUE"
