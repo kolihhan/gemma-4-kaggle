@@ -33,3 +33,17 @@ The read-only script `scripts/audit_paired_31b_existing_traces.py` targets the *
 - **Decision:** diagnose the finished six-run experiment first. Any new model training requires an explicit method/budget hypothesis, train/eval separation and frozen tasks.
 
 No change to `submission/`, current Kaggle score, or the pre-existing date-gated one-shot official submission workflow.
+
+## Read-only six-trace audit outcome (completed, no GPU)
+
+[Safe existing-output diagnostic Action 43064306933](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43064306933) completed successfully, locating **all six** structured per-task traces. The synthetic-data tests passed on the runner. No new inference, training, or contest submission was performed.
+
+| Public-dev issue | First recognized edit call (V2 / public prompt) | Direct edit calls (V2 / public prompt) | Recognized possible test-runner commands (V2 / public prompt) |
+|---|---:|---:|---:|
+| `fastapi_14487` | 22 / 16 | 4 / 7 | 0 / 0 |
+| `rich_3782` | 6 / 11 | 2 / 6 | 0 / 0 |
+| `requests_7427` | 3 / 12 | 2 / 2 | 0 / 0 |
+
+The conservative syntactic detector recognized **zero potential test-runner invocations** across these six traces. This is not conclusive evidence that zero useful checks were run: scripts and nested shell forms can evade it, and command exit statuses / test relevance were not inspected. All six traces showed edits; explicit `submit_patch` appeared in three of six traces, but all six produced nonempty patches extracted by the evaluator. Trace-normalized action calls sometimes differ from scorer `tool_calls` because they are distinct event counters.
+
+**Updated interpretation:** We can reject the hypothesis that the prompt-only treatment caused a clear uplift in this three-issue panel, but cannot yet select a correct repair intervention from action counts alone. Before choosing LoRA or PPO, distinguish test *execution and feedback uptake* from both scorer status and test-like command strings, then isolate semantic patch accuracy on adequately specified development cases. The current action-path result supports a **diagnostic pivot**, not a promoted solver architecture.
