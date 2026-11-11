@@ -1,0 +1,146 @@
+name: Gemma 4 paired three-task official verifier integrity screen (CPU only)
+on:
+  push:
+    branches: [research/three-task-integrity-screen-20261112]
+    paths: [.github/workflows/paired-three-task-integrity-cpu-once-20261112.yml]
+permissions:
+  contents: read
+concurrency:
+  group: gemma4-three-task-integrity-cpu-once-20261112
+  cancel-in-progress: false
+jobs:
+  integrity:
+    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'GO_GEMMA_THREE_TASK_INTEGRITY_CPU_ONCE' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-integrity-cpu-${{ github.run_id }}
+      KERNEL_DIR: /tmp/three-task-integrity-kernel
+      PRIVATE_DIR: /tmp/three-task-integrity-private
+      SAFE_DIR: /tmp/three-task-integrity-safe
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate frozen IDs and control matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_paired_three_task_integrity_cpu
+          python -m py_compile kaggle/paired_three_task_integrity_cpu.py scripts/render_paired_three_task_integrity_cpu.py
+          python -m scripts.render_paired_three_task_integrity_cpu \
+            --repo . --out "$KERNEL_DIR" --kernel-ref "$KERNEL_REF"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ["KERNEL_DIR"])
+          m=json.loads((root/"kernel-metadata.json").read_text())
+          assert m["is_private"] and not m["enable_gpu"] and not m["enable_internet"]
+          assert m["model_sources"]==[]
+          assert m["competition_sources"]==["gemma-4-developer-agent"]
+          print("CPU_PRIVATE_NO_GPU_METADATA_GATE=PASS")
+          PY
+      - name: Prevent duplicate pushes then launch exactly one private CPU kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          if kaggle kernels status "$KERNEL_REF" >/tmp/three-task-existing.log 2>&1; then
+            echo "REFUSE_DUPLICATE_PRIVATE_KERNEL"; exit 1
+          fi
+          kaggle kernels push -p "$KERNEL_DIR" -t 5400 >/tmp/three-task-push.log 2>&1 || {
+            echo "PRIVATE_CPU_PUSH_FAILED"; exit 1;
+          }
+          echo "PRIVATE_CPU_KERNEL_PUSHED=TRUE"
+          echo "OFFICIAL_COMPETITION_SUBMISSION=FALSE"
+      - name: Poll same CPU kernel only, no second launch
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 175); do
+            info="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            lower="$(printf '%s' "$info" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal=complete; break; fi
+            if grep -Eq 'failed|failure|error|cancelled|canceled' <<<"$lower"; then terminal=error; break; fi
+            if [ $((attempt % 15)) -eq 1 ]; then echo "PRIVATE_CPU_POLL=$attempt"; fi
+            sleep 30
+          done
+          test -n "$terminal" || terminal=pending
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          echo "PRIVATE_CPU_TERMINAL=$terminal"
+      - name: Export only allowlisted evaluation integrity flags
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$PRIVATE_DIR" "$SAFE_DIR"
+          kaggle kernels output "$KERNEL_REF" -p "$PRIVATE_DIR" -o >/tmp/three-task-output.log 2>&1 || {
+            echo "PRIVATE_CPU_OUTPUT_NOT_AVAILABLE"; exit 1;
+          }
+          test -s "$PRIVATE_DIR/paired_three_task_integrity_cpu.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path(os.environ["PRIVATE_DIR"])/"paired_three_task_integrity_cpu.json"
+          x=json.loads(p.read_text())
+          assert x.get("version")=="gemma4-paired-31b-three-task-integrity-v1"
+          assert x.get("no_model_inference") is True and x.get("no_gpu") is True
+          assert x.get("no_raw_issue_patch_or_grader_output_export") is True
+          rows=x.get("results")
+          ids=("fastapi_14487","rich_3782","requests_7427")
+          assert len(rows)==3 and [r.get("instance_id") for r in rows]==list(ids)
+          allowed_categories={
+            "evaluation_error","informative_gold_pass_noop_fail",
+            "unhelpful_noop_already_passes","confounded_gold_fails",
+            "confounded_other"
+          }
+          safe=[]
+          for row in rows:
+            assert row["integrity_category"] in allowed_categories
+            features=row["input_features"]
+            safe.append({
+              "instance_id":row["instance_id"],
+              "statement_chars":features["statement_chars"],
+              "hint_chars":features["hint_chars"],
+              "has_external_url":features["has_external_url"],
+              "short_link_pointer_risk":features["short_link_pointer_risk"],
+              "noop_resolved":row["noop"]["resolved"],
+              "noop_test_exit_code":row["noop"]["test_exit_code"],
+              "noop_status":row["noop"]["status"],
+              "gold_resolved":row["gold"]["resolved"],
+              "gold_test_exit_code":row["gold"]["test_exit_code"],
+              "gold_status":row["gold"]["status"],
+              "integrity_category":row["integrity_category"],
+            })
+          report={
+            "source_run_id":int(os.environ["GITHUB_RUN_ID"]),
+            "version":x["version"],
+            "no_inference":True,"no_gpu":True,
+            "official_competition_submission":False,
+            "public_dev_only":True,
+            "rows":safe,
+          }
+          target=Path(os.environ["SAFE_DIR"])/"three_task_integrity_safe.json"
+          target.write_text(json.dumps(report,indent=2,sort_keys=True)+"\n")
+          print("SAFE_THREE_TASK_INTEGRITY="+json.dumps(report,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gemma4-three-task-integrity-safe-${{ github.run_id }}
+          path: /tmp/three-task-integrity-safe/three_task_integrity_safe.json
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Require terminal private kernel and safe metric artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.poll.outputs.terminal }}" = complete
+          test -s "$SAFE_DIR/three_task_integrity_safe.json"
