@@ -1,0 +1,78 @@
+name: Public Kaggle Gemma high-score notebooks config reality check CPU once
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/public-gemma-configs-reality-check-once.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  inspect_public:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Pull PUBLIC notebooks only and display finite, allowlisted static config facts
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5"
+          python - <<'PY'
+          import ast, json, re
+          from pathlib import Path
+          from kaggle.api.kaggle_api_extended import KaggleApi
+
+          api=KaggleApi(); api.authenticate()
+          notebook_ids=[
+              "bliverrigpdoge/lb-0-22-4-config-files-no-training",
+              "prvsiyan/gemma-and-the-shape-of-doubt",
+              "honghanhhh/gemma-4-baseline-lb-0-24"
+          ]
+          for n,ref in enumerate(notebook_ids):
+              target=Path("/tmp/public-source-"+str(n));target.mkdir()
+              print("PUBLIC_NOTEBOOK_REF="+ref,flush=True)
+              try:
+                  api.kernels_pull(ref,str(target),metadata=True,quiet=True)
+              except Exception as e:
+                  print("PUBLIC_NOTEBOOK_PULL_STATUS=FAILED_"+type(e).__name__,flush=True)
+                  continue
+              files=[p for p in target.rglob("*") if p.is_file()]
+              print("PUBLIC_NOTEBOOK_FILES="+json.dumps([p.name for p in files][:20]),flush=True)
+              texts=[]
+              for f in files:
+                  if f.suffix==".ipynb":
+                      try:
+                          nb=json.loads(f.read_text())
+                          texts.extend("".join(c.get("source",[])) if isinstance(c.get("source"),list)
+                                       else str(c.get("source","")) for c in nb.get("cells",[]) if c.get("cell_type")=="code")
+                      except Exception:pass
+                  elif f.suffix==".py":
+                      try:texts.append(f.read_text())
+                      except Exception:pass
+              source="\n".join(texts)
+              print("PUBLIC_SOURCE_CHARS="+str(len(source)),flush=True)
+              # Output deterministic evidence of file construction and budget, not entire notebook.
+              keys=["gemma-4-31b-it-qat-w4a16-ct","gemma-4-12b-it-qat-w4a16-ct",
+                    "gemma-4-e4b-it-qat-w4a16-ct","gemma-4-e2b-it-qat-w4a16-ct",
+                    "SequentialAgent","AgentTool","max_time_minutes","max_tool_calls",
+                    "max_turns","thinking_budget","submit_patch","agent.yaml",
+                    "prompts/system.md","skills/","submission.zip"]
+              print("PUBLIC_CODE_KEYS="+json.dumps({k:source.count(k) for k in keys},sort_keys=True),flush=True)
+              config=[]
+              pattern=re.compile(r"^.*?(?:max_time_minutes|max_tool_calls|max_turns|thinking_budget|agent_class|model: gemma-4|temperature:|top_p:|max_output_tokens:|config_path:|run_command|edit_file|submit_patch).*?$",re.M)
+              for line in pattern.findall(source):
+                  # Limit to scalar flags and tool names, never raw prompt or issue text.
+                  line=line.strip()
+                  if len(line)>180:continue
+                  if any(c in line for c in ("http","token","key","secret","password","base64")):continue
+                  if re.search(r"\b(max_time_minutes|max_tool_calls|max_turns|thinking_budget|agent_class|model: gemma|temperature:|top_p:|max_output_tokens:|config_path:)\b",line):
+                      config.append(line)
+              print("PUBLIC_STATIC_SETTINGS_LINES="+json.dumps(config[:35],ensure_ascii=False),flush=True)
+              print("PUBLIC_NOTEBOOK_PULL_STATUS=SUCCESS",flush=True)
+          print("PUBLIC_NOTEBOOK_REVIEW_NO_GPU_NO_COMPETITION_SUBMISSION=TRUE",flush=True)
+          PY
