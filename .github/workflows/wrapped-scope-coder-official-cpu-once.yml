@@ -1,0 +1,56 @@
+name: Compaction-safe wrapped Scope-Coder official ADK CPU gate
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths:
+      - .github/workflows/wrapped-scope-coder-official-cpu-once.yml
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate LlmAgent root / one nested workflow / no direct mutation paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_two_stage_scope_coder tests.test_wrapped_scope_coder
+          python -m py_compile scripts/build_wrapped_scope_coder_candidate.py scripts/probe_wrapped_scope_coder_official.py
+          echo "WRAPPED_SCOPE_CODER_STATIC_GATE=PASS"
+      - name: Load pinned public V2 source and official CPU-only ADK wheelhouse
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          mkdir -p /tmp/wrapped-scope /tmp/wrapped-wheels
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p /tmp/wrapped-scope -o >/dev/null
+          test -s /tmp/wrapped-scope/submission.zip
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel" -p /tmp/wrapped-wheels --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check /tmp/wrapped-wheels/*.whl
+      - name: Build frozen two-stage wrapped candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.build_wrapped_scope_coder_candidate \
+            --source-zip /tmp/wrapped-scope/submission.zip \
+            --out /tmp/wrapped-scope/wrapped-staged.zip
+          test -s /tmp/wrapped-scope/wrapped-staged.zip
+      - name: Verify actual AgentTool execution and default compaction across five invocations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.probe_wrapped_scope_coder_official \
+            --zip /tmp/wrapped-scope/wrapped-staged.zip
+          echo "WRAPPED_SCOPE_CODER_OFFICIAL_CPU_GATE=PASS"
+      - name: Confirm no 31B inference, no GPU, no official submission
+        run: echo "WRAPPED_SCOPE_CODER_NO_GPU_NO_SUBMISSION=TRUE"
