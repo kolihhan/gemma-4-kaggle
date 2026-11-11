@@ -1,0 +1,168 @@
+name: Gemma 31B wrapped Scope real AgentTool adoption ONE private task
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/wrapped-scope-31b-adoption-go-once-20261111.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gemma4-wrapped-scope-31b-adoption-one-private-task-20261111
+  cancel-in-progress: false
+
+jobs:
+  one_private_task:
+    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'GO_WRAPPED_ADOPTION_31B_ONE_PRIVATE_20261111' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-wrapped-uptake-${{ github.run_id }}
+      SOURCE_DIR: /tmp/wrapped-uptake-source
+      KERNEL_DIR: /tmp/wrapped-uptake-kernel
+      PRIVATE_OUTPUT: /tmp/wrapped-uptake-private
+      SAFE_OUTPUT: /tmp/wrapped-uptake-safe
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fail-closed static contract and one-task preregistration gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_render_wrapped_scope_31b_adoption_probe
+          python -m py_compile scripts/render_wrapped_scope_31b_adoption_probe.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          m=json.loads(Path("experiments/wrapped-scope-31b-adoption-v1/manifest.json").read_text())
+          assert m["selected_tasks"]==m["maximum_model_evaluations"]==1
+          assert m["budget_minutes"]==5
+          assert m["task_repositories"]==["requests"]
+          assert m["agent"]=="wrapped_scope_coder"
+          print("ONE_TASK_WRAPPED_31B_PREREGISTRATION=PASS")
+          PY
+      - name: Authenticate and check GPU quota and idempotent private kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import json,subprocess
+          r=subprocess.run(["kaggle","quota","--format","json"],
+                           capture_output=True,text=True,timeout=90,check=True)
+          q=json.loads(r.stdout)
+          gpu=next(x for x in q if x.get("resource")=="GPU")
+          remaining=float(gpu["remaining"].rstrip("h"))
+          print("ONE_TASK_31B_GPU_HOURS_REMAINING="+str(remaining))
+          if remaining<4:
+              raise SystemExit("STOP_GPU_QUOTA_TOO_LOW")
+          print("ONE_TASK_31B_GPU_GATE=PASS")
+          PY
+          if kaggle kernels status "$KERNEL_REF" >/tmp/uptake-existing.log 2>&1; then
+            echo "STOP_ALREADY_EXISTING_PRIVATE_KERNEL"; exit 1
+          fi
+          if grep -Eiq 'KernelWorkerStatus\.|COMPLETE|QUEUED|RUNNING' /tmp/uptake-existing.log; then
+            echo "STOP_EXISTING_KERNEL_DETECTED"; exit 1
+          fi
+      - name: Render frozen private model runtime (official reference ZIP)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$SOURCE_DIR" "$SAFE_OUTPUT"
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p "$SOURCE_DIR" -o >/dev/null
+          test -s "$SOURCE_DIR/submission.zip"
+          python -m scripts.render_wrapped_scope_31b_adoption_probe \
+            --repo . --source-zip "$SOURCE_DIR/submission.zip" \
+            --out "$KERNEL_DIR" --kernel-ref "$KERNEL_REF"
+          python -m py_compile "$KERNEL_DIR/wrapped_scope_31b_adoption_runtime.py"
+          python -m json.tool "$KERNEL_DIR/kernel-metadata.json" >/dev/null
+          echo "PRIVATE_ONE_TASK_31B_CPU_PREFLIGHT=PASS"
+      - name: Push exactly one private L4x4 notebook (NOT competition submission)
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          kaggle kernels push -p "$KERNEL_DIR" --accelerator NvidiaL4 -t 3600 > /tmp/wrapped-uptake-push.log 2>&1
+          status=$?
+          set -e
+          python scripts/check_capacity_31b_push_v0.py --log /tmp/wrapped-uptake-push.log --client-exit-code "$status"
+          echo "REAL_31B_PRIVATE_KERNEL_ID=$KERNEL_REF"
+          echo "REAL_31B_NO_COMPETITION_SUBMISSION=TRUE"
+      - name: Poll existing single private kernel (never push a duplicate)
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for attempt in $(seq 1 120); do
+            info="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            lower="$(printf '%s' "$info" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal="complete"; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal="error"; break; fi
+            if [ "$attempt" -eq 1 ] || [ $((attempt % 20)) -eq 0 ]; then
+              echo "REAL_31B_PRIVATE_POLL_ATTEMPT=$attempt"
+            fi
+            sleep 30
+          done
+          test -n "$terminal" || terminal="pending"
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          echo "REAL_31B_PRIVATE_TERMINAL=$terminal"
+      - name: Fetch only safe derived metrics from completed private Kaggle run
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          mkdir -p "$PRIVATE_OUTPUT" "$SAFE_OUTPUT"
+          kaggle kernels output "$KERNEL_REF" -p "$PRIVATE_OUTPUT" -o >/tmp/wrapped-uptake-download.log 2>&1
+          if [ -s "$PRIVATE_OUTPUT/wrapped_scope_31b_adoption_results.json" ]; then
+            python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path(os.environ["PRIVATE_OUTPUT"])/"wrapped_scope_31b_adoption_results.json"
+          data=json.loads(p.read_text())
+          records=[]
+          for raw in data.get("results",[]):
+              records.append({k:raw.get(k) for k in (
+                  "instance_id","status","resolved","test_exit_code","has_patch",
+                  "patch_chars","tool_calls","duration_seconds","error_type",
+                  "agenttool_calls","agenttool_returns","agenttool_errors",
+                  "agenttool_seconds"
+              )})
+          safe={"version":"wrapped-scope-31b-adoption-v1",
+                "status":data.get("status"),"model":data.get("model"),
+                "requested":data.get("requested"),
+                "completed":data.get("completed"),
+                "resolved":data.get("resolved"),
+                "records":records}
+          assert len(records)==1,"one task denominator changed"
+          out=Path(os.environ["SAFE_OUTPUT"])/"adoption_safe_metrics.json"
+          out.write_text(json.dumps(safe,indent=2,sort_keys=True)+"\n")
+          print("REAL_31B_WRAPPED_ADOPTION_SAFE_RESULT="+json.dumps(safe,sort_keys=True),flush=True)
+          PY
+          else
+            echo "REAL_31B_WRAPPED_ADOPTION_NOT_TERMINAL_OR_NO_SUMMARY=TRUE"
+          fi
+          echo "NO_RAW_TASK_PATCH_TRACE_OR_REFERENCE_UPLOADED=TRUE"
+      - name: Upload only non-sensitive one-task metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemma4-wrapped-real-31b-adoption-metrics-${{ github.run_id }}
+          path: /tmp/wrapped-uptake-safe/adoption_safe_metrics.json
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: State the actual result without claiming hidden score
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "PRIVATE_31B_TERMINAL=${{ steps.poll.outputs.terminal }}"
+          echo "PRIVATE_31B_ONLY_ONE_MODEL_EVALUATION=TRUE"
+          echo "COMPETITION_SUBMISSION_COUNT=0"
+          test "${{ steps.poll.outputs.terminal }}" = "complete"
+          test -s "$SAFE_OUTPUT/adoption_safe_metrics.json"
