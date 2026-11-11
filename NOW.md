@@ -1,6 +1,15 @@
-# NOW — Verified Gemma 4 project state (2026-11-12 paired pilot and trace audit complete)
+# NOW — Verified Gemma 4 project state (2026-11-12 benchmark integrity gate completed)
 
 > **This short default-branch entrypoint is a status index, not a replacement for experiment provenance.** Every changing Kaggle state must be re-checked using the authenticated submission ledger; do not treat this snapshot as live. The detailed, actively updated research and execution history currently resides on [`research/dual-agent-recovery-v0-20261108`](https://github.com/kolihhan/gemma-4-kaggle/tree/research/dual-agent-recovery-v0-20261108). Historical versions of this file remain in Git history.
+
+## NEW: Why 31B 0/3 versus 0/3 cannot establish an Agent capability limit
+
+- [PRIVATE official wheelhouse CPU gold/no-op Action 43070401519](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43070401519) **SUCCESS** on 2026-11-11 17:44 UTC: exactly the frozen three paired public-dev issues, one untouched no-op check and one reference gold check each; **zero model inference, GPU use or official submission**.
+- **FastAPI `14487`**: task text 204 chars, no URL or hints; no-op fails (exit 1), gold **passes** (exit 0). Verifier locally informative.
+- **Rich `3782`**: task text **68 chars**, URL present, no hints; no-op fails, gold **passes**. Verifier locally informative, but the original detailed reproduction sits in linked upstream issue #3727 outside the network-disabled agent sandbox. **Information sufficiency at risk**, not proven impossible.
+- **Requests `7427`**: no-op **fails** and gold **fails**, both exit 1. This instance is **evaluation-confounded in the exact tested scorer epoch**; do not attribute its 31B failure to model inability. A community report of empty-patch *pass* concerns another local setup, not this measured run.
+- [Full frozen protocol and verified results](https://github.com/kolihhan/gemma-4-kaggle/blob/research/dual-agent-recovery-v0-20261108/docs/research/2026-11-12-three-task-integrity-preregistration.md). [PR #9](https://github.com/kolihhan/gemma-4-kaggle/pull/9) merged; no changes to solver artifacts.
+- **Decision:** The earlier V2 0/3 vs prompt-only 0/3 remains an actual observed result, but contains one reference-gold failure and one extremely short URL-dependent specification. Neither policy nor model-quality generalization follows. Prioritize **clean, specified, gold-pass/no-op-fail** independent samples before choosing training, PPO/GRPO, test policy or new multi-agent architecture.
 
 ## User-authorized next official entry — date-gated, NOT YET SUBMITTED
 
@@ -46,7 +55,7 @@
 
 1. **V4 0.15: close as no demonstrated gain; no duplicate official submission.** Keep best scored V2 bounded configuration at `0.18`.
 2. **Current V5 wrapped Scope→Coder: freeze/demote.** Real model used the only workflow, but no patch after ~300 seconds. Do not burn more GPU on this identical topology or claim a success-rate gain from one negative task.
-3. **Completed discriminating test:** matched 31B V2 vs public prompt yielded **0/3 vs 0/3** on public-development issues; both made patches and failed correctness. Demote prompt-only treatment. Diagnose failed command/test feedback versus patch semantics before an architecture or training pivot.
+3. **Completed discriminating + integrity tests:** V2 vs public prompt **0/3 vs 0/3**; integrity gate confirmed Requests gold fails and Rich has only 68-character URL-dependent input. Demote prompt-only treatment (no proven uplift), but do NOT infer a general model coding-capability limit. Next construct clean, specified, gold-pass/no-op-fail evaluation evidence before a method change.
 4. Before any next private 31B pilot: verify remaining GPU quota, predeclared distinct public-dev tasks, official task model/metrics, **same 5-minute baseline and treatment budget**, specific uptake/first-edit observables, and fail-stop logic. A clean matched V2 test is required for comparative claims.
 5. Keep competition task contents/reference patches/private logs out of this PUBLIC repo. Do not modify solver artifacts via documentation changes.
 
