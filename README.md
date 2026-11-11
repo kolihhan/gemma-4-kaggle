@@ -18,12 +18,12 @@
 
 The research branch includes `scripts/build_wrapped_scope_coder_candidate.py` and the official scripted-model ADK/compaction gate. Its engineering gate passed, but **real Gemma 31B task correctness and autonomous workflow uptake remain unmeasured**.
 
-## Official results — last authenticated 2026-11-11 16:28 MYT
+## Official results — authenticated 2026-11-11 23:36 MYT
 
 - Best **completed/scored** Public result: **0.18**, submission **58183466**, attributed Budget-Fit V2 bounded configuration.
-- Official V4-CGR submission **58222227** was still **PENDING**, no Public/Private score, at the most recent authenticated read-only ledger check. [Official receipt](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42946421274); [score check](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42947403444).
+- Official V4-CGR submission **58222227** is **COMPLETE, Public 0.15**, below the 0.18 best. [Official receipt](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42946421274); [authenticated score check](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42947403444). Do not resubmit unchanged.
 - Old optional Contract & Impact 31B private pilot: **0/4 resolved vs 0/4 for V2** on four public-development tasks. This does not prove that all contract-based repair approaches fail.
-- Wrapped Scope/Coder: **scripted ADK CPU pass**, including actual session compaction, but **no independent 31B improvement evidence**.
+- Wrapped Scope/Coder: **scripted ADK CPU pass**, but actual private Gemma 31B [one-task test](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42988852829) had **1 Workflow call, 0 successful returns, 1 error, 0 edits, 0/1 resolved** after about 302.5 seconds. This is a negative feasibility result, not an architecture improvement. [Read-only trace diagnosis](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43050260136).
 
 ## Minimal contribution/experiment rules
 
