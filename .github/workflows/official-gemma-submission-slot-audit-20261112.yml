@@ -1,0 +1,40 @@
+name: Read-only authenticated Kaggle Gemma official submission slot audit
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [".github/workflows/official-gemma-submission-slot-audit-20261112.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Inspect official daily quota and exact account submissions, no kernel push
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check "kaggle==2.2.5" "six==1.17.0"
+          python - <<'PY'
+          import datetime,json
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions
+          api=KaggleApi();api.authenticate()
+          lim=api.competition_get_submission_limits("gemma-4-developer-agent")
+          entries=authenticated_submissions()
+          active=[x for x in entries if (x.get("status") or "").upper().split(".")[-1] in ("PENDING","QUEUED","RUNNING","SCORING","EVALUATING")]
+          snap={"checked_utc":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "allowed_now":lim.num_allowed_now,
+                "limited_by_total":lim.limited_by_total,
+                "active_submissions":[{"ref":x.get("ref"),"status":x.get("status")} for x in active],
+                "latest_submissions":[{k:x.get(k) for k in
+                    ("ref","description","status","publicScore","date")} for x in entries[:6]]}
+          print("OFFICIAL_GEMMA_AUTHENTICATED_QUOTA="+json.dumps(snap,sort_keys=True,default=str),flush=True)
+          print("OFFICIAL_GEMMA_SLOT_READ_ONLY_NO_SUBMISSION=TRUE",flush=True)
+          PY
