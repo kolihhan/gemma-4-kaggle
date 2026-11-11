@@ -1,82 +1,36 @@
-# Gemma 4 Developer Agent — competition workspace
+# Gemma 4 Developer Agent — competition research workspace
 
-Private working repository for **Google – The Gemma 4 Developer Agent Competition**.
+**Repository visibility: PUBLIC.** Historical competition resources may still be exposed through Git history. Do not upload raw competition data, hidden tests, private evaluation traces, reference patches or credentials. See [PUBLIC_VISIBILITY.md](PUBLIC_VISIBILITY.md).
 
-This repo is not just a dataset mirror. It is the source of truth for competition facts, the current experiment, the candidate submission, evaluation evidence, and the private full-data mirror.
+**Mission:** produce a stronger offline GitHub-issue repair agent under the official Kaggle time and model constraints. Prefer independent issue resolution, task completion and reproducible scoring over prompt complexity or CPU compilation success.
 
-## Start here
+## Read first
 
-1. `AGENTS.md` — repo-specific working rules and evidence precedence.
-2. `NOW.md` — current decision, verified state, blockers, and next experiment.
-3. `docs/research/competition-recon-2026-10-31.md` — current competition fact check, including the stale bundled model-list warning.
-4. `docs/design/e4b-baseline-v0.md` — approved minimal baseline design.
-5. `submission/` — the **only canonical candidate submission**.
-6. `docs/evaluation/` — public-corpus profile and failure taxonomy.
+- [NOW.md](NOW.md) — concise verified project status, current score, submission ID, active and rejected methods. Date-stamped: check the authenticated Kaggle ledger again for live results.
+- [AGENTS.md](AGENTS.md) — repository instructions and execution order.
+- [RESEARCH_DOCTRINE.md](RESEARCH_DOCTRINE.md) — methodology, negative evidence and pivot triggers.
+- [EVALUATION_POLICY.md](EVALUATION_POLICY.md) — criteria distinguishing CPU mechanical checks, real model behavior, independently resolved tasks and official scores.
+- [PUBLIC_VISIBILITY.md](PUBLIC_VISIBILITY.md) — public repository / private competition-resource safeguards.
 
-## Current baseline
+## Source and execution branches
 
-Baseline v0 is deliberately simple:
+**The default `main` branch is NOT the complete research implementation.** The latest architecture experiments, private Kaggle pilots, official result audits and detailed evidence currently live on [`research/dual-agent-recovery-v0-20261108`](https://github.com/kolihhan/gemma-4-kaggle/tree/research/dual-agent-recovery-v0-20261108). Do not silently treat `main/submission/` as the latest scoring artifact; it is a historical E4B implementation.
 
-- base model: `gemma-4-e4b-it-qat-w4a16-ct`
-- one root agent
-- no LoRA
-- no sub-agents
-- all 9 official harness tools
-- inspect → hypothesize → smallest edit → targeted test → repair → diff/status → `submit_patch`
+The research branch includes `scripts/build_wrapped_scope_coder_candidate.py` and the official scripted-model ADK/compaction gate. Its engineering gate passed, but **real Gemma 31B task correctness and autonomous workflow uptake remain unmeasured**.
 
-This is a diagnostic baseline, not a claim that E4B is the best final model. See `NOW.md` before changing it.
+## Official results — last authenticated 2026-11-11 16:28 MYT
 
-## Public development corpus
+- Best **completed/scored** Public result: **0.18**, submission **58183466**, attributed Budget-Fit V2 bounded configuration.
+- Official V4-CGR submission **58222227** was still **PENDING**, no Public/Private score, at the most recent authenticated read-only ledger check. [Official receipt](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42946421274); [score check](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/42947403444).
+- Old optional Contract & Impact 31B private pilot: **0/4 resolved vs 0/4 for V2** on four public-development tasks. This does not prove that all contract-based repair approaches fail.
+- Wrapped Scope/Coder: **scripted ADK CPU pass**, including actual session compaction, but **no independent 31B improvement evidence**.
 
-`tasks.jsonl` contains **129 tasks**. `scripts/analyze_tasks.py` profiles the corpus and produces a deterministic diagnostic sample without requiring the large data mirror.
+## Minimal contribution/experiment rules
 
-Verified repo mix:
+1. Preregister tasks, baseline/treatment code digests, model and shared end-to-end budget. Do not choose tasks after viewing treatment outcomes.
+2. Check current official Kaggle rules and quota before any new private GPU inference or competition submission. Use unique private kernels.
+3. Keep all raw Competition Data and reference answers away from model input and from **new** persistent public GitHub mirrors. Public repo history remains legacy cleanup debt.
+4. Report *verified*, *inferred* and *unknown* separately. Model/tool scripted tests are not proof of correct code patches or leaderboard gains.
+5. Update the current source of truth through a reviewed change; do not let `NOW.md` grow by endlessly prepending historical logs.
 
-- FastAPI: 67
-- Rich: 48
-- Requests: 13
-- HTTPX: 1
-
-Run:
-
-```bash
-python scripts/analyze_tasks.py tasks.jsonl --per-repo 3
-```
-
-See `docs/evaluation/public-corpus-summary.md` for the verified distribution and fixed 10-task diagnostic sample.
-
-## Full competition data
-
-The repository is private because Kaggle Competition Data must not be redistributed publicly.
-
-The official `download-all` archive was mirrored on 2026-10-31 to private GitHub Release `kaggle-data-2026-10-31` as **13 checksummed parts**:
-
-- archive bytes: `21,929,290,938`
-- archive SHA-256: `69c4c4c3f98bc5e9b0ff80f8660cd1435f69dcc3a3c041198f4b974da5ffea69`
-- durable manifest: `manifests/latest.json`
-
-The initial mirror's Kaggle CLI file-inventory command was paginated, so its first-page count is intentionally not treated as an exhaustive inventory. Archive integrity is instead pinned by the official HTTP Content-Length, full archive SHA-256, and all 13 Release-part hashes.
-
-### Restore everything locally
-
-Authenticate `gh` for this private repository, or set `GH_TOKEN` / `GITHUB_TOKEN`, then run:
-
-```bash
-python scripts/restore_full_dataset.py --extract-to data --delete-zip-after-extract
-```
-
-The restore tool downloads each private Release part, verifies the part checksum, reconstructs the original zip, verifies the full archive size + SHA-256, and extracts it.
-
-Expected extracted competition data includes `docker/`, `embeddings/`, `graphs/`, `sample_submission/`, `sandbox/`, `snapshots/`, `wheels/`, `HARNESS_README.md`, and `tasks.jsonl`.
-
-## Validation
-
-GitHub Actions runs:
-
-- Python compile checks for repo tooling
-- unit tests for task-corpus analysis
-- static contract tests for the canonical E4B baseline submission
-- a real `tasks.jsonl` corpus gate (`129` tasks, `4` repos, deterministic sample)
-- restore CLI smoke test
-
-These checks prove repo/tool/layout consistency. They do **not** substitute for an actual competition scorer run; current score status lives in `NOW.md`.
+Historical `main` baseline and private-mirror setup details remain available in prior Git revisions; they are **not** instructions to recreate a public competition-data mirror.
