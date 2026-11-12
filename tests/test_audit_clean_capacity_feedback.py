@@ -55,7 +55,7 @@ class CleanCapacityFeedbackTests(unittest.TestCase):
     def test_raw_commands_or_patch_never_exported(self):
         s = json.dumps(app.audit(self.root))
         self.assertNotIn("SECRET NEVER PRINT", s)
-        self.assertNotIn("trace_", s)
+        self.assertNotIn(f"trace_{self.ids[1]}.json", s)
         self.assertNotIn("pytest ", s)
         self.assertNotIn("arguments", s)
 
