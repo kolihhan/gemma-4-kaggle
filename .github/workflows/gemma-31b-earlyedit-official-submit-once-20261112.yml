@@ -1,0 +1,56 @@
+name: OFFICIAL Gemma 31B EarlyEdit single Kaggle submission 20261112
+on:
+  push:
+    branches: [research/31b-earlyedit-paired-20261112]
+    paths: [.github/workflows/gemma-31b-earlyedit-official-submit-once-20261112.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma31b-earlyedit-20261112-official-one-submission
+  cancel-in-progress: false
+jobs:
+  submit:
+    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'GO_GEMMA_EARLYEDIT_31B_ONE_OFFICIAL_SUBMISSION_20261112' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 52
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      WORK: /tmp/gemma-earlyedit-official
+      KERNEL_REF: kolihhan/gemma4-earlyedit-official-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Verify official candidate built from unchanged tested policy (no model GPU)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_render_earlyedit_v2_paired_31b
+          python -m py_compile scripts/submit_earlyedit_31b_official_once.py
+          python -m py_compile scripts/render_earlyedit_v2_paired_31b.py
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          mkdir -p "$WORK/source"
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p "$WORK/source" -o >/tmp/gemma-earlyedit-source.log 2>&1
+          test -s "$WORK/source/submission.zip"
+          python -m scripts.submit_earlyedit_31b_official_once preflight \
+            --source-zip "$WORK/source/submission.zip" \
+            --out "$WORK/preflight" \
+            --kernel-ref "$KERNEL_REF"
+          echo GEMMA_EARLYEDIT_EXACT_CANDIDATE_CPU_PREFLIGHT=PASS
+      - name: Submit ONE Kaggle code competition entry after remote exact SHA verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -u -m scripts.submit_earlyedit_31b_official_once submit \
+            --source-zip "$WORK/source/submission.zip" \
+            --out "$WORK/official" \
+            --kernel-ref "$KERNEL_REF"
+          echo GEMMA_EARLYEDIT_OFFICIAL_SUBMIT_CODE_CALL_RETURNED=TRUE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gemma-earlyedit-official-receipt-${{ github.run_id }}
+          path: /tmp/gemma-earlyedit-official/official/receipt.json
+          if-no-files-found: warn
+          retention-days: 21
