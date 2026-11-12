@@ -26,8 +26,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m unittest -q tests.test_build_matched_12b_31b_capacity
-          python -m py_compile scripts/build_matched_12b_31b_capacity.py
+          python -m unittest -q tests.test_build_matched_12b_31b_capacity tests.test_render_matched_12b_31b_private
+          python -m py_compile scripts/build_matched_12b_31b_capacity.py scripts/render_matched_12b_31b_private.py
           echo "MODEL_12B_31B_SYNTHETIC_GATE=PASS"
       - name: Fetch only SHA-pinned attributed public Kaggle V2 source
         shell: bash
