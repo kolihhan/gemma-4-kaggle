@@ -1,0 +1,58 @@
+name: Gemma 31B EarlyEdit live state and authenticated official slot read-only
+on:
+  push:
+    branches: [research/31b-earlyedit-paired-20261112]
+    paths: [.github/workflows/gemma-earlyedit-live-qualification-and-slot-20261112.yml]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-31b-earlyedit-paired-43178431152
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Authenticated Kaggle exact-model kernel and contest submission quota
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import subprocess,json,csv,io,datetime
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          api=KaggleApi();api.authenticate()
+          limit=api.competition_get_submission_limits("gemma-4-developer-agent")
+          print("GEMMA_AUTHENTICATED_SLOT="+json.dumps({
+            "utc":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "allowed_now":limit.num_allowed_now,"limited_by_total":limit.limited_by_total,
+          },sort_keys=True,default=str),flush=True)
+          r=subprocess.run(["kaggle","competitions","submissions","gemma-4-developer-agent","-v","-q"],capture_output=True,text=True,timeout=110,check=True)
+          rows=list(csv.DictReader(io.StringIO(r.stdout)))
+          print("GEMMA_OWNED_RECENT="+json.dumps([
+            {k:x.get(k) for k in ("ref","status","publicScore","description","date")} for x in rows[:8]
+          ],sort_keys=True),flush=True)
+          PY
+          python - <<'PY'
+          import os,subprocess
+          r=subprocess.run(["kaggle","kernels","status",os.environ["KERNEL_REF"]],capture_output=True,text=True,timeout=90)
+          safe=" ".join((r.stdout or r.stderr or "").strip().split())[:350]
+          print("GEMMA_PAIRED_KERNEL_STATUS="+safe,flush=True)
+          print("GEMMA_PAIRED_KERNEL_STATUS_RETURN_CODE="+str(r.returncode),flush=True)
+          PY
+          mkdir -p /tmp/gemma-paired-earlyedit-live
+          kaggle kernels output "$KERNEL_REF" -p /tmp/gemma-paired-earlyedit-live -o >/tmp/gemma-live-output.log 2>&1 || true
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("/tmp/gemma-paired-earlyedit-live/earlyedit_v2_31b_results.json")
+          if not p.is_file():
+            print("GEMMA_PAIRED_SCORES=NOT_AVAILABLE_YET",flush=True)
+          else:
+            d=json.loads(p.read_text())
+            keys=("status","version","total_evaluations","score_by_arm","selected_public_dev_ids")
+            print("GEMMA_PAIRED_SCORES="+json.dumps({k:d.get(k) for k in keys},sort_keys=True),flush=True)
+          PY
+          echo GEMMA_AUTHENTICATED_READ_ONLY_NO_SUBMISSION_OR_GPU=TRUE
