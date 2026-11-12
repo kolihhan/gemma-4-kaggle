@@ -1,0 +1,175 @@
+name: Gemma 31B Early Edit vs V2 frozen four private real pilot once
+on:
+  push:
+    branches: [research/31b-earlyedit-paired-20261112]
+    paths: [.github/workflows/gemma-31b-earlyedit-v2-private-once-20261112.yml]
+permissions:
+  contents: read
+concurrency:
+  group: gemma31b-earlyedit-v2-frozen-four-single-pilot
+  cancel-in-progress: false
+jobs:
+  paired:
+    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'GO_GEMMA_31B_EARLYEDIT_V2_PRIVATE_PAIRED_FOUR_ONCE' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      SOURCE_DIR: /tmp/earlyedit-source
+      KERNEL_DIR: /tmp/earlyedit-private-kernel
+      PRIVATE_DIR: /tmp/earlyedit-private-result
+      SAFE_DIR: /tmp/earlyedit-safe
+      KERNEL_REF: kolihhan/gemma4-31b-earlyedit-paired-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: CPU source-only gate and frozen policy regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_render_earlyedit_v2_paired_31b tests.test_render_public_prompt_vs_v2_paired_31b
+          python -m py_compile scripts/render_earlyedit_v2_paired_31b.py
+          echo EARLYEDIT_TESTS=PASS
+      - name: Quota, authenticated GPU and duplicate kernel gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import json,subprocess
+          r=subprocess.run(["kaggle","quota","--format","json"],capture_output=True,text=True,check=True,timeout=120)
+          rows=json.loads(r.stdout)
+          matches=[x for x in rows if x.get("resource")=="GPU"]
+          if len(matches)!=1:raise RuntimeError("missing authenticated GPU quota")
+          balance=float(str(matches[0]["remaining"]).rstrip("h"))
+          print("EARLYEDIT_GPU_REMAINING_HOURS="+str(balance),flush=True)
+          if balance<6.0:raise SystemExit("STOP_GPU_REMAINING_BELOW_SAFETY_THRESHOLD")
+          print("EARLYEDIT_GPU_QUOTA_GATE=PASS",flush=True)
+          PY
+          if kaggle kernels status "$KERNEL_REF" > /tmp/earlyedit-idempotency.log 2>&1; then
+            echo STOP_KERNEL_ALREADY_EXISTS; exit 1
+          fi
+      - name: Reproduce exact pinned V2 source, render both arms without executing third-party code
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$SOURCE_DIR" "$SAFE_DIR"
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p "$SOURCE_DIR" -o >/tmp/earlyedit-source-get.log 2>&1
+          test -s "$SOURCE_DIR/submission.zip"
+          python -m scripts.render_earlyedit_v2_paired_31b \
+            --repo . --source-zip "$SOURCE_DIR/submission.zip" \
+            --out "$KERNEL_DIR" --kernel-ref "$KERNEL_REF" > "$SAFE_DIR/cpu_render.jsonl"
+          python -m py_compile "$KERNEL_DIR/earlyedit_v2_31b_runtime.py"
+          python - <<'PY'
+          import os,json,hashlib
+          from pathlib import Path
+          p=Path(os.environ["KERNEL_DIR"])
+          m=json.loads((p/"kernel-metadata.json").read_text())
+          assert m["is_private"] and m["enable_gpu"] and not m["enable_internet"]
+          assert m["model_sources"]==["google/gemma-4/Other/gemma-4-31b-it-qat-w4a16-ct/2"]
+          rows=(Path(os.environ["SAFE_DIR"])/"cpu_render.jsonl").read_text().strip().splitlines()
+          assert len(rows)==1 and rows[0].startswith("EARLYEDIT_PAIRED_RENDER=")
+          d=json.loads(rows[0].split("=",1)[1])
+          assert d["task_evaluations"]==8 and d["arm_count"]==2
+          assert d["source_zip_sha256"]=="a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3"
+          assert d["control_zip_sha256"]!=d["treatment_zip_sha256"]
+          print("EARLYEDIT_ACTUAL_PINNED_SOURCE_BUILD=PASS")
+          print("EARLYEDIT_SAFE_SOURCE_DIGESTS="+json.dumps({k:d[k] for k in ("control_zip_sha256","treatment_zip_sha256","policy_sha256","manifest_sha256")},sort_keys=True))
+          PY
+      - name: Start exactly one private 31B kernel, no competition submission
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          kaggle kernels push -p "$KERNEL_DIR" --accelerator NvidiaL4 -t 4800 > /tmp/earlyedit-push.log 2>&1
+          result=$?
+          set -e
+          python scripts/check_capacity_31b_push_v0.py --log /tmp/earlyedit-push.log --client-exit-code "$result"
+          echo EARLYEDIT_PRIVATE_KERNEL_PUSHED=TRUE
+          echo EARLYEDIT_OFFICIAL_COMPETITION_SUBMISSION=FALSE
+      - name: Poll the existing private kernel; never duplicate it
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          outcome=""
+          for i in $(seq 1 200); do
+            status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            lower="$(printf '%s' "$status" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then outcome=complete; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then outcome=error; break; fi
+            if [ "$i" -eq 1 ] || [ $((i%20)) -eq 0 ]; then echo EARLYEDIT_PRIVATE_POLL=$i; fi
+            sleep 25
+          done
+          echo "terminal=${outcome:-pending}" >> "$GITHUB_OUTPUT"
+          echo EARLYEDIT_PRIVATE_TERMINAL=${outcome:-pending}
+      - name: Extract allowlisted paired metrics only
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$PRIVATE_DIR" "$SAFE_DIR"
+          if ! kaggle kernels output "$KERNEL_REF" -p "$PRIVATE_DIR" -o >/tmp/earlyedit-output.log 2>&1; then
+            echo STOP_NO_PRIVATE_KERNEL_RESULT; exit 1
+          fi
+          test -s "$PRIVATE_DIR/earlyedit_v2_31b_results.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path(os.environ["PRIVATE_DIR"])/"earlyedit_v2_31b_results.json"
+          d=json.loads(p.read_text())
+          expected=["fastapi_14301","rich_3063","fastapi_14794","rich_3676"]
+          assert d.get("status")=="completed"
+          assert d.get("version")=="earlyedit-v2-paired-clean-v1"
+          assert d.get("total_evaluations")==8
+          assert d.get("selected_public_dev_ids")==expected
+          raw=d.get("results",[])
+          assert len(raw)==8
+          safe_fields=("arm","instance_id","status","resolved","test_exit_code",
+                       "patch_chars","has_patch","tool_calls","duration_seconds","error_type")
+          arms=("v2_5min","early_edit_5min")
+          safe=[]
+          for r in raw:
+            assert r.get("arm") in arms and r.get("instance_id") in expected
+            assert r.get("status") in ("completed","error")
+            safe.append({k:r.get(k) for k in safe_fields})
+          for arm in arms:
+            assert sorted(r["instance_id"] for r in safe if r["arm"]==arm)==sorted(expected)
+          scores={arm:{
+            "resolved":sum(r["resolved"] is True for r in safe if r["arm"]==arm),
+            "patched":sum(r["has_patch"] is True for r in safe if r["arm"]==arm),
+            "errors":sum(r["status"]=="error" for r in safe if r["arm"]==arm),
+            "tools":sum((r["tool_calls"] or 0) for r in safe if r["arm"]==arm),
+          } for arm in arms}
+          report={
+            "version":d["version"], "github_run":os.environ["GITHUB_RUN_ID"],
+            "model":d["model"], "task_count":4, "total_evaluations":8,
+            "scores":scores,"records":safe, "no_training":True,
+            "official_competition_submission":False,
+            "public_development_not_blind":True,
+            "raw_task_patch_or_traces_exported":False,
+          }
+          (Path(os.environ["SAFE_DIR"])/"paired_earlyedit_safe.json").write_text(
+            json.dumps(report,indent=2,sort_keys=True)+"\n")
+          print("EARLYEDIT_REAL_PRIVATE_SAFE_RESULT="+json.dumps(report,sort_keys=True),flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gemma-earlyedit-paired-safe-${{ github.run_id }}
+          path: /tmp/earlyedit-safe/paired_earlyedit_safe.json
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Require valid paired private terminal evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.poll.outputs.terminal }}" = complete
+          test -s "$SAFE_DIR/paired_earlyedit_safe.json"
+          echo EARLYEDIT_VALID_EIGHT_REAL_MODEL_EVALUATIONS=TRUE
+          echo EARLYEDIT_NO_OFFICIAL_COMPETITION_SUBMISSION=TRUE
