@@ -1,11 +1,9 @@
-# Exact one-off date-gated Kaggle submission authorized by user request.
-# Cron is UTC: 2026-11-12 00:30 UTC = 2026-11-12 08:30 MYT.
-# A UTC date guard below makes this INERT in later years.
+# Automatic schedule retired under the 2026-11-12 session contract.
+# CPU packaging and the selected public maximum are insufficient submission evidence.
+# Keep manual execution available only after real preflight and advantage gates pass.
 # Never alter candidate bytes, bypass quota, or retry an ambiguous API response.
 name: Gemma scored public V10 one-off official entry after quota reset
 on:
-  schedule:
-    - cron: "30 0 12 11 *"
   workflow_dispatch:
     inputs:
       submit_official:
@@ -24,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   once:
-    if: "${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.submit_official && inputs.confirm == 'SUBMIT') }}"
+    if: "${{ github.event_name == 'workflow_dispatch' && inputs.submit_official && inputs.confirm == 'SUBMIT' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 50
     env:
