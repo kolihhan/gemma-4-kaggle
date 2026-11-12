@@ -1,4 +1,13 @@
-# NOW — Verified Gemma 4 project state (2026-11-12 capacity startup failure; no new submission)
+# NOW — Verified Gemma 4 state (2026-11-12 matched capacity experiment complete)
+
+## Verified real model comparison — 2026-11-12 (newest)
+- **REAL GPU EVALUATION FINISHED:** [Action 43168183720](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43168183720) completed two private Kaggle models against exactly four previously gold-pass/no-op-fail public-development issues, matched pinned V2 prompt, sampling, 5-minute cap, 28 tool calls and 80 turns. **12B 2/4 resolved, 2/4 patches, 84 tool calls, 1221.358s**; **31B 3/4 resolved, 4/4 patches, 58 tool calls, 753.551s**. Same successful tasks: fastapi_14458 and rich_3905; 31B additionally fixed rich_3894; **both failed fastapi_15589**. All eight runs completed without task-level exceptions. **This four-task previously-screened panel is not a hidden-score estimate**, and a one-task difference is not reliable superiority evidence.
+- **MECHANISM AUDITED WITHOUT NEW GPU:** [Action 43175697727](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43175697727) passed 11 focused CPU tests and read existing private traces (4/4 each model), exporting only safe counters. In 31B failed fastapi_15589, **first source edit occurred at recorded action 14/15**, with final grader exit 1 and no recognized explicit/inline test invocation; successful 31B tasks first edited at actions **6, 7, 5**. Opaque Python commands mean test absence cannot be asserted. Late editing is a **falsifiable hypothesis**, not a proven causal explanation or a reason to tune on this task.
+- **RESEARCH DECISION:** Keep **31B as the next primary policy baseline**, preserve the frozen four-task results, and do not promote 12B, add agents or submit either unchanged. The next clean comparison should use *independent, prescreened issues* and distinguish a predeclared early-edit/verification policy or 8min time budget from the exact V2 control; change one intervention at a time and account for the 12-hour total competition budget. No fresh GPU/inference or official submission was created by the CPU feedback audit. **Last verified official best remains 0.18** (58183466); no new competition score from these private runs.
+- The previous 12B server startup failure recorded below was fixed sufficiently for this real 12B experiment: 12B vLLM started, all four tasks finished. It is historical, not a current blocker.
+
+---
+
 
 > **This short default-branch entrypoint is a status index, not a replacement for experiment provenance.** Every changing Kaggle state must be re-checked using the authenticated submission ledger; do not treat this snapshot as live. The detailed, actively updated research and execution history currently resides on [`research/dual-agent-recovery-v0-20261108`](https://github.com/kolihhan/gemma-4-kaggle/tree/research/dual-agent-recovery-v0-20261108). Historical versions of this file remain in Git history.
 
