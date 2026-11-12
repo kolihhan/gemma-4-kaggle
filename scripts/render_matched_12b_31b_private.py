@@ -78,6 +78,17 @@ def render_runtime(template: str, source_zip: bytes, arm: str) -> str:
     text=replace_exact(text,'SUMMARY_PATH = WORKING_DIR / "verifier_baseline_results.json"',
                        'SUMMARY_PATH = WORKING_DIR / '+repr("capacity_"+arm+"_results.json"))
     text=replace_exact(text,"E4B model weights not found:","Capacity model weights not found:")
+    # The 12B is a unified Gemma4 checkpoint. Kaggle staff documented an
+    # architecture override for the vLLM text-only serving path; the 31B
+    # already uses the native architecture and must remain byte-equivalent.
+    # This changes runtime startup only, never the agent payload or scoring.
+    extra_args = (
+        "--hf-overrides",
+        '{"architectures": ["Gemma4ForCausalLM"], "model_type": "gemma4"}',
+    ) if arm == "v2_12b" else ()
+    text=replace_exact(text, "                extra_args=(),",
+                       "                extra_args="+repr(extra_args)+",")
+
     # Keep the only true user-facing evidence as the official scorer task
     # result. Do not reinterpret test exit=1 as semantic patch failure.
     compile(text,FILENAME,"exec")
