@@ -1,0 +1,61 @@
+name: Gemma 12B vs 31B safe existing trace mechanism (CPU only)
+on:
+  push:
+    branches: [research/12b-vs-31b-frozen-capacity-20261112]
+    paths: [.github/workflows/audit-clean-capacity-feedback-existing-20261112.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-clean-capacity-existing-feedback-v1
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'GO_GEMMA_CLEAN_CAPACITY_EXISTING_FEEDBACK_CPU_ONCE_20261112' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Strict synthetic regression controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_audit_clean_capacity_feedback tests.test_audit_paired_31b_feedback_v2
+          python -m py_compile scripts/audit_clean_capacity_feedback.py
+          echo CLEAN_CAPACITY_CPU_TESTS_PASS=TRUE
+      - name: Pull only already-completed private notebook outputs; never run model or GPU
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/clean-capacity-existing/v2_12b /tmp/clean-capacity-existing/v2_31b
+          for arm in v2_12b v2_31b; do
+            suffix="${arm//_/-}"
+            ref="kolihhan/gemma4-realclean-capacity-43168183720-${suffix}"
+            out="/tmp/clean-capacity-existing/${arm}"
+            if ! kaggle kernels output "$ref" -p "$out" -o >/tmp/clean-capacity-pull.log 2>&1; then
+              echo "STOP_EXISTING_PRIVATE_OUTPUT_UNAVAILABLE_ARM=${arm}"
+              exit 1
+            fi
+            test -s "$out/capacity_${arm}_results.json"
+          done
+          echo EXISTING_COMPLETED_PRIVATE_OUTPUTS_DOWNLOADED=TRUE
+      - name: Classify existing private task traces and export only safe counters
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.audit_clean_capacity_feedback \
+            --root /tmp/clean-capacity-existing \
+            --out /tmp/clean-capacity-feedback-safe.json
+          echo NO_NEW_GPU_INFERENCE_TRAINING_OR_COMPETITION_SUBMISSION=TRUE
+      - name: Upload derived counters, never raw traces, issue text, commands or patches
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemma-clean-capacity-feedback-safe-${{ github.run_id }}
+          path: /tmp/clean-capacity-feedback-safe.json
+          if-no-files-found: error
+          retention-days: 14
