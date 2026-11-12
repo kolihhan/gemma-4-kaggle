@@ -2,7 +2,9 @@ name: Gemma 12B vs 31B safe existing trace mechanism (CPU only)
 on:
   push:
     branches: [research/12b-vs-31b-frozen-capacity-20261112]
-    paths: [.github/workflows/audit-clean-capacity-feedback-existing-20261112.yml]
+    paths:
+      - .github/workflows/audit-clean-capacity-feedback-existing-20261112.yml
+      - tests/test_audit_clean_capacity_feedback.py
 permissions: {contents: read}
 concurrency:
   group: gemma-clean-capacity-existing-feedback-v1
