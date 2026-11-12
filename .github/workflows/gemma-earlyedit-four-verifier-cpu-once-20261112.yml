@@ -1,0 +1,125 @@
+name: Gemma Early Edit four task current scorer official gold-noop controls CPU once
+on:
+  push:
+    branches: [research/31b-earlyedit-paired-20261112]
+    paths: [.github/workflows/gemma-earlyedit-four-verifier-cpu-once-20261112.yml]
+permissions:
+  contents: read
+concurrency:
+  group: gemma-earlyedit-four-current-scorer-cpu-one
+  cancel-in-progress: false
+jobs:
+  integrity:
+    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'GO_GEMMA_EARLYEDIT_FOUR_CURRENT_VERIFIER_CPU_ONCE' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-earlyedit-four-integrity-${{ github.run_id }}
+      KERNEL_DIR: /tmp/earlyedit-four-control-kernel
+      PRIVATE_DIR: /tmp/earlyedit-four-control-private
+      SAFE_DIR: /tmp/earlyedit-four-control-safe
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Test model-free official verifier wrapper and original verifier classifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_render_earlyedit_current_controls_cpu tests.test_paired_three_task_integrity_cpu
+          python -m py_compile scripts/render_earlyedit_current_controls_cpu.py
+          python -m scripts.render_earlyedit_current_controls_cpu \
+            --repo . --out "$KERNEL_DIR" --kernel-ref "$KERNEL_REF"
+          python -m py_compile "$KERNEL_DIR/earlyedit_controls_cpu.py"
+          echo CURRENT_VERIFIER_CPU_PREFLIGHT=PASS
+      - name: Launch one private Kaggle CPU-only official gold/noop control
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          if kaggle kernels status "$KERNEL_REF" >/tmp/earlyedit-four-control-existing.log 2>&1; then
+            echo STOP_DUPLICATE_PRIVATE_CPU_KERNEL; exit 1
+          fi
+          kaggle kernels push -p "$KERNEL_DIR" -t 4200 >/tmp/earlyedit-four-control-push.log 2>&1 || {
+            echo STOP_CPU_KERNEL_PUSH_FAILED; exit 1;
+          }
+          echo PRIVATE_VERIFIER_CPU_LAUNCHED=TRUE
+          echo NO_GPU_OR_OFFICIAL_SUBMISSION=TRUE
+      - name: Poll only this CPU notebook
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=""
+          for i in $(seq 1 190); do
+            info="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            lower="$(printf '%s' "$info" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<<"$lower"; then terminal=complete; break; fi
+            if grep -Eq 'error|failed|failure|cancelled|canceled' <<<"$lower"; then terminal=error; break; fi
+            if [ "$i" -eq 1 ] || [ $((i%20)) -eq 0 ]; then echo VERIFIER_PRIVATE_CPU_POLL=$i; fi
+            sleep 20
+          done
+          echo "terminal=${terminal:-pending}" >> "$GITHUB_OUTPUT"
+          echo VERIFIER_PRIVATE_CPU_TERMINAL=${terminal:-pending}
+      - name: Export sanitized gold/noop flags; never task descriptions or gold patches
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$PRIVATE_DIR" "$SAFE_DIR"
+          kaggle kernels output "$KERNEL_REF" -p "$PRIVATE_DIR" -o >/tmp/earlyedit-four-control-get.log 2>&1 || {
+            echo STOP_VERIFIER_RESULTS_MISSING; exit 1;
+          }
+          test -s "$PRIVATE_DIR/earlyedit_four_task_integrity_cpu.json"
+          python - <<'PY'
+          import os,json
+          from pathlib import Path
+          r=json.loads((Path(os.environ["PRIVATE_DIR"])/"earlyedit_four_task_integrity_cpu.json").read_text())
+          assert r.get("version")=="gemma4-earlyedit-four-current-scorer-controls-v1"
+          assert r.get("no_model_inference") is True and r.get("no_gpu") is True
+          assert r.get("no_raw_issue_patch_or_grader_output_export") is True
+          want=["fastapi_14301","rich_3063","fastapi_14794","rich_3676"]
+          assert r.get("requested")==4
+          rows=r.get("results")
+          assert isinstance(rows,list) and [x.get("instance_id") for x in rows]==want
+          safe=[]
+          for row in rows:
+            f=row["input_features"]
+            clean={"instance_id":row["instance_id"],
+                   "repo":row["repo"],
+                   "statement_chars":f["statement_chars"],
+                   "hint_chars":f["hint_chars"],
+                   "short_link_pointer_risk":f["short_link_pointer_risk"],
+                   "integrity_category":row["integrity_category"]}
+            for x in ("gold","noop"):
+              clean[x+"_resolved"]=row[x].get("resolved")
+              clean[x+"_test_exit_code"]=row[x].get("test_exit_code")
+              clean[x+"_status"]=row[x].get("status")
+            safe.append(clean)
+          report={"version":r["version"],"rows":safe,
+                  "all_current_informative":all(x["integrity_category"]=="informative_gold_pass_noop_fail" for x in safe),
+                  "public_dev_only":True,"new_model_inference":False,
+                  "no_gpu":True,"official_competition_submission":False,
+                  "raw_competition_content_exported":False}
+          (Path(os.environ["SAFE_DIR"])/"four_current_verifier_safe.json").write_text(
+            json.dumps(report,indent=2,sort_keys=True)+"\n")
+          print("SAFE_EARLYEDIT_CURRENT_VERIFIER="+json.dumps(report,sort_keys=True),flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gemma-earlyedit-current-verifier-safe-${{ github.run_id }}
+          path: /tmp/earlyedit-four-control-safe/four_current_verifier_safe.json
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Require terminal safe result
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.poll.outputs.terminal }}" = complete
+          test -s "$SAFE_DIR/four_current_verifier_safe.json"
+          echo OFFICIAL_CURRENT_VERIFIER_FOUR_CONTROLS_COMPLETE=TRUE
+          echo NO_GPU_INFERENCE_TRAINING_OR_COMPETITION_SUBMISSION=TRUE
