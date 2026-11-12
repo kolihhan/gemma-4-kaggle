@@ -2,7 +2,9 @@ name: Gemma Early Edit four task current scorer official gold-noop controls CPU 
 on:
   push:
     branches: [research/31b-earlyedit-paired-20261112]
-    paths: [.github/workflows/gemma-earlyedit-four-verifier-cpu-once-20261112.yml]
+    paths:
+      - .github/workflows/gemma-earlyedit-four-verifier-cpu-once-20261112.yml
+      - scripts/render_earlyedit_current_controls_cpu.py
 permissions:
   contents: read
 concurrency:
