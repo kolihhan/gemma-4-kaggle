@@ -1,0 +1,31 @@
+name: Gemma EarlyEdit 58267012 exact official scoring status read-only
+on:
+  push:
+    branches: [research/31b-earlyedit-paired-20261112]
+    paths: [.github/workflows/gemma-earlyedit-58267012-score-readonly-20261112.yml]
+permissions: {contents: read}
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env: { KAGGLE_API_TOKEN: "${{ secrets.KAGGLE_API_TOKEN }}" }
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Exact authenticated ledger for new Gemma #58267012, no model GPU
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import csv,io,json,subprocess
+          p=subprocess.run(["kaggle","competitions","submissions","gemma-4-developer-agent","-v","-q"],
+              capture_output=True,text=True,timeout=110,check=True)
+          rows=list(csv.DictReader(io.StringIO(p.stdout)))
+          matches=[x for x in rows if x.get("ref")=="58267012"]
+          if len(matches)!=1:raise SystemExit("GEMMA_EXACT_OFFICIAL_SUBMISSION_REF_NOT_IN_LEDGER")
+          row=matches[0]
+          keys=("ref","description","status","publicScore","privateScore","date")
+          print("GEMMA_EARLYEDIT_OFFICIAL_SCORE_STATUS="+json.dumps({k:row.get(k) for k in keys},sort_keys=True),flush=True)
+          print("GEMMA_EARLYEDIT_SCORE_READONLY_NO_NEW_SUBMISSION=TRUE",flush=True)
+          PY
