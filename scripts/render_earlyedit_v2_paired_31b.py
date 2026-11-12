@@ -151,7 +151,7 @@ def generate(repo: Path, source_zip: bytes) -> tuple[str, dict]:
         raise ValueError("unverified evaluator topology")
     if rendered.count("treatment_evaluator = Evaluator(treatment_config)") != 1:
         raise ValueError("unverified treatment evaluator")
-    if "competition_submit_code" in rendered or "reference_patch" in rendered:
+    if "competition_submit_code" in rendered or "agent_patch=task.patch" in rendered:
         raise ValueError("unsafe runtime content")
     if rendered.count("EARLYEDIT_FROZEN_SELECTED_IDS") != 1:
         raise ValueError("missing frozen cohort")
