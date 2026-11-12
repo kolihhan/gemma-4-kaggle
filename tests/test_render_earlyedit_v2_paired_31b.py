@@ -83,7 +83,7 @@ class EarlyEditPinnedTests(unittest.TestCase):
 
     def test_runtime_contains_no_raw_reference_patch(self):
         code, report = self._generator()
-        self.assertNotIn("reference_patch", code)
+        self.assertNotIn("agent_patch=task.patch", code)
         self.assertNotIn("task.patch", code)
         self.assertTrue(report["no_training_or_official_submission"])
         self.assertNotEqual(report["control_zip_sha256"],
