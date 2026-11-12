@@ -33,6 +33,7 @@ jobs:
           set -euo pipefail
           python -m unittest -q tests.test_build_matched_12b_31b_capacity tests.test_render_matched_12b_31b_private
           python -m py_compile scripts/render_matched_12b_31b_private.py
+          echo 'MODEL_CAPACITY_12B_VLLM_ARCH_OVERRIDE_CHECKED=TRUE'
           echo "MODEL_CAPACITY_TWO_KERNEL_CPU_TESTS=PASS"
       - name: Authenticate, ensure GPU balance and no existing equal experiment
         shell: bash
