@@ -1,3 +1,12 @@
+# NOW — Official Early-Edit 31B Kaggle submission accepted (2026-11-12)
+
+- **ACTUAL OFFICIAL CODE SUBMISSION:** Kaggle accepted **ref 58267012** at **2026-11-12 08:38:04 UTC**. Source branch `research/31b-earlyedit-paired-20261112`, immutable exact submitted ZIP SHA256 `e13cba448589157030b3dd3d980c6aca3ee932779b4847d565e4e60b6a1813fb`, private CPU builder `kolihhan/gemma4-earlyedit-official-43184445981`. GitHub [successful Action 43184445981](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43184445981) independently checked the remote archive byte-for-byte, authenticated one available official slot, and received an actual numeric Kaggle API receipt. **Competition score is PENDING/NOT YET VERIFIED; this is not an improved 0.18 score.**
+- **REAL ELIGIBLE DEV PILOT:** Earlier [Action 43178431152](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43178431152) completed exact 31B paired development test: **Early-Edit 3/4 repairs, 66 tool calls** vs **V2 3/4, 79 tool calls** at matched 5 minutes, 28-call cap and four gold-pass/no-op-fail issues. Early-Edit repaired `rich_3063` missed by V2, but regressed `rich_3676`. All four current integrity controls passed [Action 43178867901](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43178867901). **No independent correctness gain established.**
+- **COMPETITIVE BASELINE:** Last authenticated terminal best stays **0.18** (#58183466); V4-CGR scored **0.15** (#58222227). New #58267012 must be checked on Kaggle's official ledger for terminal Public score before promoting/rejecting. No extra official re-submission today.
+- **TRAINING/RESOURCES:** The candidate is one single-root Gemma 31B, prompt-only Early-Edit + feedback against pinned V2 at **5min/28 calls/80 turns**, no new training or user GPU on the official submit workflow. Only private Kaggle model evaluation was used for the earlier four-task pilot.
+
+---
+
 # NOW — Verified Gemma 4 state (2026-11-12 matched capacity experiment complete)
 
 ## Verified real model comparison — 2026-11-12 (newest)
