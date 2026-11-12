@@ -1,0 +1,63 @@
+{
+  "version": "earlyedit-v2-paired-clean-v1",
+  "question": "Does a time-aware edit and test-feedback policy improve 31B SWE issue resolution over byte-pinned V2 at fixed budget?",
+  "preregistered": "2026-11-12",
+  "task_selection": "Four fixed distinct public-development tasks from capacity-v0-replacement gold/noop screen, NOT chosen by candidate outcomes",
+  "control_source_notebook": "lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2",
+  "control_source_zip_sha256": "a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3",
+  "source_controls": {
+    "gold": "docs/evaluation/capacity-v0-replacement-gold-2026-11-04.json",
+    "noop": "docs/evaluation/capacity-v0-replacement-noop-2026-11-04.json",
+    "current_scorer_epoch_retested": false
+  },
+  "tasks": [
+    {
+      "instance_id": "fastapi_14301",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "rich_3063",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "fastapi_14794",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "rich_3676",
+      "repo": "Textualize/rich"
+    }
+  ],
+  "arms": [
+    "v2_5min",
+    "early_edit_5min"
+  ],
+  "model": "gemma-4-31b-it-qat-w4a16-ct",
+  "unchanged": [
+    "agent.yaml",
+    "configs/sampling.yaml",
+    "evaluation timeout, budget and native tools"
+  ],
+  "only_treatment_change": "Append a fixed time-aware localization, early evidence-based edit and targeted verification rule to prompts/system.md",
+  "budget": {
+    "max_time_minutes": 5,
+    "max_tool_calls": 28,
+    "max_turns": 80,
+    "timeout_seconds": 240
+  },
+  "run_order": "alternate arm order by task index (V2 first on odd, Early-Edit first on even)",
+  "primary": "resolved out of 4 by official swegemma evaluator; all errors and timeouts count unresolved",
+  "secondary": [
+    "nonempty patch",
+    "first edit action if trace exists",
+    "tool calls",
+    "elapsed time",
+    "test exit code",
+    "error class"
+  ],
+  "decision": "On a 4-task pre-screened development panel any positive difference is exploratory, never proof of hidden leaderboard gain; require fresh corroboration before official Kaggle code submission.",
+  "no_training": true,
+  "no_official_competition_submission": true,
+  "no_reference_patches_in_agent_workspace": true,
+  "no_raw_issue_patch_or_trace_in_github": true
+}
