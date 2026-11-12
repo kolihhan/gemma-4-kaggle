@@ -2,7 +2,10 @@ name: Gemma 31B Early Edit vs V2 frozen four private real pilot once
 on:
   push:
     branches: [research/31b-earlyedit-paired-20261112]
-    paths: [.github/workflows/gemma-31b-earlyedit-v2-private-once-20261112.yml]
+    paths:
+      - .github/workflows/gemma-31b-earlyedit-v2-private-once-20261112.yml
+      - scripts/render_earlyedit_v2_paired_31b.py
+      - tests/test_render_earlyedit_v2_paired_31b.py
 permissions:
   contents: read
 concurrency:
