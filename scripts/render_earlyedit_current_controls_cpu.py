@@ -46,7 +46,7 @@ def build(repo: Path) -> str:
     if out.count(OUTPUT) != 1:
         raise ValueError("unexpected result output destination")
     for t in plan["tasks"]:
-        if out.count('("' + t["instance_id"] + '", "' + t["repo"] + '")') != 1:
+        if out.count("(" + repr(t["instance_id"]) + ", " + repr(t["repo"]) + ")") != 1:
             raise ValueError("frozen verifier cohort drift")
     if "competition_submit_code" in out or "VllmServer" in out:
         raise ValueError("unexpected inference/submit code")
