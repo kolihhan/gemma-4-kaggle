@@ -1,0 +1,71 @@
+name: Gemma pinned V2 31B-vs-12B model class frozen CPU build
+on:
+  push:
+    branches: [research/12b-vs-31b-frozen-capacity-20261112]
+    paths: [.github/workflows/matched-12b-31b-cpu-preflight-20261112.yml]
+permissions:
+  contents: read
+concurrency:
+  group: gemma-matched-12b-31b-cpu-preflight-20261112
+  cancel-in-progress: false
+jobs:
+  cpu_build:
+    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'GO_GEMMA_12B_31B_CPU_PREFLIGHT_20261112' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: 
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with: 
+          python-version: '3.12'
+      - name: Verify synthetic one-variable model swap and no inherited private data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_build_matched_12b_31b_capacity tests.test_render_matched_12b_31b_private
+          python -m py_compile scripts/build_matched_12b_31b_capacity.py scripts/render_matched_12b_31b_private.py
+          echo "MODEL_12B_31B_SYNTHETIC_GATE=PASS"
+      - name: Fetch only SHA-pinned attributed public Kaggle V2 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/gemma-v2-public /tmp/gemma-model-arms
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p /tmp/gemma-v2-public -o >/tmp/gemma-model-source-download.log 2>&1
+          test -s /tmp/gemma-v2-public/submission.zip
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          from scripts.prepare_public_budgetfit_v2 import EXPECTED_ZIP_SHA256
+          data=Path("/tmp/gemma-v2-public/submission.zip").read_bytes()
+          assert hashlib.sha256(data).hexdigest()==EXPECTED_ZIP_SHA256
+          print("MODEL_SCALE_EXACT_PUBLIC_SOURCE_SHA=PASS")
+          PY
+      - name: Build exactly two controlled 12B and 31B ZIPs, no model inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.build_matched_12b_31b_capacity \
+            --source-zip /tmp/gemma-v2-public/submission.zip \
+            --out-dir /tmp/gemma-model-arms
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+          folder=Path("/tmp/gemma-model-arms")
+          items=list(folder.glob("*.zip"))
+          assert len(items)==2 and {x.stem for x in items}=={"v2_12b","v2_31b"}
+          for path in items:
+              with zipfile.ZipFile(path) as archive:
+                  assert archive.testzip() is None
+                  assert set(archive.namelist())=={
+                      "agent.yaml","eval_config.yaml","configs/sampling.yaml",
+                      "prompts/system.md",
+                  }
+          print("MODEL_SCALE_MATCHED_CPU_ARCHIVE_GATE=PASS")
+          print("NO_GPU_NO_INFERENCE_NO_OFFICIAL_COMPETITION_SUBMISSION=TRUE")
+          PY
