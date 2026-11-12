@@ -46,6 +46,14 @@ class TwoModelCapacityRendererTests(unittest.TestCase):
                     self.assertNotIn("__VERIFIER_LORA_HOLDOUT_MANIFEST_JSON__",text)
                     self.assertNotIn("__SUBMISSION_PAYLOAD_B64__",text)
                     self.assertIn("Evaluator(eval_config)",text)
+                    # Only the 12B needs the documented text-only HF architecture override.
+                    if arm == "v2_12b":
+                        self.assertIn("--hf-overrides",text)
+                        self.assertIn("Gemma4ForCausalLM",text)
+                        self.assertIn("model_type",text)
+                    else:
+                        self.assertNotIn("--hf-overrides",text)
+                        self.assertIn("extra_args=(),",text)
                     self.assertFalse(result["new_official_submission"])
                     self.assertEqual(result["issue_count"],4)
                     compile(text,"frozen_model_capacity_runtime.py","exec")
