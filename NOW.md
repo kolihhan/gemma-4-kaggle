@@ -1,6 +1,19 @@
-# NOW — Verified Gemma 4 project state (2026-11-12 four clean controls, capacity pilot running)
+# NOW — Verified Gemma 4 project state (2026-11-12 capacity startup failure; no new submission)
 
 > **This short default-branch entrypoint is a status index, not a replacement for experiment provenance.** Every changing Kaggle state must be re-checked using the authenticated submission ledger; do not treat this snapshot as live. The detailed, actively updated research and execution history currently resides on [`research/dual-agent-recovery-v0-20261108`](https://github.com/kolihhan/gemma-4-kaggle/tree/research/dual-agent-recovery-v0-20261108). Historical versions of this file remain in Git history.
+
+
+## Current verified checkpoint — 2026-11-12 13:34 MYT
+
+- **DONE — official best remains 0.18** (`58183466`); V4 `58222227` is COMPLETE **0.15**. Authenticated allowance is **1 submission now**, and there is **no V10 submission receipt**. [Live read-only account and failure recovery](https://github.com/kolihhan/name-kaggle/actions/runs/43162254900).
+- **FAILED — capacity Action 43078269086:** the private 12B kernel ended ERROR with **ServerStartupError during vLLM startup**, before server-ready and before any task started. Recovered private result contains **0 task records**; notebook elapsed approximately **277.98 s**. This is infrastructure failure, **not 0/4 correct model repairs**. The original one-hour cap was not reached.
+- **NOT EXECUTED — 31B arm:** controller stopped after 12B failed; authenticated lookup finds no 31B kernel. Neither arm completed the frozen four-task denominator; patch correctness, tool calls, tests and model comparison are unknown. Preserve all four IDs; do not silently drop tasks or call this completed.
+- **DONE — unsafe automatic submission retired:** [commit 8ffd1997](https://github.com/kolihhan/gemma-4-kaggle/commit/8ffd1997f3305b80d0f2a544c7e8d11c9f050a23) removes the date-triggered V10 automatic submission. Manual dispatch remains, but the current user contract requires real inference preflight and an expected-advantage case before use. CPU compiler/ZIP checks are insufficient.
+- **NOT EXECUTED — new GPU/inference/training/submission in this session.** V10's selected maximum 0.22 versus baseline 0.18 is weakened by eight identical-bundle public observations spanning 0.12–0.22, mean 0.15625; no matched advantage or real-model V10 preflight is established. No candidate meets this session's promotion gates.
+- **UNKNOWN / next cheapest check:** isolate vLLM's underlying startup validation/configuration error from the existing private server log before rerunning. No new repair hypothesis is yet confirmed; do not relaunch unchanged or interpret startup failure as 12B capability.
+
+Earlier dated sections below are history; this checkpoint supersedes their RUNNING/PENDING and automatic-submission claims.
+
 
 ## NEW: Why 31B 0/3 versus 0/3 cannot establish an Agent capability limit
 
@@ -18,13 +31,9 @@
 - [Real private 12B vs 31B four-task Action 43078269086](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43078269086) **LAUNCHED, RUNNING at last check**: quota gate, model archive preflight and synthetic tests PASS; one separate private Kaggle L4 kernel per model, 12B first then 31B, same four clean public-dev tasks. This **is not a scored competition entry** and **no model issue-resolution outcome exists yet** in the confirmed results. Do not claim that 12B is better or worse until all eight task evaluations terminate.
 - [Predeclared independent capacity decision contract](https://github.com/kolihhan/gemma-4-kaggle/blob/research/12b-vs-31b-frozen-capacity-20261112/docs/research/2026-11-12-12b-vs-31b-clean-four-prereg.md). Even a difference on four development tasks is preliminary and cannot predict the 12-hour hidden leaderboard score. Current best **0.18 Public** unchanged; attributed V10 date-gated official submission separate and untouched.
 
-## User-authorized next official entry — date-gated, NOT YET SUBMITTED
+## V10 exploratory entry — automatic schedule retired, NOT SUBMITTED
 
-- User explicitly requested researching the 0.18 ceiling and making another Kaggle code submission. **Authenticated official quota was 0** at **2026-11-11 16:30 UTC**, with no active scored entry ([read-only quota Action 43058907714](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43058907714)); V4 0.15 is COMPLETE. **No new official submission ID exists yet.**
-- [GitHub Actions date-gated once workflow](https://github.com/kolihhan/gemma-4-kaggle/blob/main/.github/workflows/submit-attributed-scored-v10-quota-reset-20261112.yml) created on default `main`, with scheduled attempt **2026-11-12 00:30 UTC (08:30 MYT)**. Its job checks exact UTC date, pinned source/tests, legal Kaggle submission slot, preflights the actual official compiler, verifies the uploaded private CPU builder ZIP byte-for-byte, calls the official competition API at most once and requires an authenticated submission receipt. If quota is still blocked or the SDK contract changes it **stops**. Workflow is backed by GitHub's scheduler, not a promise of model background activity; scheduled execution and score are **not yet confirmed**.
-- Chosen candidate: **attributed exact Public 0.22 score observation** for `flexonafft/gemma-4-budget-aware-coding-agent-v2/10`, source ZIP SHA256 `6ff73d104725cc31deadd18787f3f55e5ce534889cec82387e3b280637d34887`, serialized four-file score-ledger hash `56010e9e9d4c7f33856ce49d12ec3edae5c912261986e999a4aa989b3cd463cb`. It differs from user's V2 in **System Prompt only**; `agent.yaml`, sampling, limits (8min /28 calls/80 turns) are byte-identical. [Official wheelhouse CPU gate 43060142518](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43060142518) **PASS**, no Kaggle competition submission in that preflight.
-- Public v10 achieved **0.22 once**, but the same file-bundle hash had **eight** public scoring observations from **0.12 to 0.22**, mean `0.1562` (observational, not matched). **Do not claim that the user has already scored 0.22, that this is an original method, or that a future official submission will reliably beat the existing 0.18**. Attributed reproduction is a benchmark/research experiment, not an original algorithm.
-- [Separate private paired 31B prompt comparison](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43057377220) is **COMPLETED**: V2 0/3 versus public-prompt 0/3 resolved, both 3/3 nonempty patches; not a competition submission. It tests `bliverrigpdoge`, **not** the separately selected `flexonafft` V10 candidate.
+The earlier date-triggered entry was not observed to run and has no authenticated receipt. It has now been disabled under the current real-preflight and expected-advantage contract. Candidate bytes remain unchanged; no quota was spent. The exact source and original CPU packaging evidence remain in the linked research reports and Git history.
 
 ## Competition result (official, authenticated)
 
