@@ -1,0 +1,24 @@
+name: Gemma Early-Edit safe paired trace reader CPU regression
+on:
+  push:
+    branches: [research/31b-earlyedit-paired-20261112]
+    paths: [.github/workflows/gemma-31b-earlyedit-feedback-cpu-20261112.yml]
+permissions:
+  contents: read
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Synthetic paired trace regressions, fail closed on lost tasks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_audit_earlyedit_existing_traces
+          python -m py_compile scripts/audit_earlyedit_existing_traces.py
+          echo EARLYEDIT_TRACE_READER_SYNTHETIC_PASS=TRUE
+          echo NO_KAGGLE_AUTH_INFERENCE_GPU_OR_SUBMISSION=TRUE
