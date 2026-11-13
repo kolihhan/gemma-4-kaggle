@@ -27,5 +27,12 @@ jobs:
           row=matches[0]
           keys=("ref","description","status","publicScore","privateScore","date")
           print("GEMMA_EARLYEDIT_OFFICIAL_SCORE_STATUS="+json.dumps({k:row.get(k) for k in keys},sort_keys=True),flush=True)
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          api=KaggleApi();api.authenticate()
+          quota=api.competition_get_submission_limits("gemma-4-developer-agent")
+          print("GEMMA_CURRENT_OFFICIAL_SLOT="+json.dumps({"allowed_now":quota.num_allowed_now},sort_keys=True),flush=True)
+          recent=sorted(rows,key=lambda x:int(x.get("ref") or 0),reverse=True)
+          for item in recent[:8]:
+            print("GEMMA_CURRENT_OFFICIAL_ENTRY="+json.dumps({k:item.get(k) for k in keys},sort_keys=True),flush=True)
           print("GEMMA_EARLYEDIT_SCORE_READONLY_NO_NEW_SUBMISSION=TRUE",flush=True)
           PY
