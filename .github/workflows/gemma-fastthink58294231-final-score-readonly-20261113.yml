@@ -1,0 +1,32 @@
+name: Gemma FastThink 58294231 official status read-only
+on:
+  push:
+    branches: [research/31b-earlyedit-paired-20261112]
+    paths: [.github/workflows/gemma-fastthink58294231-final-score-readonly-20261113.yml]
+permissions: {contents: read}
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Exact authoritative Kaggle score for FastThink plus best
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import csv,io,json,subprocess
+          r=subprocess.run(["kaggle","competitions","submissions","gemma-4-developer-agent","-v","-q"],
+              capture_output=True,text=True,check=True,timeout=110)
+          rows=list(csv.DictReader(io.StringIO(r.stdout.lstrip("\ufeff"))))
+          keys=("ref","status","publicScore","privateScore","description","date")
+          for sid in ("58294231","58183466","58267012"):
+              m=[x for x in rows if x.get("ref")==sid]
+              print("GEMMA_FRESH_OFFICIAL="+json.dumps({"query_ref":sid,"found":len(m),
+                    **({k:m[0].get(k) for k in keys} if len(m)==1 else {})},sort_keys=True),flush=True)
+          print("READ_ONLY_NO_NEW_MODEL_OR_SUBMISSION=TRUE",flush=True)
+          PY
