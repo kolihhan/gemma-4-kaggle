@@ -1,0 +1,53 @@
+name: Gemma 31B FastThink 5min60 ONE exact official exploratory submission
+on:
+  push:
+    branches: [research/31b-earlyedit-paired-20261112]
+    paths: [.github/workflows/gemma-fastthink5m60-official-one-20261113.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma31b-fastthink5m60-one-official-20261113
+  cancel-in-progress: false
+jobs:
+  official_once:
+    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'GO_GEMMA_FASTTHINK_5MIN60_ONE_OFFICIAL_20261113' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      WORK: /tmp/gemma-fastthink5m60-20261113
+      KERNEL: kolihhan/gemma4-fastthink5m60-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Test frozen 0.18 champion plus single inference-throughput intervention
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_build_gemma_fastthink_5min60_v1 tests.test_build_toolcap60_timeout_recovery tests.test_prepare_public_budgetfit_v2
+          python -m py_compile scripts/submit_gemma_fastthink_5min60_once.py
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          echo GEMMA_FASTTHINK_LOCAL_CPU_TESTS=PASS
+      - name: Load pinned official compiler and native tool schema without running model
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gemma-fastthink-wheels
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel" -p /tmp/gemma-fastthink-wheels --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check /tmp/gemma-fastthink-wheels/*.whl
+          python - <<'PY'
+          import importlib.metadata as m
+          for name,expect in (("google-adk","1.36.1"),("adk-submission","0.2.13"),("adk-eval-core","0.1.0"),("swegemma","0.2.11")):
+            assert m.version(name)==expect,(name,m.version(name))
+          print("GEMMA_FASTTHINK_PINNED_COMPILER=PASS",flush=True)
+          PY
+      - name: Build exact single-variable code ZIP, private CPU kernel, ONE official receipt if all gates pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -u -m scripts.submit_gemma_fastthink_5min60_once --out "$WORK" --kernel "$KERNEL"
+          echo GEMMA_FASTTHINK_SUBMIT_SCRIPT_TERMINAL=TRUE
