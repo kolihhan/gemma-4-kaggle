@@ -1,0 +1,94 @@
+name: Gemma 31B champion patch checkpoints (private)
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-31b-patch-checkpoint-20261114.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-31b-patch-checkpoint-20261114
+  cancel-in-progress: false
+jobs:
+  checkpoint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 107
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-patch-checkpoint-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Render pinned champion and check current GPU budget
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python -m unittest -q tests.test_candidate_history tests.test_build_toolcap60_timeout_recovery
+          mkdir -p /tmp/gemma-patch-input
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 \
+            -p /tmp/gemma-patch-input --file-pattern '^submission[.]zip$' -o >/tmp/gemma-patch-fetch.log 2>&1
+          python -m scripts.render_patch_checkpoint_31b \
+            --source-zip /tmp/gemma-patch-input/submission.zip --out /tmp/gemma-patch-kernel --kernel-ref "$KERNEL_REF"
+          kaggle quota --format json >/tmp/gemma-patch-quota.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          records = json.loads(Path("/tmp/gemma-patch-quota.json").read_text())
+          [hours] = [float(x["remaining"].rstrip("h")) for x in records if x["resource"] == "GPU"]
+          print("GEMMA_GPU_HOURS_REMAINING=" + str(hours), flush=True)
+          if hours < 1.5:
+              raise SystemExit("GPU time remaining is below the 90-minute notebook cap")
+          PY
+      - name: Launch or inspect the same private 31B notebook
+        run: |
+          set -euo pipefail
+          if ! kaggle kernels status "$KERNEL_REF" >/tmp/gemma-patch-current.log 2>&1; then
+            rc=0
+            kaggle kernels push -p /tmp/gemma-patch-kernel --accelerator NvidiaL4 -t 5400 \
+              >/tmp/gemma-patch-push.log 2>&1 || rc=$?
+            python scripts/check_capacity_31b_push_v0.py --log /tmp/gemma-patch-push.log --client-exit-code "$rc"
+          fi
+          echo "GEMMA_PATCH_CHECKPOINT_KERNEL=$KERNEL_REF"
+          for i in $(seq 1 230); do
+            status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            case "$status" in
+              *KernelWorkerStatus.COMPLETE*) break ;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.CANCELLED*|*KernelWorkerStatus.FAILED*)
+                echo "GEMMA_PATCH_CHECKPOINT_FAILED=$status"; exit 1 ;;
+            esac
+            if [ "$i" -eq 230 ]; then echo "GEMMA_PATCH_CHECKPOINT_WAIT_LIMIT=$status"; exit 1; fi
+            if [ "$i" -eq 1 ] || [ $((i % 20)) -eq 0 ]; then echo "GEMMA_PATCH_CHECKPOINT_STATUS=$status"; fi
+            sleep 25
+          done
+      - name: Read safe checkpoint outcomes
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gemma-patch-safe
+          kaggle kernels output "$KERNEL_REF" -p /tmp/gemma-patch-safe \
+            --file-pattern '^patch_checkpoint_summary[.]json$' -o >/tmp/gemma-patch-read.log 2>&1
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.render_patch_checkpoint_31b import CHAMPION_SHA, TASKS, VERSION
+          report = json.loads(Path("/tmp/gemma-patch-safe/patch_checkpoint_summary.json").read_text())
+          assert report["status"] == "completed" and report["version"] == VERSION
+          assert report["champion_zip_sha256"] == CHAMPION_SHA
+          assert tuple(x["instance_id"] for x in report["results"]) == TASKS
+          fields = {"instance_id", "status", "error_type", "integrity", "resolved", "test_exit_code",
+                    "has_patch", "tool_calls", "llm_calls", "duration_seconds", "history_complete",
+                    "agent_seconds", "phase_seconds", "capture_seconds", "first_materialized_edit_seconds",
+                    "earlier_revisions", "earlier_grades"}
+          results = [{k: row[k] for k in fields if k in row} for row in report["results"]]
+          for row in results:
+              assert row["status"] in {"completed", "ineligible_current_verifier", "error"}
+              if "error_type" in row:
+                  assert row["error_type"].replace("_", "").isalnum() and len(row["error_type"]) < 80
+              grades = list(row.get("integrity", {}).values()) + row.get("earlier_grades", [])
+              assert all(set(g) == {"resolved", "exit"} and isinstance(g["resolved"], bool)
+                         and isinstance(g["exit"], int) for g in grades)
+          print("GEMMA_PATCH_CHECKPOINT_RESULT=" + json.dumps({
+              "version": VERSION, "champion_zip_sha256": CHAMPION_SHA,
+              "results": results,
+          }, sort_keys=True))
+          PY
