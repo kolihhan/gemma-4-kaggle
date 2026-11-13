@@ -1,3 +1,10 @@
+# 2026-11-13 13:05 MYT — Gemma FastThink 58294231 still pending on official Kaggle
+
+- Fresh [authenticated read-only Kaggle ledger #43369673679](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43369673679) confirms **new ref `58294231` remains `SubmissionStatus.PENDING` with empty Public/Private scores**, as of 2026-11-13 05:05 UTC. The code submission itself is successfully accepted via [#43361245058](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43361245058), exact candidate SHA `fc2a7bf2c1f2ca0f5a3811fd4f8bcd101fc972895faa49de10bd125a89bbd261`. This is NOT yet a scoring improvement.
+- Authenticated incumbent **0.18** (`58183466` COMPLETE). Prior Early-Edit `58267012` **0.15** COMPLETE. One-variable FastThink attempt: 31B 5-minute 60 calls `thinking_budget 4096→2048`, all other tested agent/prompt/tools preserved; no training. **Do not duplicate** this official entry while scoring is pending.
+
+---
+
 # 2026-11-13 11:52 MYT — NEW Gemma 4 31B official FastThink submission accepted; score PENDING
 
 - **ACTUAL Kaggle competition CODE submission ref `58294231`** accepted 2026-11-13 03:50:44 UTC (11:50:44 MYT), exact message `31B-fastthink2048-5min60-inference-throughput-v1-20261113`. [Official one-shot GitHub Actions #43361245058](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43361245058) **SUCCESS**, remote Kaggle ZIP verified byte-identical SHA256 `fc2a7bf2c1f2ca0f5a3811fd4f8bcd101fc972895faa49de10bd125a89bbd261`, official ADK compiler PASS, authenticated Kaggle ledger: `SubmissionStatus.PENDING` with no numeric score. **Do not call it an improvement yet and DO NOT re-submit this candidate.**
