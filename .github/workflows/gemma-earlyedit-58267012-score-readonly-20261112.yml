@@ -1,8 +1,8 @@
-name: Gemma EarlyEdit 58267012 exact official scoring status read-only
+name: Gemma FastThink 58294231 exact official scoring status read-only
 on:
   push:
     branches: [research/31b-earlyedit-paired-20261112]
-    paths: [.github/workflows/gemma-earlyedit-58267012-score-readonly-20261112.yml]
+    paths: [.github/workflows/gemma-earlyedit-58294231-score-readonly-20261112.yml]
 permissions: {contents: read}
 jobs:
   score:
@@ -26,7 +26,7 @@ jobs:
           if len(matches)!=1:raise SystemExit("GEMMA_EXACT_OFFICIAL_SUBMISSION_REF_NOT_IN_LEDGER")
           row=matches[0]
           keys=("ref","description","status","publicScore","privateScore","date")
-          print("GEMMA_EARLYEDIT_OFFICIAL_SCORE_STATUS="+json.dumps({k:row.get(k) for k in keys},sort_keys=True),flush=True)
+          print("GEMMA_FASTTHINK_OFFICIAL_SCORE_STATUS="+json.dumps({k:row.get(k) for k in keys},sort_keys=True),flush=True)
           from kaggle.api.kaggle_api_extended import KaggleApi
           api=KaggleApi();api.authenticate()
           quota=api.competition_get_submission_limits("gemma-4-developer-agent")
@@ -34,5 +34,5 @@ jobs:
           recent=sorted(rows,key=lambda x:int(x.get("ref") or 0),reverse=True)
           for item in recent[:8]:
             print("GEMMA_CURRENT_OFFICIAL_ENTRY="+json.dumps({k:item.get(k) for k in keys},sort_keys=True),flush=True)
-          print("GEMMA_EARLYEDIT_SCORE_READONLY_NO_NEW_SUBMISSION=TRUE",flush=True)
+          print("GEMMA_FASTTHINK_SCORE_READONLY_NO_NEW_SUBMISSION=TRUE",flush=True)
           PY
