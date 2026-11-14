@@ -1,0 +1,48 @@
+name: "Gemma 31B adapter training-capacity and exact Kaggle model source probe"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-31b-adapter-capacity-readonly.yml]
+permissions: {contents: read}
+jobs:
+  quota:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read current GPU quota and exact Gemma 4 unquantized QAT Kaggle model locator (no GPU)
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install --disable-pip-version-check -q kaggle==2.2.5 six==1.17.0
+          kaggle quota --format json >/tmp/adapter_quota.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          data=json.loads(Path('/tmp/adapter_quota.json').read_text())
+          gpu=[x for x in data if x.get('resource')=='GPU']
+          print('GEMMA_31B_QLORA_GPU_QUOTA='+json.dumps({
+              'gpu_quota_entries':[{'remaining':str(x.get('remaining','unknown'))} for x in gpu],
+              'no_gpu_used':True
+          },sort_keys=True),flush=True)
+          api=KaggleApi()
+          api.authenticate()
+          result=api.model_instances_list('google/gemma-4',page_size=200)
+          names=[]
+          for i in (result.instances or []):
+              attributes={}
+              for key in ('slug','name','framework','versionNumber','version_number','variation_slug'):
+                  try: val=getattr(i,key)
+                  except (AttributeError,ValueError): continue
+                  if isinstance(val,(str,int)): attributes[key]=val
+              if any('31b' in str(v).lower() for v in attributes.values()):
+                  names.append(attributes)
+          print('GEMMA_31B_OFFICIAL_KAGGLE_VARIATIONS='+json.dumps(names[:12],sort_keys=True),flush=True)
+          print('NO_GPU_NO_MODEL_LOADING_NO_TRAINING_NO_SUBMISSION=TRUE')
+          PY
