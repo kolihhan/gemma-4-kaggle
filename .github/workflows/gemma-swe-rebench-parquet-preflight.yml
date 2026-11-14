@@ -1,0 +1,24 @@
+name: "Gemma SWE-rebench Parquet remote range preflight (CPU only)"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-swe-rebench-parquet-preflight.yml]
+permissions: {contents: read}
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install CPU-only Parquet metadata dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q 'pyarrow>=20,<24' 'fsspec>=2025.3,<2027' 'aiohttp>=3.10,<4'
+      - name: Read only public Parquet metadata over HTTP range
+        run: |
+          set -euo pipefail
+          python -m scripts.probe_swe_rebench_parquet_access
+          echo NO_FULL_DATASET_DOWNLOAD_NO_SOURCE_TEXT_OR_GOLD_PATCHES=TRUE
