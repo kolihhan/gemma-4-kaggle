@@ -1,6 +1,7 @@
 """No remote data, no Docker; strict first-case F2P selector contract."""
 import unittest
-from scripts.replay_scale_swe_one_in_docker import workdir_sane, test_selectors
+from unittest.mock import patch
+from scripts.replay_scale_swe_one_in_docker import workdir_sane, test_selectors, image_size_gate
 
 class DockerF2PContracts(unittest.TestCase):
     def test_task_workdir_safe(self):
@@ -8,6 +9,20 @@ class DockerF2PContracts(unittest.TestCase):
         for bad in ("/etc/project","/workspace/../secret","/workspace//a",
                     "workspace/a","/workspace/./a"):
             self.assertFalse(workdir_sane(bad))
+    def test_docker_size_gate_rejects_unknown_and_large_images(self):
+        with patch("scripts.replay_scale_swe_one_in_docker.invoke",
+                   return_value=(0,'{"layers":[{"size":500000000}]}')):
+            self.assertEqual(image_size_gate("aweaiteam/scaleswe:synthetic"),
+                             "image_under_1p5GB_cap")
+        with patch("scripts.replay_scale_swe_one_in_docker.invoke",
+                   return_value=(0,'{"layers":[{"size":2000000000}]}')):
+            self.assertEqual(image_size_gate("aweaiteam/scaleswe:synthetic"),
+                             "image_above_1p5GB_cap")
+        with patch("scripts.replay_scale_swe_one_in_docker.invoke",
+                   return_value=(1,"")):
+            self.assertEqual(image_size_gate("aweaiteam/scaleswe:synthetic"),
+                             "image_manifest_unavailable")
+
     def test_f2p_test_selection_capped_and_no_shell(self):
         self.assertEqual(test_selectors({"f2p_script":"def test_it():\n assert True",
                           "FAIL_TO_PASS":'["tests/test_bug.py"]'}),["test_fail_to_pass.py"])
