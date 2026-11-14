@@ -87,6 +87,11 @@ def pack_completion_only(processor,tokenizer,row:dict,max_tokens:int|None=None)-
         raise ValueError("processor_chat_template_prompt_failed")
     prefix=tokenizer.encode(rendered,add_special_tokens=False)
     target=tokenizer.encode(row["completion"],add_special_tokens=False)
+    # Compare with actual full-sequence tokenization. SentencePiece/BPE
+    # may merge across the prompt/target boundary, shifting loss labels.
+    joint=tokenizer.encode(rendered+row["completion"],add_special_tokens=False)
+    if joint!=prefix+target:
+        raise ValueError("prompt_target_token_boundary_mismatch")
     eos=tokenizer.eos_token_id
     if not prefix or len(target)<4 or eos is None:
         raise ValueError("empty_prefix_or_diff_target_or_eos")
@@ -110,7 +115,7 @@ def lengths(processor,tokenizer,rows:list[dict])->list[dict]:
             raise AssertionError("training_loss_mask_length_drift")
         stats.append({"source_tokens":source_len,"completion_tokens":completion_len,
                       "total_tokens":len(packed["input_ids"]),"repo_hash":row["repo_hash"],
-                      "completion_only_mask_verified":True})
+                      "completion_only_mask_verified":True,"token_boundary_verified":True})
     return stats
 
 
@@ -155,6 +160,7 @@ def run()->dict:
           "fits_budget":{str(b):sum(x<=b for x in totals) for b in PROMPT_BANDS},
           "completion_nonempty":all(x["completion_tokens"]>=5 for x in data),
           "completion_only_mask_verified":all(x["completion_only_mask_verified"] for x in data),
+          "joint_sequence_token_boundary_verified":all(x["token_boundary_verified"] for x in data),
           "fits_4096_without_truncation":sum(x["total_tokens"]<=4096 for x in data),
         }
     EXECUTION_STAGE="complete"
