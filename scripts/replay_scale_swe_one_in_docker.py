@@ -140,17 +140,21 @@ def image_size_gate(image:str)->str:
 
 def run(case_index:int=0, gold_control:bool=False,
         source_cohort:str="original")->dict:
-    if case_index not in range(8):
-        raise ValueError("only fixed eight-task cohort indices allowed")
     if source_cohort=="original":
         selected=fetch_nvidia_fixed_eight()
+        expected=8
     elif source_cohort=="next18":
         from scripts.freeze_next_scale_swe_cohort import collect_new_cohort
         selected=collect_new_cohort()
+        expected=8
+    elif source_cohort=="wave3_30":
+        from scripts.freeze_scale_swe_wave3 import collect_wave3
+        selected=collect_wave3()
+        expected=12
     else:
         raise ValueError("unknown or unregistered source cohort")
-    if len(selected)!=8:
-        raise ValueError("source cohort denominator drift")
+    if len(selected)!=expected or case_index not in range(expected):
+        raise ValueError("source cohort size/index drift")
     source=get_scale_match(selected)
     fixed_id=list(selected)[case_index]
     meta=source[fixed_id]
@@ -248,9 +252,9 @@ def run(case_index:int=0, gold_control:bool=False,
 if __name__=="__main__":
     import argparse
     parser=argparse.ArgumentParser()
-    parser.add_argument("--case-index",type=int,choices=list(range(8)),default=0)
+    parser.add_argument("--case-index",type=int,choices=list(range(12)),default=0)
     parser.add_argument("--gold-control",action="store_true")
-    parser.add_argument("--source-cohort",choices=["original","next18"],default="original")
+    parser.add_argument("--source-cohort",choices=["original","next18","wave3_30"],default="original")
     options=parser.parse_args()
     try:
         out=run(options.case_index, options.gold_control,options.source_cohort)
