@@ -16,7 +16,7 @@ import subprocess
 from tempfile import TemporaryDirectory
 from xml.etree import ElementTree as ET
 
-from scripts.check_scale_swe_model_patch_apply import fetch_nvidia_fixed_two, get_scale_match
+from scripts.check_scale_swe_model_patch_apply import fetch_nvidia_fixed_eight, get_scale_match
 
 MAX_TESTS=3
 
@@ -118,10 +118,30 @@ def fetch_gold_for_control_only(instance_id:str)->str:
     return matches[0]
 
 
+def image_size_gate(image:str)->str:
+    """Reject unknown or over-budget image manifests BEFORE any Docker pull."""
+    code, body=invoke(["docker","manifest","inspect",image],timeout=80)
+    if code!=0:
+        return "image_manifest_unavailable"
+    try:
+        obj=json.loads(body)
+    except ValueError:
+        return "image_manifest_invalid"
+    layers=obj.get("layers") if isinstance(obj,dict) else None
+    if not isinstance(layers,list) or not layers:
+        return "image_layers_unknown"
+    size=[x.get("size") for x in layers if isinstance(x,dict)]
+    if len(size)!=len(layers) or not all(isinstance(v,int) and v>0 for v in size):
+        return "image_layers_unknown"
+    if sum(size)>1_500_000_000:
+        return "image_above_1p5GB_cap"
+    return "image_under_1p5GB_cap"
+
+
 def run(case_index:int=0, gold_control:bool=False)->dict:
-    if case_index not in (0,1):
-        raise ValueError("only original frozen two-task cohort allowed")
-    selected=fetch_nvidia_fixed_two()
+    if case_index not in range(8):
+        raise ValueError("only original eight task IDs are allowed")
+    selected=fetch_nvidia_fixed_eight()
     source=get_scale_match(selected)
     fixed_id=list(selected)[case_index]
     meta=source[fixed_id]
@@ -136,6 +156,9 @@ def run(case_index:int=0, gold_control:bool=False)->dict:
     targets=test_selectors(meta)
     if not targets:
         return {"status":"unsupported_test_selector"}
+    manifest=image_size_gate(image)
+    if manifest!="image_under_1p5GB_cap":
+        return {"status":manifest, "frozen_case_index":case_index}
 
     pull,_=invoke(["docker","pull","--quiet",image],timeout=410)
     if pull!=0:
@@ -215,7 +238,7 @@ def run(case_index:int=0, gold_control:bool=False)->dict:
 if __name__=="__main__":
     import argparse
     parser=argparse.ArgumentParser()
-    parser.add_argument("--case-index",type=int,choices=[0,1],default=0)
+    parser.add_argument("--case-index",type=int,choices=list(range(8)),default=0)
     parser.add_argument("--gold-control",action="store_true")
     options=parser.parse_args()
     try:
