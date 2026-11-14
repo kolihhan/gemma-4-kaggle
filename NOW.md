@@ -1,3 +1,11 @@
+# 2026-11-15 — ATTRIBUTED PUBLIC 0.22 V10 ONE-SHOT OFFICIAL ENTRY ATTEMPT IN FLIGHT
+
+- **Actual one-shot GitHub Actions #43619532237**: https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43619532237. Triggered on historical trusted `research/dual-agent-recovery-v0-20261108` branch using the pre-existing `GO_PUBLIC_V10_KAGGLE_SUBMIT_ONE_SHOT_20261112` exact commit-message gate; source remains immutable `69fba2905f49a834a7c4f126dd8e2ee68c80d04c`. This reproduces an **attributed third-party public 0.22** Gemma 31B V10 configuration; it is not newly trained or original agent research. The same publicly sourced config has been observed at 0.12–0.22 on historical draws, so no guarantee of own 0.22.
+- The Action passed source/CPU regression and authenticated submission **quota gate**. At the snapshot it was installing pinned official wheelhouse/validator, with code-bundle hash/preflight and `submit` steps **not yet complete**. **No verified new Kaggle submission ID or score as of this snapshot**. The workflow itself fails closed on unauthorized quota/active submissions/duplicate receipt and performs at most one attempted official submission. Best authenticated user score remains **0.180** until a numerical scored receipt exists.
+- The parallel existing 31B one-step synthetic QLoRA private notebook remained **QUEUED** at the latest prior 17:00 UTC check; the new public V10 official entry is a **separate no-training/agent-configuration lane**. Do not reinterpret either workflow as an adapter-enabled candidate.
+
+---
+
 # 2026-11-15 — GEMMA 31B JOINT TOKEN BOUNDARY VERIFIED; OFFICIAL SCORING REFRESHED
 
 - **Real private Gemma 31B QAT tokenizer and masked SFT boundary validated:** [Action #43618436515](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43618436515) **SUCCESS**, 3 synthetic regression tests plus full private CPU Kaggle tokenizer on 16 source-positive train and 3 repo-disjoint holdout examples. Newly added hard invariant compares **tokenize(prompt)+tokenize(patch)** against **tokenize(prompt+patch)** and rejects any boundary drift; **all 19 pass**. Source tokens are loss-mask `-100`, patch+EOS supervised, no truncation. 4,096-token budget fits **15/16 train and 3/3 holdout**, one 9,617-token train outlier must be excluded or separately handled. **No model tensors loaded, GPU training, or adapter test.**
