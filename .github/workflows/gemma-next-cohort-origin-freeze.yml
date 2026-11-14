@@ -1,0 +1,22 @@
+name: "Gemma new 12-row external cohort origin and success freeze (CPU)"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-next-cohort-origin-freeze.yml]
+permissions: {contents: read}
+jobs:
+  frozen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Public v2.0 source rows 18-29 admissibility gate
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/freeze_next_scale_swe_cohort.py
+          python -m scripts.freeze_next_scale_swe_cohort
+          echo GEMMA_NEXT_SOURCE_REPAIR_OUTCOMES_UNINSPECTED=TRUE
+          echo NO_GPU_NO_TRAINING_NO_COMPETITION_SUBMISSION=TRUE
