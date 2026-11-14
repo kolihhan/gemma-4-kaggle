@@ -43,11 +43,23 @@ def text_arch(cfg:dict)->dict:
 
 
 def audit()->dict:
-    serving=get_small_json(BASE,"config.json")
-    training=get_small_json(TRAIN,"config.json")
-    adapter=get_small_json(EXAMPLE,"adapter_config.json")
-    st=text_arch(serving)
-    tr=text_arch(training)
+    try:
+        serving=get_small_json(BASE,"config.json")
+    except Exception:
+        raise ValueError("phase_serving_public_config") from None
+    try:
+        training=get_small_json(TRAIN,"config.json")
+    except Exception:
+        raise ValueError("phase_training_public_config") from None
+    try:
+        adapter=get_small_json(EXAMPLE,"adapter_config.json")
+    except Exception:
+        raise ValueError("phase_public_adapter_config") from None
+    try:
+        st=text_arch(serving)
+        tr=text_arch(training)
+    except (ValueError, TypeError):
+        raise ValueError("phase_text_arch_parser") from None
     mismatches=[key for key in st if st[key] != tr[key]]
     active=adapter.get("target_modules",[])
     if not isinstance(active,list):
@@ -88,5 +100,6 @@ if __name__=="__main__":
     except Exception as exc:
         print("GEMMA_31B_LORA_CONFIG_BLOCKED="+json.dumps({
            "error_type":type(exc).__name__,
+           "error_phase":str(exc) if str(exc).startswith("phase_") else "schema_validation",
            "raw_error_url_or_auth_logged":False}),flush=True)
         raise SystemExit(1) from None
