@@ -165,6 +165,10 @@ def run(limit: int = 4, length: int = 6) -> dict:
         except (OSError, ValueError, KeyError):
             catalog["parquet_metadata_accessible"] = False
     probes = []
+    global_qualified_issues: set[str] = set()
+    global_qualified_repos: set[str] = set()
+    global_qualified_trajectories: set[str] = set()
+    global_qualified_rows = global_adk_native_rows = 0
     for item in selected:
         entry = {"config": item["config"], "split": item["split"]}
         try:
@@ -184,6 +188,11 @@ def run(limit: int = 4, length: int = 6) -> dict:
                 gate = sample_grade(row)
                 buckets[gate] += 1
                 if gate == "candidate_for_private_deep_audit":
+                    global_qualified_rows += 1
+                    global_qualified_issues.add(str(row.get("instance_id")
+                                                    or row["trajectory_id"]))
+                    global_qualified_repos.add(str(row["repo"]).lower())
+                    global_qualified_trajectories.add(str(row["trajectory_id"]))
                     passing_repos.add(str(row["repo"]).lower())
                     passing_ids.add(str(row["instance_id"]) if row.get("instance_id")
                                     else str(row["trajectory_id"]))
@@ -192,6 +201,7 @@ def run(limit: int = 4, length: int = 6) -> dict:
                     native_overlap += overlap
                     passing_with_catalog += int(count > 0)
                     passing_with_adk_native_schema += int(overlap > 0)
+                    global_adk_native_rows += int(overlap > 0)
                 for key in ("resolved", "repo", "language", "license", "trajectory_id",
                             "metadata", "messages", "trajectory", "model_patch", "tools"):
                     if key in row:
@@ -217,6 +227,11 @@ def run(limit: int = 4, length: int = 6) -> dict:
         "catalog_state": "viewer_splits" if catalog["split_count"]
             else "parquet_fallback" if selected else "no_previewable_splits",
         "rows_total_in_sample": sum(p["sampled"] for p in probes),
+        "qualified_trajectory_rows": global_qualified_rows,
+        "qualified_unique_issue_count": len(global_qualified_issues),
+        "qualified_unique_repo_count": len(global_qualified_repos),
+        "qualified_unique_trajectory_ids": len(global_qualified_trajectories),
+        "qualified_trajectory_rows_with_exact_adk_tool_schema": global_adk_native_rows,
         "probes": probes,
         "filters": {"allowed_repo_license": sorted(ALLOWED_LICENSES),
                     "excluded_public_eval_repos": sorted(EXCLUDE_REPOS),
