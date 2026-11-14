@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from scripts.audit_semantic_surface_exposure import ROOT, MANIFESTS, PILOT, audit
+from scripts.audit_semantic_surface_exposure import ROOT, MANIFESTS, PILOT, audit, require_unexposed
 
 
 class ExposureAudit(unittest.TestCase):
@@ -19,6 +19,8 @@ class ExposureAudit(unittest.TestCase):
         self.assertFalse(result["model_training_in_new_pilot"])
         self.assertIn("old_train_trace_harvest",result["manifest_hits"])
         self.assertIn("old_training_targeted_checks",result["manifest_hits"])
+        with self.assertRaisesRegex(ValueError, "fastapi_14479"):
+            require_unexposed(ROOT, PILOT)
 
     def test_invalid_manifest_and_duplicate_tasks_stop(self):
         with tempfile.TemporaryDirectory() as place:
@@ -27,6 +29,7 @@ class ExposureAudit(unittest.TestCase):
                 (base/rel).parent.mkdir(parents=True,exist_ok=True)
                 (base/rel).write_text(json.dumps({field:[]}))
             self.assertEqual(audit(base)["historically_exposed_count"],0)
+            require_unexposed(base, ("fastapi_16000", "rich_4600"))
             with self.assertRaisesRegex(ValueError,"duplicate"):
                 audit(base,("foo","foo"))
             _, bad, _ = MANIFESTS[0]
