@@ -81,4 +81,5 @@ jobs:
               print('GEMMA_PRIVATE_SFT_REAL_TOKEN_REPORT=NOT_AVAILABLE',flush=True)
           print('GEMMA_PRIVATE_INPUTS_NOT_EXPORTED=TRUE',flush=True)
           print('GEMMA_TOKEN_PREFLIGHT_SAFE_MOUNT_PHASE_ENABLED=TRUE',flush=True)
+          print('GEMMA_PRIVATE_DATASET_FLAT_NESTED_MOUNT_RESOLVER=ENABLED',flush=True)
           PY
