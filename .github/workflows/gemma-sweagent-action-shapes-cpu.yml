@@ -1,4 +1,4 @@
-name: Gemma SWE-agent actions: real metadata-only shape probe
+name: "Gemma SWE-agent actions - real metadata-only shape probe"
 on:
   push:
     branches: [research/31b-patch-checkpoint-20261114]
