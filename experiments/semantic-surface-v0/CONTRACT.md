@@ -27,3 +27,20 @@ We retain the authentic scored 31B best **0.180** (#58183466), rather than treat
 5. Do not adjust prompt, Skill code, issue cohort or thresholds after seeing this result; no leaderboard tuning and **zero official Kaggle submissions** from this pilot.
 
 **Global pivot rule:** if the Skill is ignored or no independent gains occur, stop adding tools/prompts to this lineage and reopen a data-driven repair policy/finetuning hypothesis only after training reward/trajectory availability is verified. Do not equate returned symbol references with hidden semantic correctness.
+
+
+## TERMINAL: 2026-11-14 19:35 MYT — 31B GPU paired decision
+
+Actual [private GPU Action #43586412434](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43586412434) **SUCCESS**, after a single L4×4 kernel. All eight fixed task evaluations finished and official verifier outcomes were emitted. The results are public-development diagnostics, **not official Kaggle competition scores**.
+
+| Task ID | Champion | Semantic Surface | Champion / treatment tools | Champion / treatment seconds |
+|---|---:|---:|---:|---:|
+| fastapi_13537 | 1 | 1 | 26 / 14 | 304.668 / 260.276 |
+| fastapi_14479 | 0 | 0 | 11 / 25 | 88.668 / 305.150 |
+| rich_3953 | 0 | 0 | 21 / 21 | 296.321 / 303.631 |
+| rich_3471 | 0 | 0 | 33 / 13 | 304.015 / 303.976 |
+| **Total** | **1/4** | **1/4** | **91 / 73** | **993.672 / 1173.032** |
+
+All 8 rows have `status=completed`, `has_patch=true`, no row-level grader error. Treatment `load_skill=0` and `run_skill_script=0` on **all 4**. The metric uses trace tool-call events and cannot prove why the model did not choose the Skill. **Mechanism not adopted, no paired correctness gain.** Source was frozen and code passed CPU gates, but usefulness is not demonstrated. Reject optional Skill promotion and official submission by the predeclared stop rule. Do not tune these same four task outcomes or rerun them to chase sampling noise. Nothing was trained or submitted to the official competition.
+
+A plausible alternative is a data-driven policy change (SFT/LoRA or other route), but legality, training signal, resource cost and source-disjoint success have **not yet** been established. This observed result should lead to a method-class reevaluation, not automatically to a new GPU job.
