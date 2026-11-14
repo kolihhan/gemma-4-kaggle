@@ -16,6 +16,7 @@ MODEL=Path("/kaggle/input/models/google/gemma-4/transformers/"
 DEST=Path("/kaggle/working/gemma31b-source-token-preflight.json")
 PROMPT_BANDS=(1024,2048,4096,8192,16384)
 EXPECTED={"train.jsonl":16,"holdout.jsonl":3}
+EXECUTION_STAGE="init"
 
 
 def find_private_data_dir()->Path:
@@ -99,19 +100,26 @@ def lengths(tokenizer, rows:list[dict])->list[dict]:
 
 
 def run()->dict:
+    global EXECUTION_STAGE
+    EXECUTION_STAGE="resolve_private_data_contract"
     try:
         data_root=find_private_data_dir()
+        EXECUTION_STAGE="load_private_source_rows"
         train=load_rows("train.jsonl",data_root)
         held=load_rows("holdout.jsonl",data_root)
     except FileNotFoundError:
         raise RuntimeError("phase_private_dataset_mount_missing") from None
+    EXECUTION_STAGE="validate_private_labels_and_repo_split"
     if len({r["id_hash"] for r in train+held})!=19:
         raise ValueError("task_ids_overlap")
     if {r["repo_hash"] for r in train} & {r["repo_hash"] for r in held}:
         raise ValueError("train_holdout_repository_overlap")
+    EXECUTION_STAGE="verify_exact_31b_tokenizer_mount"
     if not (MODEL/"config.json").is_file():
         raise RuntimeError("phase_exact_model_source_mount_missing")
+    EXECUTION_STAGE="import_exact_processor"
     from transformers import AutoProcessor
+    EXECUTION_STAGE="load_exact_31b_processor"
     try:
         processor=AutoProcessor.from_pretrained(str(MODEL),local_files_only=True)
     except (OSError,FileNotFoundError,ValueError):
@@ -121,6 +129,7 @@ def run()->dict:
         raise ValueError("official_tokenizer_unavailable")
     out={}
     for name,records in (("train",train),("holdout",held)):
+        EXECUTION_STAGE="tokenize_"+name
         data=lengths(tokenizer,records)
         totals=[x["total_tokens"] for x in data]
         out[name]={
@@ -131,6 +140,7 @@ def run()->dict:
           "fits_budget":{str(b):sum(x<=b for x in totals) for b in PROMPT_BANDS},
           "completion_nonempty":all(x["completion_tokens"]>=5 for x in data),
         }
+    EXECUTION_STAGE="complete"
     return {
       "status":"PRIVATE_31B_QAT_TOKENIZER_COMPLETION_ONLY_PREFLIGHT_OK",
       "data_source":"kolihhan/gemma31b-verified-repair-sft-v0",
@@ -152,7 +162,8 @@ if __name__=="__main__":
         print("GEMMA_PRIVATE_SOURCE_TOKEN_PREFLIGHT="+json.dumps(report,sort_keys=True),flush=True)
     except Exception as err:
         report={"status":"TOKEN_PREFLIGHT_BLOCKED","failure_type":type(err).__name__,
-                "safe_stage":str(err) if str(err).startswith("phase_") else "schema_or_unknown",
+                "safe_stage":EXECUTION_STAGE,
+                "safe_error_class":str(err) if str(err).startswith("phase_") else "unreported",
                 "raw_dataset_or_model_path_logged":False}
         DEST.write_text(json.dumps(report,sort_keys=True),encoding="utf-8")
         print("GEMMA_PRIVATE_SOURCE_TOKEN_PREFLIGHT="+json.dumps(report,sort_keys=True),flush=True)
