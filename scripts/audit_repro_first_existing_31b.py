@@ -19,6 +19,46 @@ TOOL_ALLOWLIST = {
 }
 
 
+def submit_call_diagnostics(trace: dict) -> dict:
+    """Categorize actual submit tool responses without exporting their payloads."""
+    statuses = Counter()
+    patch_nonempty = 0
+    max_streak = streak = 0
+    ambiguous_parallel = 0
+    for step in trace.get("steps", []):
+        if not isinstance(step, dict):
+            continue
+        calls = [c for c in step.get("tool_calls", []) if isinstance(c, dict)]
+        for call in calls:
+            if call.get("function_name") != "submit_patch":
+                streak = 0
+                continue
+            streak += 1
+            max_streak = max(max_streak, streak)
+            if len(calls) != 1:
+                statuses["unknown_parallel"] += 1
+                ambiguous_parallel += 1
+                continue
+            observation = step.get("observation")
+            content = observation.get("content", observation) if isinstance(observation, dict) else None
+            if isinstance(content, str):
+                try:
+                    content = json.loads(content)
+                except (ValueError, TypeError):
+                    content = None
+            if not isinstance(content, dict):
+                statuses["unknown"] += 1
+                continue
+            state = content.get("status")
+            statuses[state if state in ("ok", "error", "timeout") else "unknown"] += 1
+            patch_nonempty += int(isinstance(content.get("patch_size"), int)
+                                  and content["patch_size"] > 0)
+    return {"submit_response_states": dict(sorted(statuses.items())),
+            "submit_patch_nonempty_responses": patch_nonempty,
+            "max_consecutive_submit_calls": max_streak,
+            "parallel_submit_attribution_ambiguous": ambiguous_parallel}
+
+
 def safe_trace(path: Path) -> dict:
     trace = json.loads(path.read_text(encoding="utf-8"))
     metrics = reduce_feedback(trace)
@@ -31,6 +71,7 @@ def safe_trace(path: Path) -> dict:
     )
     return {
         "trace_found": True,
+        **submit_call_diagnostics(trace),
         "first_edit_action": metrics["first_edit_action"],
         "edit_actions": metrics["total_edit_actions"],
         "explicit_or_inline_tests": metrics["explicit_or_inline_tests"],
