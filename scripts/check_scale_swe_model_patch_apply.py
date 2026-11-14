@@ -13,47 +13,42 @@ from pathlib import Path
 import re
 import subprocess
 from tempfile import TemporaryDirectory
-from urllib.parse import urlparse
+from urllib.error import HTTPError
 
 from scripts.audit_open_swe_traces_metadata import get_json, DATASET, sample_grade
 from scripts.join_scale_swe_parquet_eight import (
     DATASET as SCALE, COLUMNS, replay_fields, may_contain, validate_catalog
 )
-from scripts.probe_external_source_join import collect_source
 
 MAX_REPO_BYTES=900_000_000
 
 
 def fetch_nvidia_fixed_two() -> dict:
-    first=collect_source()[:2]
-    if len(first)!=2 or len({x["instance_id"] for x in first})!=2:
-        raise ValueError("original source denominator invalid")
-    want={x["instance_id"] for x in first}
-    rows={}
-    for offset in (6,12):
-        page=get_json("/rows",{"dataset":DATASET,"config":"v2.0","split":"sweagent",
-                               "offset":offset,"length":6})
-        wrapped=page.get("rows")
-        if not isinstance(wrapped,list) or len(wrapped)!=6:
-            raise ValueError("NVIDIA page incomplete")
+    # Read each fixed six-row NVIDIA viewer page only ONCE.
+    eligible = []
+    for offset in (6, 12):
+        page = get_json("/rows", {"dataset": DATASET, "config": "v2.0",
+                                  "split": "sweagent", "offset": offset, "length": 6})
+        wrapped = page.get("rows")
+        if not isinstance(wrapped, list) or len(wrapped) != 6:
+            raise ValueError("frozen NVIDIA cohort incomplete")
         for item in wrapped:
-            rec=item.get("row",{}) if isinstance(item,dict) else {}
-            if rec.get("instance_id") not in want:
+            rec = item.get("row", {}) if isinstance(item, dict) else {}
+            if sample_grade(rec) != "candidate_for_private_deep_audit":
                 continue
-            if sample_grade(rec)!="candidate_for_private_deep_audit":
-                raise ValueError("chosen NVIDIA task no longer admissible")
-            meta=rec.get("metadata")
-            obj=meta.get("model_patch") if isinstance(meta,dict) else None
-            patch=obj.get("patch") if isinstance(obj,dict) else obj
+            meta = rec.get("metadata")
+            patch_obj = meta.get("model_patch") if isinstance(meta,dict) else None
+            patch = patch_obj.get("patch") if isinstance(patch_obj,dict) else patch_obj
             if not isinstance(patch,str) or not patch.startswith("diff --git "):
-                raise ValueError("source model patch missing")
-            rows[rec["instance_id"]]={"source":{k:rec.get(k) for k in
-                                              ("instance_id","repo","license")},
-                                     "model_patch":patch}
-    if set(rows)!=want:
-        raise ValueError("frozen patch source missing")
-    return rows
-
+                raise ValueError("frozen model diff missing")
+            eligible.append({
+                "instance_id": rec.get("instance_id"),
+                "source": {k: rec.get(k) for k in ("instance_id","repo","license")},
+                "model_patch": patch
+            })
+    if len(eligible) != 8 or len({r["instance_id"] for r in eligible}) != 8:
+        raise ValueError("frozen eight-task denominator drift")
+    return {r["instance_id"]: r for r in eligible[:2]}
 
 def get_scale_match(rows:dict)->dict:
     import fsspec
@@ -137,13 +132,17 @@ def check_one(meta:dict, model_patch:str)->str:
 
 
 def run()->dict:
-    sources=fetch_nvidia_fixed_two()
-    meta=get_scale_match(sources)
+    try:
+        sources=fetch_nvidia_fixed_two()
+    except HTTPError as exc:
+        raise RuntimeError("nvidia_source_http_" + str(exc.code)) from None
+    try:
+        meta=get_scale_match(sources)
+    except HTTPError as exc:
+        raise RuntimeError("scale_source_http_" + str(exc.code)) from None
     statuses=[]
     # Deterministic source order from original eight selected labels.
-    ordered=collect_source()[:2]
-    for row in ordered:
-        ident=row["instance_id"]
+    for ident in sources:
         statuses.append(check_one(meta[ident],sources[ident]["model_patch"]))
     return {"cohort":"first two frozen source-eligible NVIDIA v2.0/sweagent rows 6..17",
             "source":"AweAI-Team/Scale-SWE",
@@ -162,5 +161,8 @@ if __name__=="__main__":
         print("GEMMA_SCALE_SWE_TWO_MODEL_PATCH_APPLY="+json.dumps(run(),sort_keys=True),flush=True)
     except Exception as e:
         print("GEMMA_SCALE_SWE_TWO_MODEL_PATCH_BLOCKED="+json.dumps({
-            "exception_class":type(e).__name__,"source_values_printed":False}),flush=True)
+            "exception_class":type(e).__name__,
+            "source_phase_status":str(e) if isinstance(e,RuntimeError) and
+                str(e).startswith(("nvidia_source_http_","scale_source_http_")) else "unknown",
+            "source_values_printed":False}),flush=True)
         raise SystemExit(1) from None
