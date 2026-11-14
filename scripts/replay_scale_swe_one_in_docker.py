@@ -88,12 +88,14 @@ def run_test(container:str,workdir:str,which:str,selectors:list[str])->dict:
     return {"exit_code":exitcode,"junit":junit_counts(container,outfile)}
 
 
-def run()->dict:
+def run(case_index:int=0)->dict:
+    if case_index not in (0,1):
+        raise ValueError("only original frozen two-task cohort allowed")
     selected=fetch_nvidia_fixed_two()
     source=get_scale_match(selected)
-    first_id=next(iter(selected))
-    meta=source[first_id]
-    model_patch=selected[first_id]["model_patch"]
+    fixed_id=list(selected)[case_index]
+    meta=source[fixed_id]
+    model_patch=selected[fixed_id]["model_patch"]
     image=meta.get("image_url")
     workdir=meta.get("workdir")
     if not isinstance(image,str) or not re.fullmatch(r"aweaiteam/scaleswe:[A-Za-z0-9_.-]{5,180}",image):
@@ -107,7 +109,7 @@ def run()->dict:
     pull,_=invoke(["docker","pull","--quiet",image],timeout=410)
     if pull!=0:
         return {"status":"source_docker_pull_failed"}
-    container="gemma_scale_replay_first"
+    container="gemma_scale_replay_case"+str(case_index)
     cmd=["docker","create","--name",container,
          "--network","none","--memory","5g","--cpus","2",
          "--pids-limit","256","--cap-drop","ALL",
@@ -164,7 +166,8 @@ def run()->dict:
                fixed["tests"]>=1 and fixed["failures"]==0 and fixed["errors"]==0)
         return {"status":"F2P_BASELINE_FAIL_MODEL_PASS" if valid
                 else "F2P_NOT_INDEPENDENTLY_CONFIRMED",
-                "first_source_task_only":True,
+                "frozen_case_index":case_index,
+                "test_origin":"source_synthetic_f2p_script" if isinstance(synthetic,str) and synthetic.strip() else "source_developer_f2p_patch",
                 "num_selected_test_ids":len(targets),
                 "before":before,"after":after,
                 "test_environment":"same_isolated_offline_container_before_after",
@@ -175,8 +178,12 @@ def run()->dict:
 
 
 if __name__=="__main__":
+    import argparse
+    parser=argparse.ArgumentParser()
+    parser.add_argument("--case-index",type=int,choices=[0,1],default=0)
+    options=parser.parse_args()
     try:
-        out=run()
+        out=run(options.case_index)
         print("GEMMA_SCALE_FIRST_CONTAINER_F2P="+json.dumps(out,sort_keys=True),flush=True)
     except Exception as e:
         print("GEMMA_SCALE_FIRST_CONTAINER_F2P_BLOCKED="+json.dumps({
