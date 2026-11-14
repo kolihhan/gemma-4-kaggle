@@ -32,6 +32,17 @@ class SourceTokenTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"no_truncation"):
             pack_completion_only(FakeProcessor(),FakeTokenizer(),row,max_tokens=n+1)
 
+    def test_boundary_merge_detected_before_training(self):
+        class MergingTokenizer(FakeTokenizer):
+            def encode(self,text,add_special_tokens):
+                tokens=super().encode(text,add_special_tokens)
+                if "<start_of_turn>model" in text and "diff --git" in text:
+                    return tokens+[99]
+                return tokens
+        row={"prompt":"Synthetic","completion":"diff --git a/x b/x\\n--- a/x\\n+++ b/x\\n@@ -1 +1 @@\\n-0\\n+1\\n"}
+        with self.assertRaisesRegex(ValueError,"token_boundary_mismatch"):
+            pack_completion_only(FakeProcessor(),MergingTokenizer(),row)
+
     def test_processor_template_precedes_completion_without_truncation(self):
         rows=[{"prompt":"Synthetic question","completion":"diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-0\n+1\n",
                "repo_hash":"safe_hash"}]
