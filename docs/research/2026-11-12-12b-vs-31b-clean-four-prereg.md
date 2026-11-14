@@ -43,3 +43,18 @@ Decision:
 ## Independence and exclusions
 
 These are public upstream PRs and previously screened tasks. **Not blind and not generalizable to private repositories.** Only a single independent model-size variable changed. All four tasks from the frozen clean cohort are scored; no cherry-picked exclusions after seeing model output. Avoid unapproved direct leaderboard submission and avoid any new competition dataset public mirror.
+
+
+## Authenticated terminal result, recovered from completed runs (2026-11-14 review)
+
+[Matched 12B/31B GPU run #43168183720](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43168183720) succeeded on November 12. The *one changed model variable* was 12B versus 31B using matched original Budget-Fit V2 5-minute/28-tool/80-turn policy, exact frozen four upstream public-development PRs and official grader. [Safe existing-trajectory CPU audit #43175697727](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43175697727) independently read the already-generated private results; there was no new GPU, training or official submission in this recovery.
+
+| Task | 12B resolved, patch, sec, tools | 31B resolved, patch, sec, tools |
+|---|---|---|
+| fastapi_14458 | yes, yes, 308.227, 27 | yes, yes, 233.979, 16 |
+| fastapi_15589 | no, no, 304.835, 23 | no, yes, 310.826, 15 |
+| rich_3894 | no, no, 302.617, 10 | yes, yes, 123.157, 14 |
+| rich_3905 | yes, yes, 305.679, 24 | yes, yes, 85.589, 13 |
+| **Total** | **2/4 solved, 2 patched, 1,221.358 s, 84 tools** | **3/4 solved, 4 patched, 753.551 s, 58 tools** |
+
+**Decision:** This particular model-swap hypothesis does **not** justify replacing 31B, training 12B, or another identical clean-four run. It is a four-task already-inspected development sample (31B 1 uniquely rescued task; no reverse), and the model-size comparison's V2 28-tool budget is not the already-scored 31B 60-tool configuration. Real-agent trace audit found zero syntactically recognized explicit/inline tests in both arms and substantial opaque commands; neither statistic proves absence of all checks. Keep the actual official 0.180 best separate from these private task-grader counts.
