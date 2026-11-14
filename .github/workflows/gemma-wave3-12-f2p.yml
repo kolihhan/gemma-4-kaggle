@@ -1,0 +1,32 @@
+name: "Gemma Wave3 frozen 12 Scale-SWE real F2P tests (CPU)"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-wave3-12-f2p.yml]
+permissions: {contents: read}
+jobs:
+  replay_wave3:
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        case_index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    runs-on: ubuntu-latest
+    timeout-minutes: 27
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Frozen source order and Docker safety tests
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_freeze_scale_swe_wave3 tests.test_replay_scale_swe_one_in_docker
+          python -m pip install --disable-pip-version-check -q 'pyarrow>=20,<24' 'fsspec>=2025.3,<2027' 'aiohttp>=3.10,<4'
+          python -m py_compile scripts/freeze_scale_swe_wave3.py scripts/replay_scale_swe_one_in_docker.py
+          echo GEMMA_WAVE3_FREEZE_AND_SAFETY=PASS
+      - name: Test source-baseline FAIL to original NVIDIA model patch PASS in isolated Docker
+        run: |
+          set -euo pipefail
+          python -m scripts.replay_scale_swe_one_in_docker --source-cohort wave3_30 --case-index ${{ matrix.case_index }}
+          echo GEMMA_WAVE3_NO_GOLD_NO_MODEL_TRAIN_NO_OFFICIAL_SUBMIT=TRUE
