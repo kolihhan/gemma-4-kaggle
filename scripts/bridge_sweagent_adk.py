@@ -33,6 +33,37 @@ def _safe_path(value: object) -> str | None:
     return value
 
 
+def path_category(value: object) -> str:
+    """Aggregate source path *type* only; never return actual path components."""
+    if not isinstance(value, str):
+        return "missing_or_nonstring"
+    if not value:
+        return "empty"
+    if "\\\\" in value or "\\x00" in value or any(x in ("..", ".") for x in value.split("/")):
+        return "unsafe_or_traversal"
+    if value.startswith("/workspace/"):
+        return "workspace_absolute"
+    if value.startswith("/"):
+        return "other_absolute"
+    return "relative"
+
+
+def source_editor_shape(event: object) -> tuple[str, str]:
+    if not isinstance(event, dict) or not isinstance(event.get("function"), dict):
+        return ("malformed", "missing_or_nonstring")
+    raw = event["function"].get("arguments")
+    try:
+        args = json.loads(raw) if isinstance(raw, str) else raw
+    except (ValueError, TypeError):
+        return ("malformed", "missing_or_nonstring")
+    if not isinstance(args, dict):
+        return ("malformed", "missing_or_nonstring")
+    action = args.get("command")
+    if action not in {"view", "create", "insert", "str_replace"}:
+        action = "other"
+    return (action, path_category(args.get("path")))
+
+
 def _response_is_adk_contract(content: object) -> bool:
     """Native ADK returns a JSON object with status and action-specific keys.
 
@@ -120,6 +151,8 @@ def trace_gate(row: dict) -> dict:
     counts: Counter[str] = Counter()
     mapped: Counter[str] = Counter()
     reasons: Counter[str] = Counter()
+    editor_modes: Counter[str] = Counter()
+    editor_paths: Counter[str] = Counter()
     total = 0
     native_feedback_like = foreign_feedback = 0
     trace = row["messages"]
@@ -142,6 +175,10 @@ def trace_gate(row: dict) -> dict:
                 break
             name, mapped_action, reason = action_meta(call)
             counts[name if name in {"bash", "str_replace_editor", "submit"} else "other"] += 1
+            if name == "str_replace_editor":
+                mode, category = source_editor_shape(call)
+                editor_modes[mode] += 1
+                editor_paths[category] += 1
             reasons[reason] += 1
             if mapped_action is not None:
                 mapped[mapped_action["name"]] += 1
@@ -159,6 +196,8 @@ def trace_gate(row: dict) -> dict:
         "source_tools": dict(counts),
         "adk_action_counts": dict(mapped),
         "rejection_and_uncertainty_reasons": dict(reasons),
+        "editor_command_modes": dict(editor_modes),
+        "editor_path_categories": dict(editor_paths),
         "foreign_tool_replies": foreign_feedback,
         "adk_status_shaped_replies": native_feedback_like,
         "all_action_syntax_convertible": fully_syntax_mappable,
@@ -173,6 +212,8 @@ def summarize(rows: list[dict]) -> dict:
     source: Counter[str] = Counter()
     target: Counter[str] = Counter()
     reasons: Counter[str] = Counter()
+    editor_modes: Counter[str] = Counter()
+    editor_paths: Counter[str] = Counter()
     complete = 0
     for wrapper in rows:
         row = wrapper.get("row", {}) if isinstance(wrapper, dict) else {}
@@ -186,6 +227,8 @@ def summarize(rows: list[dict]) -> dict:
         source.update(audit["source_tools"])
         target.update(audit["adk_action_counts"])
         reasons.update(audit["rejection_and_uncertainty_reasons"])
+        editor_modes.update(audit["editor_command_modes"])
+        editor_paths.update(audit["editor_path_categories"])
         complete += int(audit["all_action_syntax_convertible"])
     return {
         "source": "nvidia/Open-SWE-Traces/v2.0/sweagent",
@@ -197,6 +240,8 @@ def summarize(rows: list[dict]) -> dict:
         "external_tool_names": dict(source),
         "adk_action_names": dict(target),
         "mapping_gates": dict(reasons),
+        "editor_command_modes": dict(editor_modes),
+        "editor_path_categories": dict(editor_paths),
         "fully_syntax_mappable_rows": complete,
         "foreign_feedback_rows": summed["foreign_tool_replies"],
         "adk_status_shaped_reply_rows": summed["adk_status_shaped_replies"],
