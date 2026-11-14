@@ -24,6 +24,13 @@ jobs:
           assert status["historically_exposed_ids"]==["fastapi_14479","rich_3953"]
           assert status["clean_unseen_set_proven"] is False
           assert status["leakage_to_model_proven"] is False
+          from scripts.audit_semantic_surface_exposure import require_unexposed, PILOT
+          try:
+              require_unexposed(ROOT, PILOT)
+              raise AssertionError("known prior training IDs incorrectly accepted")
+          except ValueError as error:
+              assert "fastapi_14479" in str(error) and "rich_3953" in str(error)
+          print("GEMMA_FUTURE_UNTOUCHED_TASK_GATE=FAIL_CLOSED",flush=True)
           print("GEMMA_SEMANTIC_UNTOUCHED_COHORT_CLAIM=INVALID")
           print("NO_GPU_NO_TRAINING_NO_OFFICIAL_SUBMISSION=TRUE")
           PY
