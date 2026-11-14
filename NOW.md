@@ -1,3 +1,10 @@
+# 2026-11-14 18:43 MYT — GEMMA SEMANTIC SURFACE PRIVATE 31B KAGGLE **RUNNING** AUTHENTICATED
+
+- [One-shot status Action #43586568702](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43586568702) terminal SUCCESS: at 2026-11-14 10:42:54 UTC the **existing single** private Kaggle kernel `kolihhan/gemma4-semantic-surface-43585937791` returned `KernelWorkerStatus.RUNNING`. This proves actual private Kaggle model execution started, not mere GitHub queue status. **No task-level results or final model correctness available yet.**
+- [Paired GPU controller #43586412434](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43586412434) remains in progress, polling the SAME frozen kernel. Its CPU gate passed. **Do not start another pilot**, retune candidate, submit a competition entry, or infer a score until the 8-evaluation terminal aggregate and integrity checks return. No new training or official submission.
+
+---
+
 # 2026-11-14 18:42 MYT — NEW GEMMA 31B SEMANTIC-SURFACE CANDIDATE; REAL PAIRED GPU EXECUTION STARTED
 
 - **Implemented a new executable capability**, not another generic retry prompt: `experiments/semantic-surface-v0/skill/scripts/surface.py` observes the actual `git diff` and Python AST of modified functions and lists other module/test references, with bounded traversal and no writes. It is registered through the official declarative ADK Skill path in a **single-root, exact-scored 31B** candidate; inference model/sampler/5min/60call/80turn budgets remain unchanged. The Skill is **optional/model-mediated**; real tool uptake and effect on correctness are NOT yet known.
