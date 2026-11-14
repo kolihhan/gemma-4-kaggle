@@ -79,6 +79,7 @@ jobs:
                   assert splits['train']['n']==16 and splits['holdout']['n']==3
                   assert raw['repository_overlap']==0
                   assert all(splits[k]['completion_only_mask_verified'] for k in ('train','holdout'))
+                  assert all(splits[k]['joint_sequence_token_boundary_verified'] for k in ('train','holdout'))
                   assert splits['train']['fits_4096_without_truncation']==15
                   assert splits['holdout']['fits_4096_without_truncation']==3
                   print('GEMMA_REAL_31B_QAT_COMPLETION_ONLY_MASK_VERIFIED=TRUE',flush=True)
