@@ -94,6 +94,10 @@ def run(limit: int = 4, length: int = 6) -> dict:
     selected = pick_splits(splits, limit)
     catalog = {
         "split_count": len(splits),
+        "split_catalog": [{"config": str(x.get("config", "")),
+                           "split": str(x.get("split", "")),
+                           "num_examples": x.get("num_examples")}
+                          for x in splits[:30] if isinstance(x, dict)],
         "split_api_keys": sorted(splits_payload.keys()),
         "split_pending_count": len(splits_payload.get("pending", []))
             if isinstance(splits_payload.get("pending"), list) else None,
