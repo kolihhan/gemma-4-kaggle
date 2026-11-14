@@ -41,8 +41,15 @@ class StrictBridgeTests(unittest.TestCase):
                                          "old_string": "return 0",
                                          "new_string": "return 1",
                                          "allow_multiple": False})
-        self.assertEqual(reason, "mapped_editor_matching_unverified")
-        for bad in ("../../passwd", "/etc/passwd", "src/../secret.py", "src//dup.py"):
+        self.assertEqual(reason, "mapped_editor_matching_and_root_unverified")
+        # SWE-agent's documented sandbox root is /testbed.
+        translated = action_meta(call("str_replace_editor", {
+            **args, "path": "/testbed/src/main.py"
+        }))
+        self.assertEqual(translated[1]["args"]["filepath"], "src/main.py")
+        self.assertEqual(translated[2], "mapped_editor_matching_and_root_unverified")
+        for bad in ("../../passwd", "/etc/passwd", "/tmp/src/main.py",
+                    "src/../secret.py", "src//dup.py", "/testbed/../etc/passwd"):
             self.assertEqual(action_meta(call("str_replace_editor", {**args, "path": bad}))[2],
                              "editor_unsafe_or_missing_path")
         self.assertEqual(action_meta(call("str_replace_editor", {
@@ -81,6 +88,7 @@ class StrictBridgeTests(unittest.TestCase):
     def test_path_metadata_never_contains_external_source_paths(self):
         self.assertEqual(path_category("/external_private_root/some_file.py"), "other_absolute")
         self.assertEqual(path_category("/workspace/pkg/a.py"), "workspace_absolute")
+        self.assertEqual(path_category("/testbed/pkg/a.py"), "sweagent_testbed_absolute")
         self.assertEqual(path_category("pkg/a.py"), "relative")
         self.assertEqual(path_category("../escape.py"), "unsafe_or_traversal")
         mode, category = source_editor_shape(call("str_replace_editor", {
