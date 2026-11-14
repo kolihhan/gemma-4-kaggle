@@ -88,14 +88,45 @@ def run_test(container:str,workdir:str,which:str,selectors:list[str])->dict:
     return {"exit_code":exitcode,"junit":junit_counts(container,outfile)}
 
 
-def run(case_index:int=0)->dict:
+def fetch_gold_for_control_only(instance_id:str)->str:
+    """Read upstream Scale-SWE gold patch ONLY for isolated benchmark integrity.
+
+    Not a training target, model context or inference hint; never print it.
+    """
+    from scripts.join_scale_swe_parquet_eight import validate_catalog, may_contain
+    import fsspec
+    import pyarrow.parquet as pq
+    matches=[]
+    for uri in validate_catalog():
+        with fsspec.open(uri,mode="rb",block_size=1<<16,
+                         cache_type="none",timeout=40) as handle:
+            pf=pq.ParquetFile(handle)
+            for rg in range(pf.metadata.num_row_groups):
+                group=pf.metadata.row_group(rg)
+                ix=next((i for i in range(group.num_columns)
+                         if group.column(i).path_in_schema=="instance_id"),None)
+                if ix is not None and not may_contain(group.column(ix).statistics,{instance_id}):
+                    continue
+                ids=pf.read_row_group(rg,columns=["instance_id"])["instance_id"].to_pylist()
+                positions=[i for i,val in enumerate(ids) if val==instance_id]
+                if not positions:
+                    continue
+                col=pf.read_row_group(rg,columns=["patch"])["patch"]
+                matches.extend(col[i].as_py() for i in positions)
+    if len(matches)!=1 or not isinstance(matches[0],str) or not matches[0].startswith("diff --git "):
+        raise ValueError("unique official reference fix unavailable")
+    return matches[0]
+
+
+def run(case_index:int=0, gold_control:bool=False)->dict:
     if case_index not in (0,1):
         raise ValueError("only original frozen two-task cohort allowed")
     selected=fetch_nvidia_fixed_two()
     source=get_scale_match(selected)
     fixed_id=list(selected)[case_index]
     meta=source[fixed_id]
-    model_patch=selected[fixed_id]["model_patch"]
+    model_patch=(fetch_gold_for_control_only(fixed_id) if gold_control
+                 else selected[fixed_id]["model_patch"])
     image=meta.get("image_url")
     workdir=meta.get("workdir")
     if not isinstance(image,str) or not re.fullmatch(r"aweaiteam/scaleswe:[A-Za-z0-9_.-]{5,180}",image):
@@ -164,14 +195,18 @@ def run(case_index:int=0)->dict:
         valid=(before["exit_code"]==1 and base["failures"]>=1 and base["errors"]==0
                and after["exit_code"]==0 and fixed is not None and
                fixed["tests"]>=1 and fixed["failures"]==0 and fixed["errors"]==0)
-        return {"status":"F2P_BASELINE_FAIL_MODEL_PASS" if valid
-                else "F2P_NOT_INDEPENDENTLY_CONFIRMED",
+        return {"status":("F2P_BASELINE_FAIL_GOLD_PASS" if gold_control
+                          else "F2P_BASELINE_FAIL_MODEL_PASS") if valid
+                else ("F2P_GOLD_CONTROL_NOT_CONFIRMED" if gold_control
+                      else "F2P_NOT_INDEPENDENTLY_CONFIRMED"),
+                "patch_source":"upstream_gold_integrity_control_ONLY" if gold_control else "nvidia_model",
                 "frozen_case_index":case_index,
                 "test_origin":"source_synthetic_f2p_script" if isinstance(synthetic,str) and synthetic.strip() else "source_developer_f2p_patch",
                 "num_selected_test_ids":len(targets),
                 "before":before,"after":after,
                 "test_environment":"same_isolated_offline_container_before_after",
-                "no_gold_patch_used":True,
+                "no_gold_patch_used":not gold_control,
+                "gold_patch_used_for_training_or_model_context":False,
                 "training_started":False,"official_submission":False}
     finally:
         invoke(["docker","rm","-f",container],timeout=30)
@@ -181,9 +216,10 @@ if __name__=="__main__":
     import argparse
     parser=argparse.ArgumentParser()
     parser.add_argument("--case-index",type=int,choices=[0,1],default=0)
+    parser.add_argument("--gold-control",action="store_true")
     options=parser.parse_args()
     try:
-        out=run(options.case_index)
+        out=run(options.case_index, options.gold_control)
         print("GEMMA_SCALE_FIRST_CONTAINER_F2P="+json.dumps(out,sort_keys=True),flush=True)
     except Exception as e:
         print("GEMMA_SCALE_FIRST_CONTAINER_F2P_BLOCKED="+json.dumps({
