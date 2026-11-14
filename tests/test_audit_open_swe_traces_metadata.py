@@ -2,7 +2,7 @@
 import unittest
 from unittest.mock import patch
 
-from scripts.audit_open_swe_traces_metadata import pick_splits, sample_grade, run, native_tool_schema_count
+from scripts.audit_open_swe_traces_metadata import pick_splits, sample_grade, run, native_tool_schema_count, public_tool_signatures
 
 
 def row(**kwargs):
@@ -47,6 +47,10 @@ class GateTests(unittest.TestCase):
             {"name":"write_file_extra"},
         ])
         self.assertEqual(native_tool_schema_count(payload),(4,2))
+        observed=public_tool_signatures(payload)
+        self.assertEqual({x["name"] for x in observed},
+                         {"read_file","bash_command","edit_file","write_file_extra"})
+        self.assertIn({"name":"read_file","parameter_names":[]},observed)
         self.assertEqual(native_tool_schema_count(row()),(0,0))
         self.assertEqual(native_tool_schema_count(row(tools=["{bad"])), (0,0))
 
