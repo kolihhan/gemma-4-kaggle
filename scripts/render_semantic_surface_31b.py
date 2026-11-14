@@ -14,7 +14,7 @@ from pathlib import Path
 import re
 
 from scripts.build_public_prompt_only_control_20261111 import make_zip
-from scripts.build_toolcap60_timeout_recovery import files_for_candidate
+from scripts.build_toolcap60_timeout_recovery import build as build_champion, files_for_candidate
 from scripts.build_semantic_surface_31b import candidate_files
 from scripts.render_patch_checkpoint_31b import CHAMPION_SHA
 from scripts.render_repro_first_31b import INTEGRITY
@@ -85,7 +85,7 @@ def render(repo: Path, source_zip: bytes, out: Path, kernel_ref: str) -> None:
         raise FileExistsError("refuse to overwrite")
     control = files_for_candidate(source_zip)
     treatment = candidate_files(source_zip)
-    if hashlib.sha256(make_zip(control)).hexdigest() != CHAMPION_SHA:
+    if hashlib.sha256(build_champion(source_zip)).hexdigest() != CHAMPION_SHA:
         raise ValueError("scored champion byte digest drift")
     if set(treatment) - set(control) != {
         "skills/semantic-surface/SKILL.md", "skills/semantic-surface/scripts/surface.py"
