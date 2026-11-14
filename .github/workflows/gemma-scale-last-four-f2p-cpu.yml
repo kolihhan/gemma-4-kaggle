@@ -1,0 +1,32 @@
+name: "Gemma finish frozen Scale-SWE remaining 4 F2P on CPU"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-scale-last-four-f2p-cpu.yml]
+permissions: {contents: read}
+jobs:
+  replay_remaining:
+    strategy:
+      fail-fast: false
+      matrix:
+        case_index: [4, 5, 6, 7]
+    runs-on: ubuntu-latest
+    timeout-minutes: 26
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: First run synthetic test contracts and Parquet read dependencies
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_replay_scale_swe_one_in_docker
+          python -m py_compile scripts/replay_scale_swe_one_in_docker.py
+          python -m pip install -q --disable-pip-version-check 'pyarrow>=20,<24' 'fsspec>=2025.3,<2027' 'aiohttp>=3.10,<4'
+          echo GEMMA_LAST_FOUR_SOURCE_SAFETY=PASS
+      - name: Source-verified F2P baseline then NVIDIA model diff, image under 1.5GB
+        run: |
+          set -euo pipefail
+          python -m scripts.replay_scale_swe_one_in_docker --case-index ${{ matrix.case_index }}
+          echo GEMMA_LAST_FOUR_FROZEN_NO_GOLD_PATCH_IN_MODEL=TRUE
+          echo NO_GPU_NO_TRAINING_NO_OFFICIAL_SUBMISSION=TRUE
