@@ -1,0 +1,56 @@
+name: Gemma 31B semantic surface prospective renderer CPU only
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-semantic-surface-render-cpu-20261114.yml]
+permissions: {contents: read}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Test AST tool and immutable task selection; compile all sources
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_semantic_surface_31b tests.test_render_semantic_surface_31b
+          python -m py_compile scripts/render_semantic_surface_31b.py scripts/build_semantic_surface_31b.py
+          echo GEMMA_SEMANTIC_SURFACE_CPU_TESTS=PASS
+      - name: Render the exact champion-plus-one-skill 31B private trial without GPU
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/gemma-surface-source
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 \
+            -p /tmp/gemma-surface-source --file-pattern '^submission[.]zip$' -o \
+            >/tmp/gemma-surface-source-download.log 2>&1
+          python -m scripts.render_semantic_surface_31b \
+            --source-zip /tmp/gemma-surface-source/submission.zip \
+            --out /tmp/gemma-semantic-surface-private \
+            --kernel-ref kolihhan/gemma4-semantic-surface-43585937791
+          python - <<'PY'
+          import ast,json,hashlib
+          from pathlib import Path
+          root=Path("/tmp/gemma-semantic-surface-private")
+          meta=json.loads((root/"kernel-metadata.json").read_text())
+          assert meta["is_private"] and meta["enable_gpu"] and not meta["enable_internet"]
+          assert meta["competition_sources"]==["gemma-4-developer-agent"]
+          assert len(meta["model_sources"])==1
+          content=(root/"semantic_surface_private.py").read_text()
+          ast.parse(content)
+          assert "def observed_surface(" in content
+          assert "if len(records) != 8:" in content
+          assert "if len(scored) != 4:" in content
+          assert "STOP_GOLD_NOP_INTEGRITY_FAIL:" in content
+          assert "skills/semantic-surface/scripts/surface.py" in content
+          assert "semantic_surface_summary.json" in content
+          assert "competition_submit_code(" not in content
+          print("GEMMA_SEMANTIC_SURFACE_REAL_PRIVATE_RENDER_CPU=PASS",flush=True)
+          print("NO_GPU_NO_INFERENCE_NO_OFFICIAL_SUBMISSION=TRUE",flush=True)
+          PY
