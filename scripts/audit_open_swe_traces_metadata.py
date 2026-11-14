@@ -67,6 +67,34 @@ def sample_grade(row: dict) -> str:
     return "candidate_for_private_deep_audit"
 
 
+ADK_NATIVE_TOOLS = frozenset({
+    "read_file", "run_command", "edit_file", "write_file", "get_status",
+    "submit_patch", "search_similar_code", "get_code_neighbors", "get_code_subgraph",
+})
+
+
+def native_tool_schema_count(row: dict) -> tuple[int, int]:
+    """Count only exact declared tool-name overlaps, never tool definitions."""
+    tools = row.get("tools")
+    if not isinstance(tools, list):
+        return (0, 0)
+    names = set()
+    for definition in tools[:64]:
+        try:
+            definition = json.loads(definition) if isinstance(definition, str) else definition
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(definition, dict):
+            continue
+        descriptor = definition.get("function", definition)
+        if not isinstance(descriptor, dict):
+            continue
+        name = descriptor.get("name")
+        if isinstance(name, str):
+            names.add(name)
+    return (len(names), len(names & ADK_NATIVE_TOOLS))
+
+
 def pick_splits(splits: list, limit: int = 4) -> list[dict]:
     """Choose one small viewer probe from distinct configs, not a random sample."""
     # Open-SWE-Traces uses versioned configs (v2.0) with AGENT-named
@@ -147,15 +175,36 @@ def run(limit: int = 4, length: int = 6) -> dict:
                 raise ValueError("no visible sample rows")
             buckets: Counter[str] = Counter()
             field_sets: Counter[str] = Counter()
+            passing_repos: set[str] = set()
+            passing_ids: set[str] = set()
+            declared_tools = native_overlap = 0
+            passing_with_catalog = passing_with_adk_native_schema = 0
             for record in rows:
                 row = record.get("row", {}) if isinstance(record, dict) else {}
-                buckets[sample_grade(row)] += 1
+                gate = sample_grade(row)
+                buckets[gate] += 1
+                if gate == "candidate_for_private_deep_audit":
+                    passing_repos.add(str(row["repo"]).lower())
+                    passing_ids.add(str(row["instance_id"]) if row.get("instance_id")
+                                    else str(row["trajectory_id"]))
+                    count, overlap = native_tool_schema_count(row)
+                    declared_tools += count
+                    native_overlap += overlap
+                    passing_with_catalog += int(count > 0)
+                    passing_with_adk_native_schema += int(overlap > 0)
                 for key in ("resolved", "repo", "language", "license", "trajectory_id",
-                            "metadata", "messages", "trajectory", "model_patch"):
+                            "metadata", "messages", "trajectory", "model_patch", "tools"):
                     if key in row:
                         field_sets[key] += 1
             entry.update({"sampled": len(rows), "quality_gate_counts": dict(buckets),
-                          "field_present_counts": dict(field_sets), "status": "sampled"})
+                          "field_present_counts": dict(field_sets),
+                          "passing_distinct_repo_count": len(passing_repos),
+                          "passing_distinct_task_count": len(passing_ids),
+                          "passing_with_declared_tool_catalog": passing_with_catalog,
+                          "passing_with_any_exact_adk_tool_schema": passing_with_adk_native_schema,
+                          "declared_catalog_tool_names_total": declared_tools,
+                          "exact_adk_tool_schema_names_total": native_overlap,
+                          "status": "sampled"})
         except (OSError, ValueError, KeyError) as exc:
             # No private exception text or traceback: one small failure per config.
             entry.update({"sampled": 0, "status": type(exc).__name__})
