@@ -24,4 +24,5 @@ jobs:
           set -euo pipefail
           python -m scripts.check_scale_swe_model_patch_apply
           echo GEMMA_PATCH_APPLICATION_ONLY_NO_TEST_CODE_EXECUTED_NO_GOLD=TRUE
+          echo GEMMA_NVIDIA_SOURCE_FETCH_ONCE_PER_PAGE=TRUE
           echo NO_GPU_NO_TRAINING_NO_COMPETITION_SUBMISSION=TRUE
