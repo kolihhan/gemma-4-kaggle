@@ -2,7 +2,7 @@ name: "Gemma exact 31B train QAT vs CT inference PEFT adapter static config"
 on:
   push:
     branches: [research/31b-patch-checkpoint-20261114]
-    paths: [.github/workflows/gemma-31b-lora-static-compat.yml]
+    paths: [.github/workflows/gemma-31b-lora-static-compat.yml, kaggle/gemma31b_qlora_one_step_smoke.py, tests/test_gemma31b_qlora_one_step_smoke.py]
 permissions: {contents: read}
 jobs:
   static_configs:
@@ -17,6 +17,9 @@ jobs:
         run: |
           set -euo pipefail
           python -m unittest -q tests.test_probe_gemma31b_adapter_compat
+          python -m unittest -q tests.test_gemma31b_qlora_one_step_smoke
+          python -m py_compile kaggle/gemma31b_qlora_one_step_smoke.py
+          echo GEMMA_31B_MULTIMODAL_MODEL_LOADER_STATIC=CHECKED
           python -m scripts.probe_gemma31b_adapter_compat
           echo GEMMA_31B_LORA_STATIC_ONLY_NO_WEIGHT_DOWNLOAD=TRUE
           echo GEMMA_31B_PUBLIC_CONFIG_PHASE_DIAGNOSTIC=TRUE
