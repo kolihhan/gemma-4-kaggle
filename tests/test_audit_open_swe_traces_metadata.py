@@ -2,7 +2,7 @@
 import unittest
 from unittest.mock import patch
 
-from scripts.audit_open_swe_traces_metadata import pick_splits, sample_grade, run
+from scripts.audit_open_swe_traces_metadata import pick_splits, sample_grade, run, native_tool_schema_count
 
 
 def row(**kwargs):
@@ -37,6 +37,18 @@ class GateTests(unittest.TestCase):
         self.assertEqual(sample_grade(row(model_patch={"patch": "diff --git a/ok b/ok"})),
                          "candidate_for_private_deep_audit")
 
+
+
+    def test_tool_catalog_overlap_is_exact_and_never_exposes_commands(self):
+        payload=row(tools=[
+            '{"type":"function","function":{"name":"read_file","parameters":{"secret":"never print"}}}',
+            '{"type":"function","function":{"name":"bash_command"}}',
+            {"name":"edit_file"},
+            {"name":"write_file_extra"},
+        ])
+        self.assertEqual(native_tool_schema_count(payload),(4,2))
+        self.assertEqual(native_tool_schema_count(row()),(0,0))
+        self.assertEqual(native_tool_schema_count(row(tools=["{bad"]), (0,0))
 
     def test_no_viewer_split_degrades_to_parquet_metadata_not_fake_zero(self):
         def mock(source, params):
