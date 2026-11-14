@@ -64,6 +64,9 @@ class GateTests(unittest.TestCase):
             summary = run(1, 1)
         self.assertEqual(summary["catalog_state"], "parquet_fallback")
         self.assertEqual(summary["rows_total_in_sample"], 1)
+        self.assertEqual(summary["qualified_unique_issue_count"], 1)
+        self.assertEqual(summary["qualified_unique_repo_count"], 1)
+        self.assertEqual(summary["qualified_trajectory_rows_with_exact_adk_tool_schema"], 0)
         self.assertEqual(summary["probes"][0]["quality_gate_counts"]["candidate_for_private_deep_audit"], 1)
         self.assertFalse(summary["full_dataset_scanned"])
 
