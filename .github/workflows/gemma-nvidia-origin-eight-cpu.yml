@@ -1,0 +1,20 @@
+name: "Gemma 8 NVIDIA successful tasks source origin check CPU"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-nvidia-origin-eight-cpu.yml]
+permissions: {contents: read}
+jobs:
+  origin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read exact origin category for frozen eight NVIDIA successes (aggregate only)
+        run: |
+          set -euo pipefail
+          python -m scripts.probe_nvidia_swe_source_origin
+          echo NO_RAW_IDS_NO_GOLD_NO_GPU_NO_TRAINING_NO_SUBMISSION=TRUE
