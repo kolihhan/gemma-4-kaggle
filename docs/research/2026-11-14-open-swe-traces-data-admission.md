@@ -23,3 +23,17 @@ The original Gemma 4 **31B / five-minute / 60-tool** coding agent is officially 
 5. **Stop/pivot trigger:** if no faithful conversion to runnable native ADK actions and no strong alternative evidence-to-patch supervision, reject *raw trajectory distillation*, rather than spend GPU on mislabeled “positives.” This does not permanently ban SFT/QLoRA, but rules out the naive current data path.
 
 This report deliberately distinguishes 16 syntactically gated `resolved=1` source rollouts from **zero approved competition-ready ADK tool-call SFT examples**.
+
+
+## Live observed external tool dialects (follow-up source probe)
+
+[Authenticated GitHub CPU Action #43593187704](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43593187704) completed successfully on the same 24 real v2.0 dataset-viewer rows with a new **allowlisted schema-only** extraction: public tool names and argument *key names*; no commands, values, agent messages or code fragments exported. The 16 candidate row / 16 distinct issue / **0 exact native ADK tool-name** counts reproduce.
+
+| External scaffold | Public tool names observed | Transfer to official ADK tool contract |
+|---|---|---|
+| Claude Code | `Bash`, `Read`, `Edit` | **Undetermined**; catalog parser did not expose argument-key metadata for these declarations. Do not assume they are mappable. |
+| OpenCode | `bash(command,timeout,workdir)`, `edit(filePath,oldString,newString,replaceAll)`, `read(filePath,offset,limit)`, `write(content,filePath)`, also `glob`, `grep`, `skill`, `task`, `todowrite`, `webfetch` | **Potentially partial**: shell/file actions have analogous native tools, but path/offset/multiple-edit/timeout semantics and tool-result shapes differ; `task`, `webfetch` etc. have no direct registered ADK counterpart. |
+| OpenHands | `execute_bash(command,is_input,timeout)`, `str_replace_editor(command,path,old_str,new_str,...)`, `finish(message)`, `think(thought)` | **Conditional**: a branch of editor commands might map to native `edit_file`; input mode and editor commands cannot blindly map. |
+| SWE-agent | `bash(command)`, `str_replace_editor(command,path,old_str,new_str,...)`, `submit()` | **Most plausible restricted bridge** at the *declared-schema* level; must still check actual source call arguments, path safety, feedback serialization and `submit_patch` lifecycle. |
+
+Official native [`HARNESS_README.md`](../../HARNESS_README.md) exposes `run_command(command)`, `read_file(filepath,start_line,end_line)`, `edit_file(filepath,old_string,new_string,allow_multiple)`, `write_file(filepath,content)`, and `submit_patch()` with **non-identical** semantics to the external scaffolds. This schema comparison is evidence of *possible* mapping tasks, **not an implemented mapping, positive imitation dataset, or policy/solver improvement**. A safe adapter must explicitly reject opaque/non-equivalent actions; no instruction rewrite should claim a foreign agent's tool call is native.
