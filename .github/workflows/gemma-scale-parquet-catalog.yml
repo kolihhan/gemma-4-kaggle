@@ -1,0 +1,20 @@
+name: "Gemma Scale-SWE converted Parquet metadata catalog (CPU)"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-scale-parquet-catalog.yml]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read converted Parquet shard catalog only
+        run: |
+          set -euo pipefail
+          python -m scripts.probe_scale_swe_parquet_catalog
+          echo NO_SOURCE_ROWS_NO_GOLD_PATCHES_NO_GPU=TRUE
