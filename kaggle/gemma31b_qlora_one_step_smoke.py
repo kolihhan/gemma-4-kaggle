@@ -77,7 +77,7 @@ def main()->dict:
         compat=ensure_peft_dependency_compatible()
         import torch
         from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-        from transformers import AutoModelForCausalLM,AutoProcessor,BitsAndBytesConfig
+        from transformers import Gemma4ForConditionalGeneration,AutoProcessor,BitsAndBytesConfig
         report["torchao_action"]=compat
         gpu_count=torch.cuda.device_count()
         report["visible_cuda_devices"]=gpu_count
@@ -94,7 +94,7 @@ def main()->dict:
                                  bnb_4bit_use_double_quant=True,
                                  bnb_4bit_compute_dtype=dtype,
                                  bnb_4bit_quant_storage=dtype)
-        model=AutoModelForCausalLM.from_pretrained(
+        model=Gemma4ForConditionalGeneration.from_pretrained(
             str(MODEL),local_files_only=True,quantization_config=quant,
             dtype=dtype,low_cpu_mem_usage=True,device_map="auto",
             max_memory={i:"20GiB" for i in range(gpu_count)})
