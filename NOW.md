@@ -1,3 +1,10 @@
+# 2026-11-14 — EXTERNAL PAIRED-43 CROSS-CHECK: PROMPT VERIFICATION ALONE HAS NO MEASURED LIFT
+
+- Public [Gemma 4 verification budget audit](https://github.com/velocitylabo/gemma4-agent-budget-audit) independently reports a 31B **paired 43 eligible tasks** fixed 6-min comparison: **17 vs 17** for prompt-only verify/retry vs baseline (exact McNemar p=1). Our own 31B frozen **2/4 vs 2/4** showed the same no-net-gain outcome. Different datasets/harness versions; cannot infer equivalence or rule out a different mechanism. Do not promote repeat-verify prompts or spend another official slot based on them. [Detailed evidence](docs/research/2026-11-14-reproduction-first-31b.md).
+- Authenticated best official Gemma remains **0.180**, ref 58183466. Proposed next scientific focus remains patch-semantic coverage / specification completeness using independent task evidence. **No new GPU, training or Kaggle submission** in this source review.
+
+---
+
 # 2026-11-14 16:27 MYT — 31B FOUR-TASK SPECIFICATION AUDIT, NO NEW GPU
 
 - Matched development results remain **2/4 vs 2/4**. Original public [FastAPI #14492](https://github.com/fastapi/fastapi/pull/14492) (license identifier docs/test) and [Rich #3518](https://github.com/Textualize/rich/pull/3518) (one-line Table.highlight inheritance) were solved. [FastAPI #15800](https://github.com/fastapi/fastapi/pull/15800) (large new frontend integration) and [Rich #4075](https://github.com/Textualize/rich/pull/4075) (empty Console.print(end=...) semantics) both failed. These are post-hoc public PR source facts; exact agent task texts and gold diffs were not exposed to future agent runs.
