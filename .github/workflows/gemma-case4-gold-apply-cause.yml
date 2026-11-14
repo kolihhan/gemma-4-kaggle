@@ -1,0 +1,27 @@
+name: "Gemma frozen case4 gold source-vs-fixture apply cause CPU"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-case4-gold-apply-cause.yml]
+permissions: {contents: read}
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Source metadata dependencies and static safety
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_replay_scale_swe_one_in_docker
+          python -m py_compile scripts/diagnose_scale_gold_case4_apply.py
+          python -m pip install -q --disable-pip-version-check 'pyarrow>=20,<24' 'fsspec>=2025.3,<2027' 'aiohttp>=3.10,<4'
+          echo GEMMA_CASE4_GOLD_DIAGNOSTIC_SYNTHETIC_TESTS=PASS
+      - name: Compare reference and model patch application on clean source vs installed F2P
+        run: |
+          set -euo pipefail
+          python -m scripts.diagnose_scale_gold_case4_apply
+          echo NO_TEST_EXECUTION_NO_GPU_NO_TRAINING_NO_OFFICIAL_SUBMISSION=TRUE
