@@ -92,8 +92,32 @@ def run(limit: int = 4, length: int = 6) -> dict:
     if not isinstance(splits, list):
         raise ValueError("missing splits")
     selected = pick_splits(splits, limit)
+    catalog = {
+        "split_count": len(splits),
+        "split_api_keys": sorted(splits_payload.keys()),
+        "split_pending_count": len(splits_payload.get("pending", []))
+            if isinstance(splits_payload.get("pending"), list) else None,
+        "split_failed_count": len(splits_payload.get("failed", []))
+            if isinstance(splits_payload.get("failed"), list) else None,
+        "parquet_file_count": None,
+        "parquet_api_keys": [],
+    }
     if not selected:
-        raise ValueError("no data-viewer train splits")
+        # Some very large Hub datasets expose Parquet shard indexes but no
+        # dataset-viewer rows; that is not a zero-success finding.
+        try:
+            parquet = get_json("/parquet", {"dataset": DATASET})
+            catalog["parquet_api_keys"] = sorted(parquet.keys())
+            files = parquet.get("parquet_files", [])
+            catalog["parquet_file_count"] = len(files) if isinstance(files, list) else None
+            if isinstance(files, list):
+                selected = pick_splits([
+                    {"config": f.get("config"), "split": f.get("split"),
+                     "num_examples": f.get("num_rows", 1)}
+                    for f in files if isinstance(f, dict)
+                ], limit)
+        except (OSError, ValueError, KeyError):
+            catalog["parquet_metadata_accessible"] = False
     probes = []
     for item in selected:
         entry = {"config": item["config"], "split": item["split"]}
@@ -122,6 +146,9 @@ def run(limit: int = 4, length: int = 6) -> dict:
         "dataset": DATASET,
         "scope": "PUBLIC_VIEWER_METADATA_ONLY_NONRANDOM_FIRST_ROWS",
         "configs_selected": len(selected),
+        "catalog": catalog,
+        "catalog_state": "viewer_splits" if catalog["split_count"]
+            else "parquet_fallback" if selected else "no_previewable_splits",
         "rows_total_in_sample": sum(p["sampled"] for p in probes),
         "probes": probes,
         "filters": {"allowed_repo_license": sorted(ALLOWED_LICENSES),
