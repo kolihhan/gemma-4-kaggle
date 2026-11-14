@@ -1,0 +1,26 @@
+name: "Gemma SWE verified source join - CPU only"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-swe-source-join-cpu.yml]
+permissions: {contents: read}
+jobs:
+  join:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Test provenance join with synthetic data only
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_probe_external_source_join
+          python -m py_compile scripts/probe_external_source_join.py
+          echo GEMMA_REPLAY_JOIN_UNIT_TESTS=PASS
+      - name: Match eight real NVIDIA success task IDs to Nebius source snapshots via filtered public API
+        run: |
+          set -euo pipefail
+          python -m scripts.probe_external_source_join
+          echo GEMMA_PUBLIC_JOIN_NO_RAW_TASK_GOLD_PATCHES_OR_SNAPSHOTS_SAVED=TRUE
