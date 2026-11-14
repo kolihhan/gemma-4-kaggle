@@ -73,6 +73,31 @@ ADK_NATIVE_TOOLS = frozenset({
 })
 
 
+def public_tool_signatures(row: dict) -> list[dict]:
+    """Only bounded tool names and JSON argument key names, no descriptions/values."""
+    result = set()
+    for member in row.get("tools", [])[:64] if isinstance(row.get("tools"), list) else ():
+        try:
+            item = json.loads(member) if isinstance(member, str) else member
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(item, dict):
+            continue
+        fn = item.get("function", item)
+        if not isinstance(fn, dict):
+            continue
+        name = fn.get("name")
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]{0,63}", name):
+            continue
+        param = fn.get("parameters", {})
+        props = param.get("properties", {}) if isinstance(param, dict) else {}
+        keys = tuple(sorted(str(k) for k in props if
+                            isinstance(k, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", k)))[:12]
+        result.add((name, keys))
+    return [{"name": name, "parameter_names": list(keys)}
+            for name, keys in sorted(result)[:20]]
+
+
 def native_tool_schema_count(row: dict) -> tuple[int, int]:
     """Count only exact declared tool-name overlaps, never tool definitions."""
     tools = row.get("tools")
@@ -183,6 +208,7 @@ def run(limit: int = 4, length: int = 6) -> dict:
             passing_ids: set[str] = set()
             declared_tools = native_overlap = 0
             passing_with_catalog = passing_with_adk_native_schema = 0
+            tool_signatures = set()
             for record in rows:
                 row = record.get("row", {}) if isinstance(record, dict) else {}
                 gate = sample_grade(row)
@@ -197,6 +223,8 @@ def run(limit: int = 4, length: int = 6) -> dict:
                     passing_ids.add(str(row["instance_id"]) if row.get("instance_id")
                                     else str(row["trajectory_id"]))
                     count, overlap = native_tool_schema_count(row)
+                    for sig in public_tool_signatures(row):
+                        tool_signatures.add((sig["name"], tuple(sig["parameter_names"])))
                     declared_tools += count
                     native_overlap += overlap
                     passing_with_catalog += int(count > 0)
@@ -214,6 +242,9 @@ def run(limit: int = 4, length: int = 6) -> dict:
                           "passing_with_any_exact_adk_tool_schema": passing_with_adk_native_schema,
                           "declared_catalog_tool_names_total": declared_tools,
                           "exact_adk_tool_schema_names_total": native_overlap,
+                          "public_tool_signatures": [
+                              {"name": n, "parameter_names": list(k)}
+                              for n, k in sorted(tool_signatures)[:20]],
                           "status": "sampled"})
         except (OSError, ValueError, KeyError) as exc:
             # No private exception text or traceback: one small failure per config.
