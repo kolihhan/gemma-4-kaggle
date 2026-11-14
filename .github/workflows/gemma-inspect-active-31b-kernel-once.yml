@@ -1,0 +1,56 @@
+name: "Gemma read-only private Kaggle 31B smoke state check"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-inspect-active-31b-kernel-once.yml]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      TARGET: kolihhan/gemma31b-qlora-one-step-43605569270
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read PRIVATE Kaggle kernel terminal state only, NO GPU or new execution
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install --disable-pip-version-check -q kaggle==2.2.5 six==1.17.0
+          status="$(kaggle kernels status "$TARGET" 2>&1 || true)"
+          if [[ "$status" == *KernelWorkerStatus.COMPLETE* ]]; then
+            safe=COMPLETE
+          elif [[ "$status" == *KernelWorkerStatus.ERROR* || "$status" == *KernelWorkerStatus.FAILED* ]]; then
+            safe=ERROR
+          elif [[ "$status" == *KernelWorkerStatus.RUNNING* ]]; then
+            safe=RUNNING
+          elif [[ "$status" == *KernelWorkerStatus.QUEUED* || "$status" == *KernelWorkerStatus.PENDING* ]]; then
+            safe=QUEUED
+          else
+            safe=UNKNOWN
+          fi
+          echo "GEMMA_31B_PRIVATE_KERNEL_READONLY_STATE=$safe"
+          echo 'GEMMA_31B_PRIVATE_KERNEL_NEW_RUNS=0'
+          mkdir -p /tmp/gemma-inspect-only
+          kaggle kernels output "$TARGET" -p /tmp/gemma-inspect-only \
+            --file-pattern '^gemma31b-lora-smoke-result[.]json$' -o \
+            >/tmp/gemma-read-only-download.log 2>&1 || true
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('/tmp/gemma-inspect-only/gemma31b-lora-smoke-result.json')
+          if not p.exists():
+              print('GEMMA_31B_PRIVATE_KERNEL_REPORT=NOT_YET_PRESENT')
+          else:
+              r=json.loads(p.read_text())
+              fields={'status','failure_phase','failure_type','visible_cuda_devices','model_class',
+                      'placement','trainable_parameter_count','trainable_tensors_with_gradient',
+                      'adapter_bytes','finite_loss','real_task_training_rows'}
+              print('GEMMA_31B_PRIVATE_KERNEL_REPORT='+json.dumps({
+                  k:v for k,v in r.items() if k in fields
+              },sort_keys=True))
+          PY
