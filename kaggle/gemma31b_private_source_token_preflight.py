@@ -18,10 +18,45 @@ PROMPT_BANDS=(1024,2048,4096,8192,16384)
 EXPECTED={"train.jsonl":16,"holdout.jsonl":3}
 
 
-def load_rows(name:str)->list[dict]:
+def find_private_data_dir()->Path:
+    """Resolve Kaggle flat vs owner/datasets/versioned mount layouts safely."""
+    root=Path("/kaggle/input")
+    if not root.is_dir():
+        raise RuntimeError("phase_no_kaggle_input_root")
+    candidates=[
+      DATASET,
+      root/"datasets"/"kolihhan"/"gemma31b-verified-repair-sft-v0",
+      root/"datasets"/"kolihhan"/"gemma31b-verified-repair-sft-v0"/"versions"/"1",
+      root/"kolihhan"/"gemma31b-verified-repair-sft-v0",
+    ]
+    # Inspect only the expected own source contract, never print other
+    # dataset paths or traverse external symlinks.
+    for p in root.rglob("source_contract.json"):
+        candidates.append(p.parent)
+        if len(candidates)>50:
+            raise RuntimeError("phase_private_mount_listing_too_large")
+    valid=[]
+    for candidate in candidates:
+        if not all((candidate/name).is_file() for name in ("train.jsonl","holdout.jsonl","source_contract.json")):
+            continue
+        try:
+            contract=json.loads((candidate/"source_contract.json").read_text(encoding="utf-8"))
+        except (OSError,ValueError):
+            continue
+        if (contract.get("schema_version")=="gemma31b-source-patch-completion-v0" and
+            contract.get("train_rows")==16 and contract.get("holdout_rows")==3 and
+            contract.get("excluded_gold_patch") is True):
+            valid.append(candidate.resolve())
+    distinct=set(valid)
+    if len(distinct)!=1:
+        raise RuntimeError("phase_private_dataset_contract_not_found_or_ambiguous")
+    return next(iter(distinct))
+
+
+def load_rows(name:str,source_dir:Path)->list[dict]:
     if name not in EXPECTED:
         raise ValueError("unsupported split")
-    f=DATASET/name
+    f=source_dir/name
     if not f.is_file():
         raise FileNotFoundError("private_source_dataset_not_mounted")
     rows=[json.loads(l) for l in f.read_text(encoding="utf-8").splitlines() if l.strip()]
@@ -65,8 +100,9 @@ def lengths(tokenizer, rows:list[dict])->list[dict]:
 
 def run()->dict:
     try:
-        train=load_rows("train.jsonl")
-        held=load_rows("holdout.jsonl")
+        data_root=find_private_data_dir()
+        train=load_rows("train.jsonl",data_root)
+        held=load_rows("holdout.jsonl",data_root)
     except FileNotFoundError:
         raise RuntimeError("phase_private_dataset_mount_missing") from None
     if len({r["id_hash"] for r in train+held})!=19:
