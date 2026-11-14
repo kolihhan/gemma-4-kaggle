@@ -1,0 +1,56 @@
+name: Gemma 31B semantic surface candidate CPU evidence (NO GPU)
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-semantic-surface-cpu-20261114.yml]
+permissions: {contents: read}
+jobs:
+  candidate_cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Verify actual git diff AST observation and source syntax
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_semantic_surface_31b
+          python -m py_compile experiments/semantic-surface-v0/skill/scripts/surface.py scripts/build_semantic_surface_31b.py
+          echo GEMMA_SEMANTIC_SURFACE_REAL_GIT_DIFF_CPU=PASS
+      - name: Build frozen 0.180 source candidate with one real Skill, no new training
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/gemma-surface-source
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p /tmp/gemma-surface-source --file-pattern '^submission[.]zip$' -o >/tmp/gemma-surface-source.log 2>&1
+          python -m scripts.build_semantic_surface_31b --source-zip /tmp/gemma-surface-source/submission.zip --out /tmp/gemma-surface-candidate.zip
+          python - <<'PY'
+          import hashlib,zipfile
+          from pathlib import Path
+          from scripts.build_toolcap60_timeout_recovery import build, files_for_candidate
+          from scripts.build_semantic_surface_31b import candidate_files, build_candidate, RULE
+          from scripts.render_patch_checkpoint_31b import CHAMPION_SHA
+          src=Path('/tmp/gemma-surface-source/submission.zip').read_bytes()
+          assert hashlib.sha256(build(src)).hexdigest()==CHAMPION_SHA
+          base=files_for_candidate(src)
+          candidate=candidate_files(src)
+          assert set(candidate)-set(base)=={
+              'skills/semantic-surface/SKILL.md','skills/semantic-surface/scripts/surface.py'}
+          assert [name for name in base if base[name]!=candidate[name]]==[
+              'agent.yaml','prompts/system.md']
+          assert 'gemma-4-31b-it-qat-w4a16-ct' in candidate['agent.yaml']
+          assert candidate['configs/sampling.yaml']==base['configs/sampling.yaml']
+          assert candidate['eval_config.yaml']==base['eval_config.yaml']
+          assert RULE in candidate['prompts/system.md']
+          blob=Path('/tmp/gemma-surface-candidate.zip').read_bytes()
+          assert blob==build_candidate(src)
+          with zipfile.ZipFile('/tmp/gemma-surface-candidate.zip') as z:
+              assert z.testzip() is None and set(z.namelist())==set(candidate)
+          print('GEMMA_SURFACE_INFERENCE_CANDIDATE_CPU_READY='+hashlib.sha256(blob).hexdigest())
+          print('NO_GPU_NO_TRAINING_NO_OFFICIAL_SUBMISSION=TRUE')
+          PY
