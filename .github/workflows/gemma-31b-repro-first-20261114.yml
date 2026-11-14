@@ -1,0 +1,86 @@
+name: Gemma 31B reproduce-then-edit paired test (private)
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-31b-repro-first-20261114.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-31b-repro-first-20261114
+  cancel-in-progress: false
+jobs:
+  paired:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-repro-first-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Render frozen arms from the pinned source and verify GPU quota
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python -m unittest -q tests.test_render_public_prompt_vs_v2_paired_31b tests.test_render_earlyedit_v2_paired_31b tests.test_build_toolcap60_timeout_recovery
+          mkdir -p /tmp/gemma-repro-input
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 \
+            -p /tmp/gemma-repro-input --file-pattern '^submission[.]zip$' -o >/tmp/gemma-repro-fetch.log 2>&1
+          python -m scripts.render_repro_first_31b --source-zip /tmp/gemma-repro-input/submission.zip \
+            --out /tmp/gemma-repro-kernel --kernel-ref "$KERNEL_REF"
+          kaggle quota --format json >/tmp/gemma-repro-quota.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          records = json.loads(Path('/tmp/gemma-repro-quota.json').read_text())
+          [hours] = [float(x['remaining'].rstrip('h')) for x in records if x['resource'] == 'GPU']
+          print('GEMMA_GPU_HOURS_REMAINING=' + str(hours))
+          if hours < 1.5:
+              raise SystemExit('GPU time remaining is below the notebook cap')
+          PY
+      - name: Run the paired experiment without an official submission
+        run: |
+          set -euo pipefail
+          if ! kaggle kernels status "$KERNEL_REF" >/tmp/gemma-repro-current.log 2>&1; then
+            rc=0
+            kaggle kernels push -p /tmp/gemma-repro-kernel --accelerator NvidiaL4 -t 5400 \
+              >/tmp/gemma-repro-push.log 2>&1 || rc=$?
+            python scripts/check_capacity_31b_push_v0.py --log /tmp/gemma-repro-push.log --client-exit-code "$rc"
+          fi
+          echo "REPRO_FIRST_KERNEL=$KERNEL_REF"
+          for i in $(seq 1 240); do
+            status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            case "$status" in
+              *KernelWorkerStatus.COMPLETE*) exit 0 ;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.CANCELLED*|*KernelWorkerStatus.FAILED*)
+                echo "REPRO_FIRST_FAILED=$status"; exit 1 ;;
+            esac
+            if [ "$i" -eq 1 ] || [ $((i % 20)) -eq 0 ]; then echo "REPRO_FIRST_STATUS=$status"; fi
+            sleep 25
+          done
+          exit 1
+      - name: Read the aggregate official-grader outcomes
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gemma-repro-safe
+          kaggle kernels output "$KERNEL_REF" -p /tmp/gemma-repro-safe \
+            --file-pattern '^repro_first_summary[.]json$' -o >/tmp/gemma-repro-read.log 2>&1
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.render_repro_first_31b import ARMS, TASKS, VERSION, RESULT
+          record = json.loads((Path('/tmp/gemma-repro-safe') / RESULT).read_text())
+          assert record['status'] == 'completed' and record['version'] == VERSION
+          assert tuple(record['selected_public_dev_ids']) == TASKS
+          assert record['total_evaluations'] == 2 * len(TASKS)
+          assert record['treatment_zip_sha256'] == '8d25aafe6e11fc6045243d23fb2ab80fedd583feaa095a0e2799e338897052c0'
+          rows = record['results']
+          assert len(rows) == len(ARMS) * len(TASKS)
+          assert {(r['arm'], r['instance_id']) for r in rows} == {(a, t) for a in ARMS for t in TASKS}
+          fields = ('arm', 'instance_id', 'status', 'resolved', 'test_exit_code',
+                    'has_patch', 'tool_calls', 'duration_seconds', 'checks')
+          safe = [{k: r.get(k) for k in fields} for r in rows]
+          print('REPRO_FIRST_VERIFIED=' + json.dumps({'results': safe, 'scores': record['score_by_arm']}, sort_keys=True))
+          PY

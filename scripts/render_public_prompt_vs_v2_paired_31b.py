@@ -82,6 +82,12 @@ def render_runtime(template: str, source_zip: bytes, public: dict[str, str], pla
     if "max_time_minutes: 5" not in control["eval_config.yaml"]:
         raise ValueError("time cap mismatch")
 
+    return render_pair(template, control, treatment, plan)
+
+
+def render_pair(template: str, control: dict, treatment: dict, plan: dict) -> str:
+    """Render the common isolated evaluator for caller-validated arm files."""
+
     # The original E4B reference runtime does not import hashlib; the
     # frozen ID-only selector uses it. Inject only the standard-library import.
     text = replace_one(template, "import json\n", "import json\nimport hashlib\n",
