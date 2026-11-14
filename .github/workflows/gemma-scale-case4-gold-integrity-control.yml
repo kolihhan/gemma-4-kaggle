@@ -1,0 +1,27 @@
+name: "Gemma Scale-SWE frozen case 4 gold integrity control only"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-scale-case4-gold-integrity-control.yml]
+permissions: {contents: read}
+jobs:
+  source_integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 26
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: F2P test integrity static safety and Parquet dependencies
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_replay_scale_swe_one_in_docker
+          python -m pip install -q --disable-pip-version-check 'pyarrow>=20,<24' 'fsspec>=2025.3,<2027' 'aiohttp>=3.10,<4'
+          echo GEMMA_CASE4_GOLD_CONTROL_SAFETY=PASS
+      - name: Run case 4 base failing test vs upstream gold fix, never model input
+        run: |
+          set -euo pipefail
+          python -m scripts.replay_scale_swe_one_in_docker --case-index 4 --gold-control
+          echo GEMMA_CASE4_GOLD_USED_FOR_BENCHMARK_INTEGRITY_ONLY=TRUE
+          echo NO_GPU_NO_TRAINING_NO_COMPETITION_SUBMISSION=TRUE
