@@ -1,0 +1,31 @@
+name: "Gemma new frozen Scale-SWE 8x independent Docker F2P (NO TRAINING)"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-next-eight-scale-f2p.yml]
+permissions: {contents: read}
+jobs:
+  replay:
+    strategy:
+      fail-fast: false
+      matrix:
+        case_index: [0, 1, 2, 3, 4, 5, 6, 7]
+    runs-on: ubuntu-latest
+    timeout-minutes: 27
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Freeze new source IDs, test exact selection and Docker F2P safety
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_freeze_next_scale_swe_cohort tests.test_replay_scale_swe_one_in_docker
+          python -m py_compile scripts/replay_scale_swe_one_in_docker.py scripts/freeze_next_scale_swe_cohort.py
+          python -m pip install -q --disable-pip-version-check 'pyarrow>=20,<24' 'fsspec>=2025.3,<2027' 'aiohttp>=3.10,<4'
+          echo GEMMA_SECOND_EIGHT_FIXED_COHORT_SAFETY=PASS
+      - name: Source cases new8 (first eight successes from public rows 18-29), offline Docker
+        run: |
+          set -euo pipefail
+          python -m scripts.replay_scale_swe_one_in_docker --source-cohort next18 --case-index ${{ matrix.case_index }}
+          echo GEMMA_NEW_EIGHT_NO_GOLD_NO_ADAPTER_NO_GPU_NO_COMPETITION_SUBMISSION=TRUE
