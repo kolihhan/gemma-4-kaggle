@@ -1,7 +1,8 @@
 """Synthetic data-contract tests; external raw trajectories never enter test output."""
 import unittest
+from unittest.mock import patch
 
-from scripts.audit_open_swe_traces_metadata import pick_splits, sample_grade
+from scripts.audit_open_swe_traces_metadata import pick_splits, sample_grade, run
 
 
 def row(**kwargs):
@@ -35,6 +36,24 @@ class GateTests(unittest.TestCase):
         self.assertEqual(sample_grade(row(trajectory_id=None)), "missing_trajectory_identity")
         self.assertEqual(sample_grade(row(model_patch={"patch": "diff --git a/ok b/ok"})),
                          "candidate_for_private_deep_audit")
+
+
+    def test_no_viewer_split_degrades_to_parquet_metadata_not_fake_zero(self):
+        def mock(source, params):
+            if source == "/splits":
+                return {"splits": [], "pending": [{"config": "big"}]}
+            if source == "/parquet":
+                return {"parquet_files": [{"config": "big", "split": "train",
+                                           "num_rows": 1000, "url": "https://example.invalid/large.parquet"}]}
+            if source == "/rows":
+                return {"rows": [{"row": row(resolved=1)}]}
+            raise AssertionError("unexpected source")
+        with patch("scripts.audit_open_swe_traces_metadata.get_json", side_effect=mock):
+            summary = run(1, 1)
+        self.assertEqual(summary["catalog_state"], "parquet_fallback")
+        self.assertEqual(summary["rows_total_in_sample"], 1)
+        self.assertEqual(summary["probes"][0]["quality_gate_counts"]["candidate_for_private_deep_audit"], 1)
+        self.assertFalse(summary["full_dataset_scanned"])
 
     def test_one_per_train_config_no_future_label_dependence(self):
         splits=[
