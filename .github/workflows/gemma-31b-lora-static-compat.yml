@@ -1,0 +1,22 @@
+name: "Gemma exact 31B train QAT vs CT inference PEFT adapter static config"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-31b-lora-static-compat.yml]
+permissions: {contents: read}
+jobs:
+  static_configs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Local exact-model config read-only contract and upstream small config probe
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_probe_gemma31b_adapter_compat
+          python -m scripts.probe_gemma31b_adapter_compat
+          echo GEMMA_31B_LORA_STATIC_ONLY_NO_WEIGHT_DOWNLOAD=TRUE
+          echo NO_GPU_NO_TRAINING_NO_OFFICIAL_SUBMISSION=TRUE
