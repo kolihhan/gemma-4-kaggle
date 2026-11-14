@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 import json
+import re
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -68,18 +69,31 @@ def sample_grade(row: dict) -> str:
 
 def pick_splits(splits: list, limit: int = 4) -> list[dict]:
     """Choose one small viewer probe from distinct configs, not a random sample."""
+    # Open-SWE-Traces uses versioned configs (v2.0) with AGENT-named
+    # splits (openhands/sweagent/etc.), not a conventional train split.
+    # Prefer the latest available version to avoid mixing duplicate
+    # trajectories across dataset releases. No hidden/test split sampled.
+    versions = sorted(
+        {str(x.get("config")) for x in splits if isinstance(x, dict)
+         and re.match(r"^v[0-9]+\\.[0-9]+$", str(x.get("config", "")))},
+        key=lambda s: tuple(int(p) for p in s[1:].split(".")),
+        reverse=True,
+    )
+    if not versions:
+        return []
+    version = versions[0]
     choices = []
     seen = set()
     for item in splits:
-        if not isinstance(item, dict) or not item.get("config") or not item.get("split"):
+        if not isinstance(item, dict) or not item.get("split"):
             continue
-        config = str(item["config"])
+        config = str(item.get("config"))
         split = str(item["split"])
-        if config in seen or (item.get("num_examples") or 0) == 0:
+        if config != version or split in seen or item.get("num_examples") == 0:
             continue
-        if "train" not in split.lower():
+        if any(bad in split.lower() for bad in ("test", "holdout", "validation")):
             continue
-        seen.add(config)
+        seen.add(split)
         choices.append({"config": config, "split": split})
         if len(choices) == limit:
             break
