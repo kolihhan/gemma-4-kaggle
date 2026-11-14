@@ -1,0 +1,24 @@
+name: "Gemma Scale-SWE two source Docker images size-only probe"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-scale-swe-docker-manifests.yml]
+permissions: {contents: read}
+jobs:
+  image_probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Prepare public dataset column access
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q 'pyarrow>=20,<24' 'fsspec>=2025.3,<2027' 'aiohttp>=3.10,<4'
+      - name: Public Docker manifest availability and compressed size, no pull
+        run: |
+          set -euo pipefail
+          python -m scripts.probe_scale_swe_docker_images
+          echo GEMMA_SOURCE_DOCKER_NO_IMAGE_PULLED_NO_CONTAINER_RUN=TRUE
