@@ -95,7 +95,7 @@ def run()->dict:
       "model_tokenizer":"Gemma 4 31B QAT unquantized v2",
       "split_reports":out,
       "repository_overlap":0,
-      "source_completion_labels_masked":True,
+      "completion_only_masking_not_yet_run":True,
       "all_source_train_patches_independently_F2P":True,
       "raw_task_text_logged":False,"reference_patch_read":False,
       "model_tensors_loaded":False,"GPU_used":False,"training":False,
