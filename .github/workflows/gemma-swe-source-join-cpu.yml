@@ -24,3 +24,4 @@ jobs:
           set -euo pipefail
           python -m scripts.probe_external_source_join
           echo GEMMA_PUBLIC_JOIN_NO_RAW_TASK_GOLD_PATCHES_OR_SNAPSHOTS_SAVED=TRUE
+          echo GEMMA_PUBLIC_SOURCE_FILTER_HTTP_CLASS_DIAG=TRUE
