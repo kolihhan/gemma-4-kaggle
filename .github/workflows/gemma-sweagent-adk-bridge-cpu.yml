@@ -25,3 +25,4 @@ jobs:
           python -m scripts.bridge_sweagent_adk
           echo GEMMA_SWE_ADK_NO_TRAINING_DATA_EXPORT=TRUE
           echo GEMMA_SWE_ADK_FIXED_TWOSLICE_FETCH=TRUE
+          echo GEMMA_SWE_ADK_SOURCE_PATH_CLASSES_ONLY=TRUE
