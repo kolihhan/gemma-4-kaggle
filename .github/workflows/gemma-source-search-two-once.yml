@@ -1,0 +1,26 @@
+name: "Gemma external source join - alternate HF search TWO ONLY"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-source-search-two-once.yml]
+permissions: {contents: read}
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Synthetic source join and partial-index tests
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_probe_external_join_search_two
+          python -m py_compile scripts/probe_external_join_search_two.py
+          echo GEMMA_SOURCE_SEARCH_TWO_TESTS=PASS
+      - name: Search two fixed external source IDs without logging data
+        run: |
+          set -euo pipefail
+          python -m scripts.probe_external_join_search_two
+          echo GEMMA_SOURCE_SEARCH_TWO_NO_RAW_NO_GPU_NO_SUBMISSION=TRUE
