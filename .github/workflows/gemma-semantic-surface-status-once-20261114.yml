@@ -1,0 +1,35 @@
+name: Gemma semantic-surface one-shot Kaggle status READ ONLY
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-semantic-surface-status-once-20261114.yml]
+permissions: {contents: read}
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read live Kaggle private kernel state, do not retrigger work
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          output="$(kaggle kernels status kolihhan/gemma4-semantic-surface-43585937791 2>&1)" || {
+            echo GEMMA_SURFACE_PRIVATE_KERNEL_STATE=NOT_ACCESSIBLE
+            exit 1
+          }
+          case "$output" in
+            *KernelWorkerStatus.COMPLETE*) state=COMPLETE ;;
+            *KernelWorkerStatus.RUNNING*) state=RUNNING ;;
+            *KernelWorkerStatus.QUEUED*) state=QUEUED ;;
+            *KernelWorkerStatus.ERROR*) state=ERROR ;;
+            *KernelWorkerStatus.FAILED*) state=FAILED ;;
+            *KernelWorkerStatus.CANCELLED*) state=CANCELLED ;;
+            *) state=UNKNOWN ;;
+          esac
+          echo GEMMA_SURFACE_PRIVATE_KERNEL_STATE="$state"
+          echo NO_GPU_NO_MODEL_INFERENCE_NO_TRAINING_NO_SUBMISSION=TRUE
