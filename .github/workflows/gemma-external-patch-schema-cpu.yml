@@ -1,0 +1,26 @@
+name: "Gemma successful external patch supervision - strict schema CPU"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-external-patch-schema-cpu.yml]
+permissions: {contents: read}
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Test minimal issue/patch schema on synthetic data; no raw exports
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_probe_external_patch_supervision
+          python -m py_compile scripts/probe_external_patch_supervision.py
+          echo GEMMA_PATCH_SCHEMA_SYNTHETIC_TESTS=PASS
+      - name: Bounded external data viewer sample, aggregate only
+        run: |
+          set -euo pipefail
+          python -m scripts.probe_external_patch_supervision
+          echo GEMMA_PATCH_SCHEMA_NO_RAW_EXTERNAL_DATA_EXPORT=TRUE
