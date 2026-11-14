@@ -1,7 +1,8 @@
 """Synthetic no-GPU unit contracts for 31B LoRA smoke."""
 import unittest
 from types import SimpleNamespace
-from kaggle.gemma31b_qlora_one_step_smoke import device_map_summary,TRAINING
+import inspect
+from kaggle.gemma31b_qlora_one_step_smoke import device_map_summary,TRAINING,main
 
 class QLoraSmokeTests(unittest.TestCase):
     def test_no_cpu_offload_is_falsifiable(self):
@@ -17,6 +18,11 @@ class QLoraSmokeTests(unittest.TestCase):
         ]:
             with self.assertRaises(RuntimeError):
                 device_map_summary(SimpleNamespace(hf_device_map=bad))
+
+    def test_exact_multimodal_model_load_class(self):
+        source=inspect.getsource(main)
+        self.assertIn("Gemma4ForConditionalGeneration.from_pretrained(",source)
+        self.assertNotIn("AutoModelForCausalLM",source)
 
     def test_one_step_and_lora_scope_bounded(self):
         self.assertEqual(TRAINING["training_steps"],1)
