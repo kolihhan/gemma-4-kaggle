@@ -38,3 +38,16 @@ Two separate CPU-only [Actions #43554709189](https://github.com/kolihhan/gemma-4
 - Harness mechanics: `submit_patch` does not debit the tool-call ceiling; `patch_submitted` exits the outer loop only when the current ADK turn ends, per the bundled `HARNESS_README.md`. This explains how multiple successful submission requests can be observed before session stop, but **does not prove** which model or framework behavior caused this instance's 25-call streak.
 
 **Decision:** do not submit or create a special-case retry/stop patch from this one failed task. The instruction-only treatment remains rejected at 2/4 vs 2/4. Structural turn-bound control is a possible *future* test only if it is expressible in the official declarative harness and a separate task/source-shift evaluation supports it. In the four-task result, neither graph removal nor a new test-first prompt has support as a broadly useful intervention.
+
+
+## Four original public PRs and issue-link integrity — post-hoc 2026-11-14
+
+Previously frozen 31B paired task outcomes remain champion **2/4** and reproduce-first **2/4**, solving the same two IDs. Public source cross-checks after grading show:
+- Solved `fastapi_14492`: [FastAPI #14492](https://github.com/fastapi/fastapi/pull/14492), corrects the Apache 2.0 license identifier from MIT to Apache-2.0 (plus expected docs test).
+- Solved `rich_3518`: [Rich #3518](https://github.com/Textualize/rich/pull/3518), propagates `Table.highlight` when auto-adding Column in `add_row` (plus regression test).
+- Failed `fastapi_15800`: [FastAPI #15800](https://github.com/fastapi/fastapi/pull/15800), a new `app.frontend` and `router.frontend` feature spanning routing precedence, fallback modes, directory behavior, docs and tests.
+- Failed `rich_4075`: [Rich #4075](https://github.com/Textualize/rich/pull/4075), a small but semantic empty `Console.print(end=...)` fix, disproving the simple assertion that *only* large changes fail.
+
+**Source reliability surprise:** the original Rich PR #4075 body says `Fixes #3740`, but [Rich issue #3740](https://github.com/Textualize/rich/issues/3740) concerns Python 3.14 beta `test_assemble_meta` Style/Span equality, not the empty print behavior. Blindly following PR issue links can retrieve unrelated context. The exact benchmark task statement's link availability was **not** checked, so this is a warning about an external-source repair proposal, **not** a proven cause of this particular model failure. The public reference diffs were reviewed only after grading; they must never feed into scored agent prompts.
+
+**Verdict:** 4 task outcomes + post-hoc public source facts support distinguishing self-contained edits, wide feature semantics and ambiguous source context. They do not justify a prompt-only change, dynamic web link retrieval in an offline environment, another GPU run, or an official submission. No novelty/generality inference.
