@@ -23,7 +23,7 @@ from scripts.join_scale_swe_parquet_eight import (
 MAX_REPO_BYTES=900_000_000
 
 
-def fetch_nvidia_fixed_two() -> dict:
+def fetch_nvidia_fixed_eight() -> dict:
     # Read each fixed six-row NVIDIA viewer page only ONCE.
     eligible = []
     for offset in (6, 12):
@@ -48,7 +48,13 @@ def fetch_nvidia_fixed_two() -> dict:
             })
     if len(eligible) != 8 or len({r["instance_id"] for r in eligible}) != 8:
         raise ValueError("frozen eight-task denominator drift")
-    return {r["instance_id"]: r for r in eligible[:2]}
+    return {r["instance_id"]: r for r in eligible}
+
+
+def fetch_nvidia_fixed_two() -> dict:
+    """Frozen first two, maintaining the previously tested sample contract."""
+    whole=fetch_nvidia_fixed_eight()
+    return dict(list(whole.items())[:2])
 
 def get_scale_match(rows:dict)->dict:
     import fsspec
