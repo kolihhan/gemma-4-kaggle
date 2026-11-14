@@ -1,0 +1,139 @@
+name: Gemma 31B semantic-surface first real paired GPU (NO submit)
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-semantic-surface-private-one-20261114.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-semantic-surface-private-one-20261114
+  cancel-in-progress: false
+jobs:
+  paired:
+    runs-on: ubuntu-latest
+    timeout-minutes: 167
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-semantic-surface-43585937791
+      ROOT_DIR: /tmp/gemma-surface-pilot-1114
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Frozen exact-scored champion and code-surface CPU gates
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m unittest -q tests.test_semantic_surface_31b tests.test_render_semantic_surface_31b
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          mkdir -p "$ROOT_DIR/source"
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 \
+            -p "$ROOT_DIR/source" --file-pattern '^submission[.]zip$' -o \
+            >/tmp/gemma-surface-source-fetch.log 2>&1
+          python -m scripts.render_semantic_surface_31b \
+            --source-zip "$ROOT_DIR/source/submission.zip" \
+            --out "$ROOT_DIR/kernel" --kernel-ref "$KERNEL_REF"
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          from scripts.build_toolcap60_timeout_recovery import build
+          from scripts.build_semantic_surface_31b import build_candidate
+          from scripts.render_patch_checkpoint_31b import CHAMPION_SHA
+          from scripts.render_semantic_surface_31b import VERSION, ARMS
+          base=Path(os.environ["ROOT_DIR"])
+          original=(base/"source/submission.zip").read_bytes()
+          assert hashlib.sha256(build(original)).hexdigest()==CHAMPION_SHA
+          assert hashlib.sha256(build_candidate(original)).hexdigest()=="b705301954c8f56a39644b3bde1d24da1213615bf07dac4d2710b1c62251bc69"
+          meta=json.loads((base/"kernel/kernel-metadata.json").read_text())
+          assert meta["id"]==os.environ["KERNEL_REF"] and meta["is_private"] is True
+          assert meta["enable_internet"] is False and meta["competition_sources"]==["gemma-4-developer-agent"]
+          assert len(meta["model_sources"])==1 and "31b" in meta["model_sources"][0]
+          print("GEMMA_SEMANTIC_FROZEN_PRIVATE_SOURCE_GATE=PASS",flush=True)
+          PY
+          kaggle quota --format json > "$ROOT_DIR/quota.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads((Path(os.environ["ROOT_DIR"])/"quota.json").read_text())
+          [h]=[float(str(x["remaining"]).rstrip("h")) for x in r if x["resource"]=="GPU"]
+          print("GEMMA_SEMANTIC_GPU_HOURS="+str(h),flush=True)
+          if h<2.0:raise SystemExit("STOP_NO_GPU_BUDGET_FOR_REAL_PAIRED_31B")
+          PY
+      - name: One private L4x4 kernel, no competition submission
+        run: |
+          set -euo pipefail
+          if ! kaggle kernels status "$KERNEL_REF" >/tmp/gemma-semantic-existing.log 2>&1; then
+            rc=0
+            kaggle kernels push -p "$ROOT_DIR/kernel" --accelerator NvidiaL4 -t 7800 \
+              >/tmp/gemma-semantic-push.log 2>&1 || rc=$?
+            python scripts/check_capacity_31b_push_v0.py --log /tmp/gemma-semantic-push.log --client-exit-code "$rc"
+          fi
+          echo GEMMA_SEMANTIC_PRIVATE_KERNEL="$KERNEL_REF"
+          for i in $(seq 1 230); do
+            status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            case "$status" in
+              *KernelWorkerStatus.COMPLETE*)
+                echo GEMMA_SEMANTIC_PRIVATE_TERMINAL=COMPLETE
+                exit 0 ;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.CANCELLED*|*KernelWorkerStatus.FAILED*)
+                echo GEMMA_SEMANTIC_PRIVATE_TERMINAL=ERROR
+                exit 1 ;;
+            esac
+            if [ "$i" -eq 1 ] || [ $((i%15)) -eq 0 ]; then
+              echo GEMMA_SEMANTIC_PRIVATE_POLL="$i"
+            fi
+            sleep 35
+          done
+          echo GEMMA_SEMANTIC_PRIVATE_TERMINAL=PENDING_AT_GITHUB_TIMEOUT
+          exit 1
+      - name: Retrieve only allowlisted task outcomes, tool invocation totals and timing
+        if: success()
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT_DIR/safe"
+          kaggle kernels output "$KERNEL_REF" -p "$ROOT_DIR/safe" \
+            --file-pattern '^semantic_surface_summary[.]json$' -o \
+            >/tmp/gemma-semantic-output.log 2>&1
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from scripts.render_semantic_surface_31b import VERSION, ARMS, RESULT, EXCLUDED
+          from scripts.render_patch_checkpoint_31b import CHAMPION_SHA
+          root=Path(os.environ["ROOT_DIR"])/"safe"
+          [p]=list(root.rglob(RESULT))
+          report=json.loads(p.read_text())
+          assert report["status"]=="completed" and report["version"]==VERSION
+          assert report["model"]=="gemma-4-31b-it-qat-w4a16-ct"
+          assert report["treatment_zip_sha256"]=="b705301954c8f56a39644b3bde1d24da1213615bf07dac4d2710b1c62251bc69"
+          ids=report["selected_public_dev_ids"]
+          assert len(ids)==4 and len(set(ids))==4 and not set(ids)&set(EXCLUDED)
+          assert sum(i.startswith("fastapi_") for i in ids)==2
+          assert sum(i.startswith("rich_") for i in ids)==2
+          rows=report["results"]
+          assert len(rows)==8 and report["total_evaluations"]==8
+          assert {(r["arm"],r["instance_id"]) for r in rows}=={(a,t) for a in ARMS for t in ids}
+          safe=[]
+          for r in rows:
+            assert r["status"] in ("completed","error")
+            sub={k:r.get(k) for k in ("arm","instance_id","status","resolved",
+                  "test_exit_code","has_patch","tool_calls","duration_seconds","surface")}
+            if r["status"]=="completed":
+              assert isinstance(sub["surface"],dict)
+              assert isinstance(sub["resolved"],bool)
+            safe.append(sub)
+          totals={a:sum(r["resolved"] is True for r in safe if r["arm"]==a) for a in ARMS}
+          scripts=sum((r.get("surface") or {}).get("script_calls") or 0
+                      for r in safe if r["arm"]==ARMS[1])
+          print("GEMMA_SEMANTIC_PAIRED_VERIFIED="+json.dumps({
+            "scope":"PUBLIC_DEV_FOUR_TASKS_NOT_HIDDEN_SCORE",
+            "ids":ids,"scores":totals,"records":safe,
+            "surface_skill_script_calls_treatment":scripts,
+            "net_resolved":totals[ARMS[1]]-totals[ARMS[0]],
+            "official_competition_submission":False,
+            "new_training":False},sort_keys=True),flush=True)
+          if totals[ARMS[1]]>totals[ARMS[0]] and scripts>0:
+            print("GEMMA_SEMANTIC_GATE=POSITIVE_NEEDS_DISJOINT_CONFIRMATION")
+          else:
+            print("GEMMA_SEMANTIC_GATE=REJECT_OR_INSUFFICIENT_UPTAKE")
+          PY
+          echo NO_TRAINING_NO_OFFICIAL_SUBMISSION=TRUE
