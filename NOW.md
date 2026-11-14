@@ -1,3 +1,10 @@
+# 2026-11-14 11:18 MYT — GEMMA 31B REPRODUCTION-FIRST PAIRED EXPERIMENT: NO GAIN
+
+- **VERIFIED** private official-grader paired [Action #43547354883](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43547354883) completed (8 evaluations, 4 fixed tasks per arm, same 31B, 5min/60 calls/80 turns). Champion **2/4 resolved**; reproduce-before-edit prompt-only treatment **2/4**, same two issues solved, **all 8 patched**, zero errors. Both arms recorded zero recognized pre-edit checks or exact repeated pre/post commands (metric is a lower bound). **No measured gain or measured mechanism uptake.** Treatment SHA `8d25aafe6e11fc6045243d23fb2ab80fedd583feaa095a0e2799e338897052c0`. **REJECT this specific treatment; NO official submission.** [Full decision record](docs/research/2026-11-14-reproduction-first-31b.md).
+- Current scored official best stays **0.180** (#58183466), and FastThink #58294231 scored **0.120**. Next scientific bottleneck: investigate why failed issues consume near the entire wall budget, distinguish reasoning latency from tool-level exploration, and require a materially different mechanism plus disjoint validation before another Kaggle submission. Do not repeat a no-gain prompt tweak.
+
+---
+
 # 2026-11-13 13:05 MYT — Gemma FastThink 58294231 still pending on official Kaggle
 
 - Fresh [authenticated read-only Kaggle ledger #43369673679](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43369673679) confirms **new ref `58294231` remains `SubmissionStatus.PENDING` with empty Public/Private scores**, as of 2026-11-13 05:05 UTC. The code submission itself is successfully accepted via [#43361245058](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43361245058), exact candidate SHA `fc2a7bf2c1f2ca0f5a3811fd4f8bcd101fc972895faa49de10bd125a89bbd261`. This is NOT yet a scoring improvement.
