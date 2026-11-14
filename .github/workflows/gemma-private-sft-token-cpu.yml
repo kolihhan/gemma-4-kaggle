@@ -1,0 +1,83 @@
+name: "Gemma private 16-3 source F2P token lengths on exact 31B QAT tokenizer CPU"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-private-sft-token-cpu.yml]
+permissions: {contents: read}
+jobs:
+  token_preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 34
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma31b-private-sft-token-${{ github.run_id }}
+      KERNEL_DIR: /tmp/gemma31b-private-sft-token
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: CPU-only private tokenizer preflight kernel render
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m py_compile kaggle/gemma31b_private_source_token_preflight.py
+          python -m pip install --disable-pip-version-check -q kaggle==2.2.5 six==1.17.0
+          mkdir -p "$KERNEL_DIR"
+          cp kaggle/gemma31b_private_source_token_preflight.py "$KERNEL_DIR/entry.py"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path(os.environ['KERNEL_DIR'])/'kernel-metadata.json'
+          kid=os.environ['KERNEL_REF']
+          p.write_text(json.dumps({
+              "id":kid,"title":kid.split('/',1)[1],
+              "code_file":"entry.py","language":"python",
+              "kernel_type":"script","is_private":True,
+              "enable_gpu":False,"enable_tpu":False,
+              "enable_internet":False,
+              "dataset_sources":["kolihhan/gemma31b-verified-repair-sft-v0"],
+              "model_sources":["google/gemma-4/transformers/gemma-4-31b-it-qat-q4_0-unquantized/2"],
+              "competition_sources":[],"kernel_sources":[]
+          },indent=2),encoding='utf-8')
+          print('GEMMA_PRIVATE_TOKEN_KERNEL_RENDER=PASS;GPU=FALSE',flush=True)
+          PY
+      - name: Run one PRIVATE CPU tokenizer-only validation, no tensors
+        run: |
+          set -euo pipefail
+          if ! kaggle kernels status "$KERNEL_REF" >/tmp/private-token-status.txt 2>&1; then
+            kaggle kernels push -p "$KERNEL_DIR" -t 1200 >/tmp/private-token-push.txt 2>&1
+          fi
+          echo "GEMMA_PRIVATE_TOKEN_KERNEL_REF=$KERNEL_REF"
+          for attempt in $(seq 1 72); do
+            status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            case "$status" in
+              *KernelWorkerStatus.COMPLETE*) echo GEMMA_PRIVATE_TOKEN_KERNEL_TERMINAL=COMPLETE; exit 0 ;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*|*KernelWorkerStatus.CANCELLED*)
+                echo GEMMA_PRIVATE_TOKEN_KERNEL_TERMINAL=FAILED; exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo GEMMA_PRIVATE_TOKEN_KERNEL_TERMINAL=TIMED_OUT;exit 1
+      - name: Retrieve only aggregate token lengths, never raw source/patch
+        if: always()
+        run: |
+          set +e
+          mkdir -p /tmp/private-token-report
+          kaggle kernels output "$KERNEL_REF" -p /tmp/private-token-report \
+            --file-pattern '^gemma31b-source-token-preflight[.]json$' -o \
+            >/tmp/private-token-download.txt 2>&1
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          f=Path('/tmp/private-token-report/gemma31b-source-token-preflight.json')
+          if f.exists():
+              raw=json.loads(f.read_text())
+              safe={k:raw[k] for k in ('status','split_reports','repository_overlap',
+                   'model_tensors_loaded','GPU_used','training','official_submission',
+                   'failure_type') if k in raw}
+              print('GEMMA_PRIVATE_SFT_REAL_TOKEN_REPORT='+json.dumps(safe,sort_keys=True),flush=True)
+          else:
+              print('GEMMA_PRIVATE_SFT_REAL_TOKEN_REPORT=NOT_AVAILABLE',flush=True)
+          print('GEMMA_PRIVATE_INPUTS_NOT_EXPORTED=TRUE',flush=True)
+          PY
