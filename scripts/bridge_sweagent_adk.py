@@ -21,8 +21,13 @@ def _safe_path(value: object) -> str | None:
         return None
     if "\x00" in value or "\\" in value:
         return None
-    if value == "/workspace" or value.startswith("/workspace/"):
+    if value.startswith("/workspace/"):
         value = value.removeprefix("/workspace/")
+    elif value.startswith("/testbed/"):
+        # SWE-agent edit_anthropic is documented to use this root.
+        # Target ADK materializes the task checkout at /workspace.
+        # This is a *path translation*, not proof of tool/result equivalence.
+        value = value.removeprefix("/testbed/")
     elif value.startswith("/"):
         return None
     parts = value.split("/")
@@ -43,6 +48,8 @@ def path_category(value: object) -> str:
         return "unsafe_or_traversal"
     if value.startswith("/workspace/"):
         return "workspace_absolute"
+    if value.startswith("/testbed/"):
+        return "sweagent_testbed_absolute"
     if value.startswith("/"):
         return "other_absolute"
     return "relative"
@@ -135,7 +142,7 @@ def action_meta(event: object) -> tuple[str, dict | None, str]:
         return (name, {"name": "edit_file",
                        "args": {"filepath": filepath, "old_string": before,
                                 "new_string": after, "allow_multiple": False}},
-                "mapped_editor_matching_unverified")
+                "mapped_editor_matching_and_root_unverified")
     if cmd == "view":
         # SWE-agent's unbounded view may produce much larger output than
         # ADK's capped read_file. Do not translate it as equivalent.
