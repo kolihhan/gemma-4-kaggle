@@ -1,0 +1,43 @@
+name: "Gemma strict private-only 19 F2P source SFT serializer CPU"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-build-private-source-sft-cpu.yml]
+permissions: {contents: read}
+jobs:
+  build_and_validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Strict issue-to-model-diff schema tests; no source download
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_build_private_f2p_patch_sft tests.test_check_three_scale_cohorts_train_split
+          python -m py_compile scripts/build_private_f2p_patch_sft.py
+      - name: Construct real 16-train/3-holdout source F2P examples in runner only
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q 'pyarrow>=20,<24' 'fsspec>=2025.3,<2027' 'aiohttp>=3.10,<4'
+          mkdir -p /tmp/gemma31b-f2p-private-data
+          umask 077
+          python -m scripts.build_private_f2p_patch_sft --private-dir /tmp/gemma31b-f2p-private-data
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('/tmp/gemma31b-f2p-private-data')
+          r=json.loads((root/'source_contract.json').read_text())
+          assert r['train_rows']==16 and r['holdout_rows']==3
+          assert (root/'train.jsonl').stat().st_size > 1000
+          assert (root/'holdout.jsonl').stat().st_size > 100
+          assert r['excluded_gold_patch'] and r['excluded_external_tool_feedback']
+          assert not r['proven_kaggle_hidden_disjoint']
+          print('GEMMA_31B_PRIVATE_SFT_SCHEMA_AND_COUNT=PASS',flush=True)
+          print('GEMMA_31B_RAW_SOURCE_ARTIFACTS_UPLOADED=FALSE',flush=True)
+          PY
+      - name: Delete ephemeral raw external source content
+        if: always()
+        run: rm -rf /tmp/gemma31b-f2p-private-data
