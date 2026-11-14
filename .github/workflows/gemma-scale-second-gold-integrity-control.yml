@@ -1,0 +1,28 @@
+name: "Gemma second Scale-SWE gold integrity F2P test, offline CPU NO MODEL"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-scale-second-gold-integrity-control.yml]
+permissions: {contents: read}
+jobs:
+  source_integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 26
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read-only source provenance and Docker test contract unit checks
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_replay_scale_swe_one_in_docker
+          python -m py_compile scripts/replay_scale_swe_one_in_docker.py
+          python -m pip install -q --disable-pip-version-check 'pyarrow>=20,<24' 'fsspec>=2025.3,<2027' 'aiohttp>=3.10,<4'
+          echo GEMMA_GOLD_INTEGRITY_PRECHECK=PASS
+      - name: Baseline-fail then source GOLD patch pass in identical second Docker, never model input
+        run: |
+          set -euo pipefail
+          python -m scripts.replay_scale_swe_one_in_docker --case-index 1 --gold-control
+          echo GEMMA_GOLD_EVALUATION_ONLY_NOT_SFT_NOT_MODEL_CONTEXT=TRUE
+          echo NO_GPU_NO_MODEL_TRAINING_NO_COMPETITION_SUBMISSION=TRUE
