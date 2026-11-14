@@ -19,4 +19,5 @@ jobs:
           python -m unittest -q tests.test_probe_gemma31b_adapter_compat
           python -m scripts.probe_gemma31b_adapter_compat
           echo GEMMA_31B_LORA_STATIC_ONLY_NO_WEIGHT_DOWNLOAD=TRUE
+          echo GEMMA_31B_PUBLIC_CONFIG_PHASE_DIAGNOSTIC=TRUE
           echo NO_GPU_NO_TRAINING_NO_OFFICIAL_SUBMISSION=TRUE
