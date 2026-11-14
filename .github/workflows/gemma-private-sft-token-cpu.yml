@@ -75,9 +75,10 @@ jobs:
               raw=json.loads(f.read_text())
               safe={k:raw[k] for k in ('status','split_reports','repository_overlap',
                    'model_tensors_loaded','GPU_used','training','official_submission',
-                   'failure_type') if k in raw}
+                   'failure_type','safe_stage') if k in raw}
               print('GEMMA_PRIVATE_SFT_REAL_TOKEN_REPORT='+json.dumps(safe,sort_keys=True),flush=True)
           else:
               print('GEMMA_PRIVATE_SFT_REAL_TOKEN_REPORT=NOT_AVAILABLE',flush=True)
           print('GEMMA_PRIVATE_INPUTS_NOT_EXPORTED=TRUE',flush=True)
+          print('GEMMA_TOKEN_PREFLIGHT_SAFE_MOUNT_PHASE_ENABLED=TRUE',flush=True)
           PY
