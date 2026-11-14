@@ -1,0 +1,22 @@
+name: "Gemma two frozen Scale-SWE cohort overlap check"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-two-cohort-overlap-cpu.yml]
+permissions: {contents: read}
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Metadata-only task and repo disjointness across the first 16 successes
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/check_frozen_scale_cohort_overlap.py
+          python -m scripts.check_frozen_scale_cohort_overlap
+          echo GEMMA_SOURCE_IDS_AND_REPO_NAMES_NOT_EXPORTED=TRUE
+          echo NO_GPU_NO_TRAINING_NO_OFFICIAL_SUBMISSION=TRUE
