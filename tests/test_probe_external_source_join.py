@@ -1,5 +1,6 @@
 """Mocked source join; tests never import real task text or patches."""
 import unittest
+from urllib.error import HTTPError
 from unittest.mock import patch
 from scripts.probe_external_source_join import filtered_join
 
@@ -50,6 +51,9 @@ class SourceJoinTests(unittest.TestCase):
         ]:
             with patch("scripts.probe_external_source_join.get_json",return_value=output):
                 self.assertEqual(filtered_join(row()),expected)
+        with patch("scripts.probe_external_source_join.get_json",
+                   side_effect=HTTPError("https://example.invalid/",422,"unavailable",None,None)):
+            self.assertEqual(filtered_join(row()),"filter_http_422")
         with patch("scripts.probe_external_source_join.get_json",side_effect=OSError):
             self.assertEqual(filtered_join(row()),"filter_unavailable")
 
