@@ -6,14 +6,31 @@ Does not equate repo independence with benchmark-independence; only local audit.
 from __future__ import annotations
 from collections import Counter
 import json
+import time
+from urllib.error import HTTPError, URLError
 
 from scripts.check_scale_swe_model_patch_apply import fetch_nvidia_fixed_eight
 from scripts.freeze_next_scale_swe_cohort import collect_new_cohort
 
 
+def source_read_with_bounded_retry(fetch):
+    """Retry source-viewer availability, never alter labels, offsets or IDs."""
+    for attempt in range(3):
+        try:
+            return fetch()
+        except HTTPError as exc:
+            if exc.code not in {429,500,502,503,504} or attempt == 2:
+                raise
+        except (TimeoutError, URLError):
+            if attempt == 2:
+                raise
+        time.sleep(1.5 * (attempt + 1))
+    raise RuntimeError("source service did not return valid cohort")
+
+
 def audit()->dict:
-    old=fetch_nvidia_fixed_eight()
-    new=collect_new_cohort()
+    old=source_read_with_bounded_retry(fetch_nvidia_fixed_eight)
+    new=source_read_with_bounded_retry(collect_new_cohort)
     if len(old)!=8 or len(new)!=8:
         raise ValueError("frozen source denominators changed")
     shared_ids=set(old)&set(new)
