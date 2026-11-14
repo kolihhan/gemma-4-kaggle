@@ -43,7 +43,7 @@ class GateTests(unittest.TestCase):
             if source == "/splits":
                 return {"splits": [], "pending": [{"config": "big"}]}
             if source == "/parquet":
-                return {"parquet_files": [{"config": "big", "split": "train",
+                return {"parquet_files": [{"config": "v2.0", "split": "openhands",
                                            "num_rows": 1000, "url": "https://example.invalid/large.parquet"}]}
             if source == "/rows":
                 return {"rows": [{"row": row(resolved=1)}]}
@@ -57,15 +57,16 @@ class GateTests(unittest.TestCase):
 
     def test_one_per_train_config_no_future_label_dependence(self):
         splits=[
-            {"config": "a", "split": "train", "num_examples": 11},
-            {"config": "a", "split": "test", "num_examples": 3},
-            {"config": "b", "split": "train", "num_examples": 0},
-            {"config": "c", "split": "train", "num_examples": 12},
-            {"config": "d", "split": "test", "num_examples": 7},
+            {"config": "v1.2", "split": "openhands", "num_examples": 11},
+            {"config": "v2.0", "split": "openhands", "num_examples": None},
+            {"config": "v2.0", "split": "sweagent", "num_examples": None},
+            {"config": "v2.0", "split": "validation", "num_examples": 9},
+            {"config": "v2.0", "split": "claudecode", "num_examples": 0},
+            {"config": "v1.2", "split": "sweagent", "num_examples": 21},
         ]
         self.assertEqual(pick_splits(splits, 3), [
-            {"config": "a", "split": "train"},
-            {"config": "c", "split": "train"}
+            {"config": "v2.0", "split": "openhands"},
+            {"config": "v2.0", "split": "sweagent"}
         ])
         self.assertEqual(pick_splits([], 4), [])
 
