@@ -75,32 +75,42 @@ def load_rows(name:str,source_dir:Path)->list[dict]:
     return rows
 
 
+def pack_completion_only(processor,tokenizer,row:dict,max_tokens:int|None=None)->dict:
+    """Build real trainable ids/labels: issue tokens never contribute to loss.
+
+    No truncation; callers must explicitly omit oversized examples.
+    """
+    rendered=processor.apply_chat_template(
+        [{"role":"user","content":[{"type":"text","text":row["prompt"]}]}],
+        tokenize=False,add_generation_prompt=True)
+    if not isinstance(rendered,str) or not rendered:
+        raise ValueError("processor_chat_template_prompt_failed")
+    prefix=tokenizer.encode(rendered,add_special_tokens=False)
+    target=tokenizer.encode(row["completion"],add_special_tokens=False)
+    eos=tokenizer.eos_token_id
+    if not prefix or len(target)<4 or eos is None:
+        raise ValueError("empty_prefix_or_diff_target_or_eos")
+    ids=prefix+target+[eos]
+    labels=[-100]*len(prefix)+target+[eos]
+    if len(ids)!=len(labels) or labels[:len(prefix)]!=[-100]*len(prefix):
+        raise AssertionError("completion_only_loss_mask_invalid")
+    if max_tokens is not None and len(ids)>max_tokens:
+        raise ValueError("example_exceeds_budget_no_truncation")
+    return {"input_ids":ids,"attention_mask":[1]*len(ids),"labels":labels,
+            "source_tokens":len(prefix),"completion_tokens":len(target)+1}
+
+
 def lengths(processor,tokenizer,rows:list[dict])->list[dict]:
     stats=[]
     for row in rows:
-        # Gemma 4 is a multimodal processor; the tokenizer may have no
-        # standalone chat_template. Render with the model processor first.
-        rendered=processor.apply_chat_template(
-            [{"role":"user","content":[{"type":"text","text":row["prompt"]}]}],
-            tokenize=False,add_generation_prompt=True)
-        if not isinstance(rendered,str) or not rendered:
-            raise ValueError("processor_chat_template_prompt_failed")
-        prefix=tokenizer.encode(rendered,add_special_tokens=False)
-        if not isinstance(prefix,list) or not prefix:
-            raise ValueError("processor_render_tokenization_failed")
-        target=tokenizer.encode(row["completion"],add_special_tokens=False)
-        if not isinstance(target,list) or not target:
-            raise ValueError("diff_target_empty")
-        stop=tokenizer.eos_token_id
-        if stop is None:
-            raise ValueError("missing_eos")
-        source_len=len(prefix)
-        completion_len=len(target)+1
-        total=source_len+completion_len
-        if completion_len<5 or total<=completion_len:
-            raise ValueError("masked_completion_length_invalid")
+        packed=pack_completion_only(processor,tokenizer,row)
+        source_len=packed["source_tokens"]
+        completion_len=packed["completion_tokens"]
+        if packed["labels"].count(-100)!=source_len or len(packed["input_ids"])!=source_len+completion_len:
+            raise AssertionError("training_loss_mask_length_drift")
         stats.append({"source_tokens":source_len,"completion_tokens":completion_len,
-                      "total_tokens":total,"repo_hash":row["repo_hash"]})
+                      "total_tokens":len(packed["input_ids"]),"repo_hash":row["repo_hash"],
+                      "completion_only_mask_verified":True})
     return stats
 
 
@@ -144,6 +154,8 @@ def run()->dict:
           "max_prompt_tokens":max(x["source_tokens"] for x in data),
           "fits_budget":{str(b):sum(x<=b for x in totals) for b in PROMPT_BANDS},
           "completion_nonempty":all(x["completion_tokens"]>=5 for x in data),
+          "completion_only_mask_verified":all(x["completion_only_mask_verified"] for x in data),
+          "fits_4096_without_truncation":sum(x["total_tokens"]<=4096 for x in data),
         }
     EXECUTION_STAGE="complete"
     return {
@@ -152,7 +164,8 @@ def run()->dict:
       "model_tokenizer":"Gemma 4 31B QAT unquantized v2",
       "split_reports":out,
       "repository_overlap":0,
-      "completion_only_masking_not_yet_run":True,
+      "completion_only_masking_cpu_verified":True,
+      "gradient_or_gpu_mask_execution_unverified":True,
       "all_source_train_patches_independently_F2P":True,
       "raw_task_text_logged":False,"reference_patch_read":False,
       "model_tensors_loaded":False,"GPU_used":False,"training":False,
