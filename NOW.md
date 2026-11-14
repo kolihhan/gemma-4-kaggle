@@ -1,3 +1,9 @@
+# 2026-11-14 12:06 MYT — GEMMA 31B SAFE TRACE FOLLOW-UP: 27 SUCCESSFUL SUBMITS ON ONE FAILED TASK
+
+- **VERIFIED** two CPU-only readbacks [#43554709189](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43554709189) and [#43554924748](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43554924748) processed all 8 frozen traces, tests PASS, no inference/official submission. Baseline vs prompt-treatment: `read_file` 41/47, graph calls 0/1, recognized test calls 0/0 (opaque shell calls 19/22). On failed `fastapi_15800`, treatment issued **27 `submit_patch` calls with 27 `ok` responses and nonempty patches**, max **25 in succession**; baseline had 2 successful calls. Official `submit_patch` is not counted against tool budget and loop termination occurs at end of ADK turn. This is one **repeated-successful-submit/turn-termination** failure example, not evidence for a universal tool error or a resolved-task gain. Original paired 2/4 vs 2/4 stands. **No new leaderboard candidate justified; no submission.** [Full evidence](docs/research/2026-11-14-reproduction-first-31b.md).
+
+---
+
 # 2026-11-14 11:18 MYT — GEMMA 31B REPRODUCTION-FIRST PAIRED EXPERIMENT: NO GAIN
 
 - **VERIFIED** private official-grader paired [Action #43547354883](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43547354883) completed (8 evaluations, 4 fixed tasks per arm, same 31B, 5min/60 calls/80 turns). Champion **2/4 resolved**; reproduce-before-edit prompt-only treatment **2/4**, same two issues solved, **all 8 patched**, zero errors. Both arms recorded zero recognized pre-edit checks or exact repeated pre/post commands (metric is a lower bound). **No measured gain or measured mechanism uptake.** Treatment SHA `8d25aafe6e11fc6045243d23fb2ab80fedd583feaa095a0e2799e338897052c0`. **REJECT this specific treatment; NO official submission.** [Full decision record](docs/research/2026-11-14-reproduction-first-31b.md).
