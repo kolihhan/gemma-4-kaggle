@@ -48,7 +48,7 @@ class GateTests(unittest.TestCase):
         ])
         self.assertEqual(native_tool_schema_count(payload),(4,2))
         self.assertEqual(native_tool_schema_count(row()),(0,0))
-        self.assertEqual(native_tool_schema_count(row(tools=["{bad"]), (0,0))
+        self.assertEqual(native_tool_schema_count(row(tools=["{bad"])), (0,0))
 
     def test_no_viewer_split_degrades_to_parquet_metadata_not_fake_zero(self):
         def mock(source, params):
