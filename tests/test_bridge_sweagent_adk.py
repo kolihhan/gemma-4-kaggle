@@ -1,7 +1,7 @@
 """Zero-execution, synthetic contractual tests for SWE-agent action bridge."""
 import unittest
 
-from scripts.bridge_sweagent_adk import action_meta, trace_gate, summarize
+from scripts.bridge_sweagent_adk import action_meta, trace_gate, summarize, path_category, source_editor_shape
 
 
 def call(name, args):
@@ -77,6 +77,25 @@ class StrictBridgeTests(unittest.TestCase):
         self.assertEqual(summary["mapped_action_syntax_count"], 2)
         self.assertEqual(summary["trainable_trajectories_approved"], 0)
         self.assertNotIn("DO_NOT_LOG", str(summary))
+
+    def test_path_metadata_never_contains_external_source_paths(self):
+        self.assertEqual(path_category("/external_private_root/some_file.py"), "other_absolute")
+        self.assertEqual(path_category("/workspace/pkg/a.py"), "workspace_absolute")
+        self.assertEqual(path_category("pkg/a.py"), "relative")
+        self.assertEqual(path_category("../escape.py"), "unsafe_or_traversal")
+        mode, category = source_editor_shape(call("str_replace_editor", {
+            "command": "str_replace", "path": "/external_private_root/a.py",
+            "old_str": "x", "new_str": "y"}))
+        self.assertEqual((mode, category), ("str_replace", "other_absolute"))
+        x = trace_gate(success_row([
+            {"role": "user"},
+            {"role": "assistant", "tool_calls": [call("str_replace_editor", {
+                "command": "str_replace", "path": "/external_private_root/a.py",
+                "old_str": "x", "new_str": "y"})]},
+            {"role": "tool", "content": "ok"}
+        ]))
+        self.assertEqual(x["editor_path_categories"], {"other_absolute": 1})
+        self.assertNotIn("/external_private_root", str(x))
 
     def test_bad_or_unrecognized_calls_cannot_be_silent_positives(self):
         self.assertIsNone(action_meta(call("webfetch", {"url": "https://example.test"}))[1])
