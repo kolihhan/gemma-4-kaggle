@@ -211,10 +211,28 @@ def summarize(rows: list[dict]) -> dict:
 
 if __name__ == "__main__":
     from scripts.audit_open_swe_traces_metadata import DATASET, get_json
-    data = get_json("/rows", {"dataset": DATASET, "config": "v2.0",
-                              "split": "sweagent", "offset": 6, "length": 12})
-    rows = data.get("rows", [])
-    if not isinstance(rows, list) or len(rows) != 12:
+    # Viewer occasionally times out on giant serialized trajectories;
+    # read the *same fixed cohort* as two smaller slices. No replacements.
+    from urllib.error import URLError
+    rows = []
+    for offset in (6, 12):
+        last = None
+        for attempt in range(2):
+            try:
+                data = get_json("/rows", {"dataset": DATASET, "config": "v2.0",
+                                          "split": "sweagent", "offset": offset,
+                                          "length": 6})
+                chunk = data.get("rows", [])
+                if not isinstance(chunk, list) or len(chunk) != 6:
+                    raise ValueError("partial public source batch")
+                rows.extend(chunk)
+                last = None
+                break
+            except (TimeoutError, URLError) as exc:
+                last = type(exc).__name__
+        if last is not None:
+            raise SystemExit("fixed source batch unavailable: " + last)
+    if len(rows) != 12:
         raise SystemExit("fixed 12-row cohort unavailable: stop")
     print("GEMMA_SWEAGENT_ADK_ACTION_BRIDGE=" + json.dumps(summarize(rows),sort_keys=True),flush=True)
     print("NO_TRAINING_NO_GPU_NO_OFFICIAL_SUBMISSION=TRUE")
