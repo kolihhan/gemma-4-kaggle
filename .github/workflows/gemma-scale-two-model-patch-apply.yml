@@ -1,0 +1,27 @@
+name: "Gemma Scale-SWE two genuine source patch apply checks, CPU"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-scale-two-model-patch-apply.yml]
+permissions: {contents: read}
+jobs:
+  apply_check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 19
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Synthetic repo URL safety tests, CPU library install
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_check_scale_swe_model_patch_apply
+          python -m pip install -q --disable-pip-version-check 'pyarrow>=20,<24' 'fsspec>=2025.3,<2027' 'aiohttp>=3.10,<4'
+          echo GEMMA_SOURCE_PATCH_SAFE_PUBLIC_CLONE_TESTS=PASS
+      - name: Checkout precise public parent commits and test model diff applicability
+        run: |
+          set -euo pipefail
+          python -m scripts.check_scale_swe_model_patch_apply
+          echo GEMMA_PATCH_APPLICATION_ONLY_NO_TEST_CODE_EXECUTED_NO_GOLD=TRUE
+          echo NO_GPU_NO_TRAINING_NO_COMPETITION_SUBMISSION=TRUE
