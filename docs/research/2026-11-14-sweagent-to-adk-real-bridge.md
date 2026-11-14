@@ -65,3 +65,10 @@ The upstream [Nebius SWE-rebench-V2](https://huggingface.co/datasets/nebius/SWE-
 - **Decision:** do not retry identical failed HTTP queries, pretend the 8 source commits were found, use the upstream gold patch as the model target, or launch 31B QLoRA. Independent patch replays are still **0**, and verified 31B-admissible training rows still **0**. If pursuing this data lane, first use a distinct source-access path (read-only streaming indexed Parquet, snapshot/commit export, or a tested alternate public endpoint) with a frozen small cohort, clear resource cap and non-exporting provenance checks.
 
 This failure is a **public data access bottleneck**, not a statement about SWE-rebench-V2 scientific validity, NVIDIA source label reliability, or the potential of patch-centric SFT.
+
+
+### Distinct source-access fallback tested and also blocked
+
+After the public Dataset Viewer `/filter` produced 8/8 HTTP 500 responses, the independent [officially documented `/search` endpoint](https://huggingface.co/docs/dataset-viewer/quick_start) was tested on exactly the first **two** source-success task IDs. The short, fixed [read-only Action #43596279707](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43596279707) and unit tests **PASS**, but both searches returned **HTTP 500**. The source-ID-sensitive `where`/`query` and response bodies were not written to public logs. This does **not** mean the tasks have no source record; it means **both current public search/index APIs are unusable for this join**. The fallback code lives in `scripts/probe_external_join_search_two.py`, its test and one-shot workflow.
+
+**Stop identical endpoint polling.** A future reproducible source join needs another legitimate access mechanism (small Parquet streaming on a bounded row-group range, a maintained instance-ID index, or verified source git checkout) before grader replay. This report documents **zero source-snapshot matches, zero local test replays, zero approved training trajectories**.
