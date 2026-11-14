@@ -2,7 +2,7 @@ name: "Gemma private 16-3 source F2P token lengths on exact 31B QAT tokenizer CP
 on:
   push:
     branches: [research/31b-patch-checkpoint-20261114]
-    paths: [.github/workflows/gemma-private-sft-token-cpu.yml]
+    paths: [.github/workflows/gemma-private-sft-token-cpu.yml, kaggle/gemma31b_private_source_token_preflight.py, tests/test_gemma31b_private_source_token_preflight.py]
 permissions: {contents: read}
 jobs:
   token_preflight:
@@ -74,6 +74,14 @@ jobs:
           f=Path('/tmp/private-token-report/gemma31b-source-token-preflight.json')
           if f.exists():
               raw=json.loads(f.read_text())
+              if raw.get('status')=='PRIVATE_31B_QAT_TOKENIZER_COMPLETION_ONLY_PREFLIGHT_OK':
+                  splits=raw['split_reports']
+                  assert splits['train']['n']==16 and splits['holdout']['n']==3
+                  assert raw['repository_overlap']==0
+                  assert all(splits[k]['completion_only_mask_verified'] for k in ('train','holdout'))
+                  assert splits['train']['fits_4096_without_truncation']==15
+                  assert splits['holdout']['fits_4096_without_truncation']==3
+                  print('GEMMA_REAL_31B_QAT_COMPLETION_ONLY_MASK_VERIFIED=TRUE',flush=True)
               safe={k:raw[k] for k in ('status','split_reports','repository_overlap',
                    'model_tensors_loaded','GPU_used','training','official_submission',
                    'failure_type','safe_stage','safe_error_class') if k in raw}
