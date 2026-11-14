@@ -79,3 +79,4 @@ jobs:
       - name: Distinguish preflight-only runs from actual Kaggle entries
         if: "${{ (github.event_name == 'push' && github.event.head_commit.message != 'GO_PUBLIC_V10_KAGGLE_SUBMIT_ONE_SHOT_20261112') || (github.event_name == 'workflow_dispatch' && (!inputs.submit_official || inputs.confirm != 'SUBMIT')) }}"
         run: echo "ATTRIBUTED_SCORED_V10_NO_COMPETITION_SUBMISSION_TRIGGERED=TRUE"
+# 2026-11-15: Authorized single guarded V10 submit attempt, no code or source change.
