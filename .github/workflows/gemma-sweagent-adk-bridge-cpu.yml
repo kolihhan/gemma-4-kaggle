@@ -1,0 +1,26 @@
+name: "Gemma SWE-agent to ADK strict action bridge - 12 real rows CPU"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-sweagent-adk-bridge-cpu.yml]
+permissions: {contents: read}
+jobs:
+  bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Verify strict action translation and no false-positive training examples
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_probe_sweagent_action_shapes tests.test_bridge_sweagent_adk
+          python -m py_compile scripts/bridge_sweagent_adk.py
+          echo GEMMA_STRICT_ACTION_BRIDGE_UNIT_TESTS=PASS
+      - name: Read 12 prespecified real resolved/unresolved SWE-agent rows; aggregate only
+        run: |
+          set -euo pipefail
+          python -m scripts.bridge_sweagent_adk
+          echo GEMMA_SWE_ADK_NO_TRAINING_DATA_EXPORT=TRUE
