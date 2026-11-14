@@ -1,0 +1,27 @@
+name: "Gemma 8 real Scale-SWE parquet source joins (CPU, no gold)"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-scale-eight-parquet-join.yml]
+permissions: {contents: read}
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 19
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Synthetic source/commit/test contract and Parquet dependencies
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_join_scale_swe_parquet_eight
+          python -m pip install --disable-pip-version-check -q 'pyarrow>=20,<24' 'fsspec>=2025.3,<2027' 'aiohttp>=3.10,<4'
+          echo GEMMA_SCALE_SWE_EIGHT_JOIN_UNIT_TESTS=PASS
+      - name: Use public Parquet HTTP range to match exact eight real NVIDIA source IDs
+        run: |
+          set -euo pipefail
+          python -m scripts.join_scale_swe_parquet_eight
+          echo GEMMA_SCALE_SWE_EIGHT_JOIN_NO_RAW_TASKS_OR_GOLD=TRUE
+          echo NO_GPU_NO_TRAINING_NO_OFFICIAL_SUBMISSION=TRUE
