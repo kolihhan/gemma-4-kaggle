@@ -1,0 +1,29 @@
+name: Gemma semantic surface retrospective task exposure (CPU only)
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-semantic-surface-exposure-audit-20261114.yml]
+permissions: {contents: read}
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Retrospective metadata overlap verification; no model or private data
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_audit_semantic_surface_exposure
+          python scripts/audit_semantic_surface_exposure.py
+          python - <<'PY'
+          from scripts.audit_semantic_surface_exposure import audit,ROOT
+          status=audit(ROOT)
+          assert status["historically_exposed_ids"]==["fastapi_14479","rich_3953"]
+          assert status["clean_unseen_set_proven"] is False
+          assert status["leakage_to_model_proven"] is False
+          print("GEMMA_SEMANTIC_UNTOUCHED_COHORT_CLAIM=INVALID")
+          print("NO_GPU_NO_TRAINING_NO_OFFICIAL_SUBMISSION=TRUE")
+          PY
