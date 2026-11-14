@@ -1,0 +1,84 @@
+name: "Gemma upload verified 16/3 repair SFT dataset to PRIVATE Kaggle only"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-upload-private-f2p-sft.yml]
+permissions: {contents: read}
+jobs:
+  private_data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      SOURCE_DIR: /tmp/gemma31b-private-f2p-source-v0
+      DATASET_REF: kolihhan/gemma31b-verified-repair-sft-v0
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Strong synthetic rules and private-source preprocessing dependencies
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m unittest -q tests.test_build_private_f2p_patch_sft tests.test_check_three_scale_cohorts_train_split
+          python -m pip install --disable-pip-version-check -q \
+            'pyarrow>=20,<24' 'fsspec>=2025.3,<2027' 'aiohttp>=3.10,<4' 'kaggle==2.2.5' 'six==1.17.0'
+      - name: Freeze exact 16 train and 3 holdout F2P model repairs, source-only
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$SOURCE_DIR"
+          python -m scripts.build_private_f2p_patch_sft --private-dir "$SOURCE_DIR"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          d=Path(os.environ['SOURCE_DIR'])
+          contract=json.loads((d/'source_contract.json').read_text())
+          assert contract['train_rows']==16 and contract['holdout_rows']==3
+          assert contract['excluded_gold_patch'] and contract['excluded_external_tool_feedback']
+          assert contract['train_repo_count']==14 and contract['holdout_repo_count']==3
+          meta={
+            "id":os.environ['DATASET_REF'],
+            "title":"Gemma 31B Verified Repair SFT v0 Private",
+            "subtitle":"External F2P-checked Python repair pairs with repository-level holdout",
+            "description":(
+              "PRIVATE research-only dataset: 16 train and 3 repository-disjoint "
+              "holdout issue-to-model-patch pairs from NVIDIA Open-SWE-Traces "
+              "v2.0 and Scale-SWE; the original source repository licenses are "
+              "MIT, Apache-2.0 or BSD. No upstream gold/reference patches, "
+              "test fixtures, raw tools, Kaggle competition cases or hidden "
+              "task data included. Attribution belongs to original authors. "
+              "This private collection does not relicense upstream material. "
+              "F2P verified on the sampled source tests, not Kaggle."
+            ),
+            "licenses":[{"name":"other"}],
+          }
+          (d/'dataset-metadata.json').write_text(json.dumps(meta,indent=2),encoding='utf-8')
+          print('GEMMA_PRIVATE_KAGGLE_DATASET_PREP=PASS;TRAIN=16;HOLDOUT=3',flush=True)
+          PY
+      - name: Create one non-public Kaggle dataset, never publish GitHub artifacts
+        run: |
+          set -euo pipefail
+          # --public is deliberately NEVER passed; Kaggle CLI defaults to PRIVATE.
+          if kaggle datasets create -p "$SOURCE_DIR" -q -t -r skip \
+              >/tmp/gemma31b-private-dataset-upload.log 2>&1; then
+            echo "GEMMA_PRIVATE_KAGGLE_DATASET_CREATED=$DATASET_REF"
+          else
+            rc=$?
+            echo "GEMMA_PRIVATE_KAGGLE_DATASET_CREATE_FAILED_EXIT=$rc"
+            echo "GEMMA_NO_RAW_UPLOAD_LOG_PRINTED=TRUE"
+            exit "$rc"
+          fi
+          if kaggle datasets status "$DATASET_REF" \
+              >/tmp/gemma31b-private-dataset-status.log 2>&1; then
+            echo "GEMMA_PRIVATE_KAGGLE_DATASET_STATUS_ENDPOINT=OK"
+          else
+            echo "GEMMA_PRIVATE_KAGGLE_DATASET_STATUS_ENDPOINT=NOT_YET_VERIFIED"
+          fi
+          echo "GEMMA_PRIVATE_UPLOAD_DEFAULT_VISIBILITY=PRIVATE"
+          echo "GEMMA_NO_PUBLIC_GITHUB_SOURCE_ARTIFACT=TRUE"
+          echo "GEMMA_NO_GPU_NO_TRAINING_NO_OFFICIAL_SUBMISSION=TRUE"
+      - name: Destroy raw external-source files from runner, including on failure
+        if: always()
+        run: rm -rf "$SOURCE_DIR"
