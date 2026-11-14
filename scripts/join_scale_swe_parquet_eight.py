@@ -18,7 +18,7 @@ from scripts.join_swe_traces_parquet_source import may_contain
 
 DATASET="AweAI-Team/Scale-SWE"
 COLUMNS=("instance_id","user","repo","parent_commit","pr_commit",
-         "image_url","problem_statement","f2p_patch","f2p_script","FAIL_TO_PASS")
+         "image_url","workdir","problem_statement","f2p_patch","f2p_script","FAIL_TO_PASS")
 MAX_PROJECTED_BYTES=110_000_000
 ALLOWED_HOSTS={"huggingface.co","cdn-lfs.huggingface.co","datasets-server.huggingface.co"}
 
