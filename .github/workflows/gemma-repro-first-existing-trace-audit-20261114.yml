@@ -4,6 +4,7 @@ on:
     branches: [research/31b-patch-checkpoint-20261114]
     paths:
       - .github/workflows/gemma-repro-first-existing-trace-audit-20261114.yml
+# One bounded re-read classifies repeated submit_patch responses; no GPU or code submission.
 permissions: {contents: read}
 concurrency:
   group: gemma-repro-first-existing-traces-once-20261114
