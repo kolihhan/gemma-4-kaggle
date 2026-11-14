@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from collections import Counter
 import json
 import re
+from urllib.error import HTTPError, URLError
 
 from scripts.audit_open_swe_traces_metadata import DATASET, get_json, sample_grade
 
@@ -27,7 +28,14 @@ def filtered_join(source_row: dict) -> str:
     try:
         data = get_json("/filter", {"dataset": SOURCE, "config": "default", "split": "train",
                                     "where": query, "offset": 0, "length": 2})
-    except (OSError, ValueError, KeyError):
+    except HTTPError as exc:
+        # HTTP status only; never raw URL/where/task ID/error body.
+        if exc.code in {400, 401, 403, 404, 422, 429, 500, 501, 502, 503, 504}:
+            return "filter_http_" + str(exc.code)
+        return "filter_http_other"
+    except TimeoutError:
+        return "filter_timeout"
+    except (OSError, ValueError, KeyError, URLError):
         return "filter_unavailable"
     if data.get("partial") is True:
         return "partial_index_unreliable"
