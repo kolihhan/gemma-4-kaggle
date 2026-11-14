@@ -1,0 +1,22 @@
+name: "Gemma three frozen Scale-SWE cohort repo-disjoint training split"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-three-cohort-train-split-cpu.yml]
+permissions: {contents: read}
+jobs:
+  train_split:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Freeze 19 verified positives, test grouped holdout and source completeness
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_check_three_scale_cohorts_train_split
+          python -m scripts.check_three_scale_cohorts_train_split
+          echo GEMMA_SOURCE_TRAIN_HOLDOUT_BY_REPOSITORY_ONLY=TRUE
+          echo NO_RAW_DATA_NO_GPU_NO_TRAINING_NO_KAGGLE_SUBMISSION=TRUE
