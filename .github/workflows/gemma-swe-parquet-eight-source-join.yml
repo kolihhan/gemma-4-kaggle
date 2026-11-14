@@ -1,0 +1,27 @@
+name: "Gemma 8-source Parquet join over HTTP Range, no gold data"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-swe-parquet-eight-source-join.yml]
+permissions: {contents: read}
+jobs:
+  join:
+    runs-on: ubuntu-latest
+    timeout-minutes: 21
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Synthetic contracts and low-footprint range dependencies
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_join_swe_traces_parquet_source
+          python -m pip install --disable-pip-version-check -q 'pyarrow>=20,<24' 'fsspec>=2025.3,<2027' 'aiohttp>=3.10,<4'
+          echo GEMMA_SWE_REBENCH_PARQUET_JOIN_SYNTHETIC_TESTS=PASS
+      - name: Join eight frozen public NVIDIA success tasks to exact Nebius source rowgroups
+        run: |
+          set -euo pipefail
+          python -m scripts.join_swe_traces_parquet_source
+          echo GEMMA_SWE_REBENCH_PARQUET_JOIN_ZERO_RAW_DATA_EXPORT=TRUE
+          echo NO_GPU_NO_TRAINING_NO_SUBMISSION=TRUE
