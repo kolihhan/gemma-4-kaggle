@@ -1,0 +1,29 @@
+name: "Gemma first Scale-SWE real offline Docker F2P baseline-vs-model (NO GPU)"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-scale-first-real-f2p-cpu.yml]
+permissions: {contents: read}
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 26
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Offline replay safety tests and Parquet source-only dependencies
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_replay_scale_swe_one_in_docker
+          python -m py_compile scripts/replay_scale_swe_one_in_docker.py
+          python -m pip install -q --disable-pip-version-check 'pyarrow>=20,<24' 'fsspec>=2025.3,<2027' 'aiohttp>=3.10,<4'
+          docker --version
+          echo GEMMA_SCALE_F2P_ISOLATED_SAFETY_TESTS=PASS
+      - name: First frozen task Docker baseline failing test and NVIDIA MODEL patch passing test
+        run: |
+          set -euo pipefail
+          python -m scripts.replay_scale_swe_one_in_docker
+          echo GEMMA_SCALE_F2P_GOLD_NEVER_READ=TRUE
+          echo NO_GPU_NO_MODEL_TRAINING_NO_OFFICIAL_SUBMISSION=TRUE
