@@ -19,4 +19,5 @@ jobs:
           python -m py_compile scripts/check_frozen_scale_cohort_overlap.py
           python -m scripts.check_frozen_scale_cohort_overlap
           echo GEMMA_SOURCE_IDS_AND_REPO_NAMES_NOT_EXPORTED=TRUE
+          echo GEMMA_SOURCE_VIEWER_BOUNDED_RETRY_NO_SAMPLE_REPLACEMENT=TRUE
           echo NO_GPU_NO_TRAINING_NO_OFFICIAL_SUBMISSION=TRUE
