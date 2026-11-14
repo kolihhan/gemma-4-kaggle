@@ -138,10 +138,19 @@ def image_size_gate(image:str)->str:
     return "image_under_1p5GB_cap"
 
 
-def run(case_index:int=0, gold_control:bool=False)->dict:
+def run(case_index:int=0, gold_control:bool=False,
+        source_cohort:str="original")->dict:
     if case_index not in range(8):
-        raise ValueError("only original eight task IDs are allowed")
-    selected=fetch_nvidia_fixed_eight()
+        raise ValueError("only fixed eight-task cohort indices allowed")
+    if source_cohort=="original":
+        selected=fetch_nvidia_fixed_eight()
+    elif source_cohort=="next18":
+        from scripts.freeze_next_scale_swe_cohort import collect_new_cohort
+        selected=collect_new_cohort()
+    else:
+        raise ValueError("unknown or unregistered source cohort")
+    if len(selected)!=8:
+        raise ValueError("source cohort denominator drift")
     source=get_scale_match(selected)
     fixed_id=list(selected)[case_index]
     meta=source[fixed_id]
@@ -163,7 +172,7 @@ def run(case_index:int=0, gold_control:bool=False)->dict:
     pull,_=invoke(["docker","pull","--quiet",image],timeout=410)
     if pull!=0:
         return {"status":"source_docker_pull_failed"}
-    container="gemma_scale_replay_case"+str(case_index)
+    container="gemma_scale_replay_"+source_cohort+"_case"+str(case_index)
     cmd=["docker","create","--name",container,
          "--network","none","--memory","5g","--cpus","2",
          "--pids-limit","256","--cap-drop","ALL",
@@ -224,6 +233,7 @@ def run(case_index:int=0, gold_control:bool=False)->dict:
                       else "F2P_NOT_INDEPENDENTLY_CONFIRMED"),
                 "patch_source":"upstream_gold_integrity_control_ONLY" if gold_control else "nvidia_model",
                 "frozen_case_index":case_index,
+                "frozen_source_cohort":source_cohort,
                 "test_origin":"source_synthetic_f2p_script" if isinstance(synthetic,str) and synthetic.strip() else "source_developer_f2p_patch",
                 "num_selected_test_ids":len(targets),
                 "before":before,"after":after,
@@ -240,9 +250,10 @@ if __name__=="__main__":
     parser=argparse.ArgumentParser()
     parser.add_argument("--case-index",type=int,choices=list(range(8)),default=0)
     parser.add_argument("--gold-control",action="store_true")
+    parser.add_argument("--source-cohort",choices=["original","next18"],default="original")
     options=parser.parse_args()
     try:
-        out=run(options.case_index, options.gold_control)
+        out=run(options.case_index, options.gold_control,options.source_cohort)
         print("GEMMA_SCALE_FIRST_CONTAINER_F2P="+json.dumps(out,sort_keys=True),flush=True)
     except Exception as e:
         print("GEMMA_SCALE_FIRST_CONTAINER_F2P_BLOCKED="+json.dumps({
