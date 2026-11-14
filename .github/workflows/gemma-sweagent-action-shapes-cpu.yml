@@ -1,0 +1,21 @@
+name: Gemma SWE-agent actions: real metadata-only shape probe
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-sweagent-action-shapes-cpu.yml]
+permissions: {contents: read}
+jobs:
+  shapes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Test safe source-action structure parser and inspect 12 unseen viewer rows
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_probe_sweagent_action_shapes
+          python -m scripts.probe_sweagent_action_shapes
+          echo GEMMA_SWEAGENT_NO_RAW_TRAJECTORY_EXPORT=TRUE
