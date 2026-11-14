@@ -61,11 +61,19 @@ def audit()->dict:
     except (ValueError, TypeError):
         raise ValueError("phase_text_arch_parser") from None
     mismatches=[key for key in st if st[key] != tr[key]]
-    active=adapter.get("target_modules",[])
-    if not isinstance(active,list):
-        raise ValueError("adapter targets invalid")
-    targets=sorted(x for x in active if isinstance(x,str) and
-                   re.fullmatch(r"[a-z][a-z0-9_]{0,40}",x))
+    active=adapter.get("target_modules")
+    if isinstance(active,list):
+        target_policy="explicit_list"
+        targets=sorted(x for x in active if isinstance(x,str) and
+                       re.fullmatch(r"[a-z][a-z0-9_]{0,40}",x))
+    elif isinstance(active,str):
+        target_policy="named_regex_or_all_linear"
+        targets=[]
+    elif active is None:
+        target_policy="PEFT_default_target_modules"
+        targets=[]
+    else:
+        raise ValueError("unsupported PEFT target-module schema")
     # This is comparison to public trainer-guide targets, NOT actual
     # model parameter existence or PEFT runtime loading.
     expected={"q_proj","k_proj","v_proj","o_proj","gate_proj","up_proj","down_proj"}
@@ -84,6 +92,7 @@ def audit()->dict:
         "example_rank":adapter.get("r"),
         "example_lora_alpha":adapter.get("lora_alpha"),
         "example_base_model":adapter.get("base_model_name_or_path"),
+        "example_target_policy":target_policy,
         "example_targets":targets,
         "example_targets_subset_of_guide":set(targets).issubset(expected),
         "actual_safetensors_read":False,
