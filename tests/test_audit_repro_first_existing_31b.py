@@ -87,6 +87,24 @@ class ReadOnlyFeedbackAuditTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "source run"):
                 audit(root)
 
+    def test_submit_loop_reports_only_response_categories(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "trace.json"
+            source = {"steps": [
+                {"tool_calls": [{"function_name": "submit_patch", "arguments": {}}],
+                 "observation": {"content": json.dumps({"status": "error",
+                     "error_message": "PRIVATE_SECRET_DO_NOT_EXPORT"})}},
+                {"tool_calls": [{"function_name": "submit_patch", "arguments": {}}],
+                 "observation": {"content": json.dumps({"status": "ok",
+                     "patch_size": 212, "files_changed": 2})}},
+            ]}
+            path.write_text(json.dumps(source))
+            result = safe_trace(path)
+            self.assertEqual(result["submit_response_states"], {"error": 1, "ok": 1})
+            self.assertEqual(result["submit_patch_nonempty_responses"], 1)
+            self.assertEqual(result["max_consecutive_submit_calls"], 2)
+            self.assertNotIn("PRIVATE_SECRET_DO_NOT_EXPORT", json.dumps(result))
+
     def test_direct_trace_reducer_no_raw_command(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "trace.json"
