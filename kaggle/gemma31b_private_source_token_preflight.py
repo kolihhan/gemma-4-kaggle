@@ -64,16 +64,22 @@ def lengths(tokenizer, rows:list[dict])->list[dict]:
 
 
 def run()->dict:
-    train=load_rows("train.jsonl")
-    held=load_rows("holdout.jsonl")
+    try:
+        train=load_rows("train.jsonl")
+        held=load_rows("holdout.jsonl")
+    except FileNotFoundError:
+        raise RuntimeError("phase_private_dataset_mount_missing") from None
     if len({r["id_hash"] for r in train+held})!=19:
         raise ValueError("task_ids_overlap")
     if {r["repo_hash"] for r in train} & {r["repo_hash"] for r in held}:
         raise ValueError("train_holdout_repository_overlap")
     if not (MODEL/"config.json").is_file():
-        raise FileNotFoundError("exact_31b_model_tokenizer_mount_missing")
+        raise RuntimeError("phase_exact_model_source_mount_missing")
     from transformers import AutoProcessor
-    processor=AutoProcessor.from_pretrained(str(MODEL),local_files_only=True)
+    try:
+        processor=AutoProcessor.from_pretrained(str(MODEL),local_files_only=True)
+    except (OSError,FileNotFoundError,ValueError):
+        raise RuntimeError("phase_tokenizer_processor_load_failure") from None
     tokenizer=getattr(processor,"tokenizer",None)
     if tokenizer is None:
         raise ValueError("official_tokenizer_unavailable")
@@ -110,6 +116,7 @@ if __name__=="__main__":
         print("GEMMA_PRIVATE_SOURCE_TOKEN_PREFLIGHT="+json.dumps(report,sort_keys=True),flush=True)
     except Exception as err:
         report={"status":"TOKEN_PREFLIGHT_BLOCKED","failure_type":type(err).__name__,
+                "safe_stage":str(err) if str(err).startswith("phase_") else "schema_or_unknown",
                 "raw_dataset_or_model_path_logged":False}
         DEST.write_text(json.dumps(report,sort_keys=True),encoding="utf-8")
         print("GEMMA_PRIVATE_SOURCE_TOKEN_PREFLIGHT="+json.dumps(report,sort_keys=True),flush=True)
