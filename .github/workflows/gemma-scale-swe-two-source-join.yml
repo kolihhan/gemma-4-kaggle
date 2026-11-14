@@ -1,0 +1,25 @@
+name: "Gemma correct Scale-SWE two-task source join (CPU)"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-scale-swe-two-source-join.yml]
+permissions: {contents: read}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Test source join semantics locally
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_probe_scale_swe_two_join
+          echo GEMMA_SCALE_SWE_SOURCE_MATCH_TESTS=PASS
+      - name: Probe two fixed NVIDIA task IDs at correct Scale-SWE source
+        run: |
+          set -euo pipefail
+          python -m scripts.probe_scale_swe_two_join
+          echo GEMMA_SCALE_SWE_NO_SOURCE_TASK_ID_OR_PATCH_LOGGED=TRUE
