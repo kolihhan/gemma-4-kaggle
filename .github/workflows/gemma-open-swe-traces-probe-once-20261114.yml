@@ -1,0 +1,27 @@
+name: Gemma Open-SWE-Traces metadata gate ONE CPU run
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-open-swe-traces-probe-once-20261114.yml]
+permissions: {contents: read}
+jobs:
+  source_probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Unit test strict success, license, repo and tool-trace filters
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_audit_open_swe_traces_metadata
+          python -m py_compile scripts/audit_open_swe_traces_metadata.py
+          echo GEMMA_EXTERNAL_SOURCE_FILTER_SYNTHETIC_TESTS=PASS
+      - name: Probe up to 24 public dataset-viewer rows, metadata only
+        run: |
+          set -euo pipefail
+          python -m scripts.audit_open_swe_traces_metadata --configs 4 --rows 6
+          echo GEMMA_EXTERNAL_SOURCE_METADATA_ONLY=TRUE
+          echo NO_GPU_NO_FULL_DATASET_NO_RAW_TRAJECTORIES_NO_TRAINING_NO_SUBMISSION=TRUE
