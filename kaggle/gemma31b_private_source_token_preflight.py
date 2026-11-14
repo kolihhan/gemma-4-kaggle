@@ -75,14 +75,19 @@ def load_rows(name:str,source_dir:Path)->list[dict]:
     return rows
 
 
-def lengths(tokenizer, rows:list[dict])->list[dict]:
+def lengths(processor,tokenizer,rows:list[dict])->list[dict]:
     stats=[]
     for row in rows:
-        prefix=tokenizer.apply_chat_template(
-            [{"role":"user","content":row["prompt"]}],
-            tokenize=True,add_generation_prompt=True)
+        # Gemma 4 is a multimodal processor; the tokenizer may have no
+        # standalone chat_template. Render with the model processor first.
+        rendered=processor.apply_chat_template(
+            [{"role":"user","content":[{"type":"text","text":row["prompt"]}]}],
+            tokenize=False,add_generation_prompt=True)
+        if not isinstance(rendered,str) or not rendered:
+            raise ValueError("processor_chat_template_prompt_failed")
+        prefix=tokenizer.encode(rendered,add_special_tokens=False)
         if not isinstance(prefix,list) or not prefix:
-            raise ValueError("chat_template_prompt_failed")
+            raise ValueError("processor_render_tokenization_failed")
         target=tokenizer.encode(row["completion"],add_special_tokens=False)
         if not isinstance(target,list) or not target:
             raise ValueError("diff_target_empty")
@@ -130,7 +135,7 @@ def run()->dict:
     out={}
     for name,records in (("train",train),("holdout",held)):
         EXECUTION_STAGE="tokenize_"+name
-        data=lengths(tokenizer,records)
+        data=lengths(processor,tokenizer,records)
         totals=[x["total_tokens"] for x in data]
         out[name]={
           "n":len(data),"max_tokens":max(totals),
