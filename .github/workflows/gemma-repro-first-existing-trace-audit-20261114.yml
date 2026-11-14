@@ -1,0 +1,48 @@
+name: Gemma reproduce-first completed trace feedback (CPU/read-only)
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths:
+      - .github/workflows/gemma-repro-first-existing-trace-audit-20261114.yml
+permissions: {contents: read}
+concurrency:
+  group: gemma-repro-first-existing-traces-once-20261114
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL: kolihhan/gemma4-repro-first-43547354883
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Run strict CPU synthetic regression tests
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/audit_repro_first_existing_31b.py
+          python -m unittest -q tests.test_audit_repro_first_existing_31b tests.test_audit_paired_31b_feedback_v2
+          echo REPRO_EXISTING_AUDIT_CPU_TESTS=PASS
+      - name: Fetch outputs of one existing complete private Kaggle run
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/gemma-repro-existing
+          status="$(kaggle kernels status "$KERNEL" 2>&1)" || exit 1
+          case "$status" in
+            *KernelWorkerStatus.COMPLETE*) ;;
+            *) echo GEMMA_EXISTING_PRIVATE_RUN_NOT_COMPLETE; exit 1 ;;
+          esac
+          kaggle kernels output "$KERNEL" -p /tmp/gemma-repro-existing -o >/tmp/gemma-repro-read-private.log 2>&1 || {
+            echo GEMMA_EXISTING_OUTPUT_READ_FAILED; exit 1;
+          }
+          echo GEMMA_EXISTING_COMPLETED_PRIVATE_OUTPUT_AVAILABLE=TRUE
+      - name: Reduce and report only safe source-of-truth counters
+        run: |
+          set -euo pipefail
+          python -m scripts.audit_repro_first_existing_31b --root /tmp/gemma-repro-existing
+          echo NO_NEW_GPU_TRAINING_OR_OFFICIAL_SUBMISSION=TRUE
