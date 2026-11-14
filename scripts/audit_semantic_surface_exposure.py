@@ -63,5 +63,17 @@ def audit(root: Path, selected: tuple[str, ...] = PILOT) -> dict:
     }
 
 
+def require_unexposed(root: Path, selected: tuple[str, ...]) -> None:
+    """Fail closed before GPU if any proposed confirmation ID is already in old manifests.
+
+    This is a minimal necessary gate, NOT sufficient proof of global
+    independence: unindexed prior manual exposures remain possible.
+    """
+    result = audit(root, selected)
+    if result["historically_exposed_count"]:
+        raise ValueError("known historical task exposure: " +
+                         ",".join(result["historically_exposed_ids"]))
+
+
 if __name__ == "__main__":
     print(json.dumps(audit(ROOT),sort_keys=True))
