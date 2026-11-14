@@ -75,7 +75,7 @@ def pick_splits(splits: list, limit: int = 4) -> list[dict]:
     # trajectories across dataset releases. No hidden/test split sampled.
     versions = sorted(
         {str(x.get("config")) for x in splits if isinstance(x, dict)
-         and re.match(r"^v[0-9]+\\.[0-9]+$", str(x.get("config", "")))},
+         and re.match(r"^v[0-9]+[.][0-9]+$", str(x.get("config", "")))},
         key=lambda s: tuple(int(p) for p in s[1:].split(".")),
         reverse=True,
     )
