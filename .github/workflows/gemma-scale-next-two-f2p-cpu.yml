@@ -1,0 +1,32 @@
+name: "Gemma frozen Scale-SWE cases 2-3 independent F2P (CPU only)"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-scale-next-two-f2p-cpu.yml]
+permissions: {contents: read}
+jobs:
+  actual_replay:
+    strategy:
+      fail-fast: false
+      matrix:
+        case_index: [2, 3]
+    runs-on: ubuntu-latest
+    timeout-minutes: 26
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Source F2P code safety and size-cap synthetic checks
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_replay_scale_swe_one_in_docker
+          python -m py_compile scripts/replay_scale_swe_one_in_docker.py
+          python -m pip install -q --disable-pip-version-check 'pyarrow>=20,<24' 'fsspec>=2025.3,<2027' 'aiohttp>=3.10,<4'
+          echo GEMMA_NEXT_FROZEN_F2P_SAFETY=PASS
+      - name: Uninspected source cases 2-3 model F2P, stop before oversized image
+        run: |
+          set -euo pipefail
+          python -m scripts.replay_scale_swe_one_in_docker --case-index ${{ matrix.case_index }}
+          echo GEMMA_NEXT_FROZEN_F2P_NO_GOLD_PATCH=TRUE
+          echo NO_GPU_NO_TRAINING_NO_COMPETITION_SUBMISSION=TRUE
