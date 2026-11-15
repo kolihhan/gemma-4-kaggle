@@ -117,6 +117,44 @@ def reduce_trace(path: Path) -> dict:
     }
 
 
+
+def paired_budget_gate(records: list[dict]) -> dict:
+    """Compare the *same* issue IDs; a faster failure is not a successful agent."""
+    by_id: dict[str, dict[str, dict]] = {}
+    for row in records:
+        by_id.setdefault(row["instance_id"], {})[row["arm"]] = row
+    if len(by_id) != 3 or any(set(pair) != set(ARMS) for pair in by_id.values()):
+        raise ValueError("three genuinely paired tasks required")
+    matrix = {"both_resolved": 0, "control_only": 0,
+              "treatment_only": 0, "neither_resolved": 0}
+    cost = {}
+    for arm in ARMS:
+        usable = [r for pair in by_id.values() for r in [pair[arm]]
+                  if type(r.get("tool_calls_scorer")) is int and r["tool_calls_scorer"] >= 0]
+        secs = [r for pair in by_id.values() for r in [pair[arm]]
+                if type(r.get("duration_seconds")) in (int,float) and r["duration_seconds"] >= 0]
+        cost[arm] = {"known_tool_call_tasks": len(usable),
+                     "total_tool_calls": sum(r["tool_calls_scorer"] for r in usable),
+                     "known_duration_tasks": len(secs),
+                     "total_duration_seconds": round(sum(r["duration_seconds"] for r in secs), 2)}
+    for pair in by_id.values():
+        control, treatment = (pair[arm]["resolved"] for arm in ARMS)
+        key = ("both_resolved" if control and treatment else
+               "control_only" if control else "treatment_only" if treatment
+               else "neither_resolved")
+        matrix[key] += 1
+    delta = matrix["treatment_only"] - matrix["control_only"]
+    return {
+        "matched_issues": len(by_id), "matrix": matrix,
+        "net_rescues_minus_regressions": delta,
+        "budget_by_arm": cost,
+        "gate": ("NO_CORRECTNESS_GAIN" if delta <= 0
+                 else "PRELIMINARY_ONLY_NEEDS_DISJOINT_CONFIRMATION"),
+        "promote": False,
+        "limitation": "Three previously seen public-dev issues; tool cost or edit timing without correct resolution is not evidence of better Kaggle generalization.",
+    }
+
+
 def audit(root: Path) -> dict:
     rows = read_safe_results(root / "paired_prompt_v2_31b_results.json")
     reports = []
@@ -148,6 +186,7 @@ def audit(root: Path) -> dict:
             "traces_found": sum(r["arm"] == arm and r["trace_found"] for r in reports),
         } for arm in ARMS},
         "tasks": reports,
+        "paired_budget_gate": paired_budget_gate(reports),
     }
 
 
