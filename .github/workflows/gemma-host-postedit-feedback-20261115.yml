@@ -2,7 +2,7 @@ name: "Gemma host feedback bounded test selection synthetic contract"
 on:
   push:
     branches: [research/dual-agent-recovery-v0-20261108]
-    paths: [.github/workflows/gemma-host-postedit-feedback-20261115.yml]
+    paths: [.github/workflows/gemma-host-postedit-feedback-20261115.yml, scripts/gemma_host_postedit_feedback_prototype_20261115.py]
 permissions: {contents: read}
 jobs:
   verify:
