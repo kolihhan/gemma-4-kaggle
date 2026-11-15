@@ -1,0 +1,32 @@
+name: Gemma PRO existing official submission status exact
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-pro-existing-submission-state-20261115.yml]
+permissions: {contents: read}
+jobs:
+  existing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env: {KAGGLE_API_TOKEN: "${{ secrets.KAGGLE_API_TOKEN }}"}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Authenticate and inspect existing account submissions only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import json
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions
+          rows = authenticated_submissions()
+          named = [{k:r.get(k) for k in ('ref','status','publicScore','date','description')}
+                   for r in rows if str(r.get('ref')) in ('58350278','58183466')]
+          if not any(str(x['ref']) == '58350278' for x in named):
+              raise SystemExit('MISSING_EXPECTED_OFFICIAL_SUBMISSION')
+          print('GEMMA_PRO_EXISTING_SUBMISSIONS='+json.dumps(named,sort_keys=True,default=str))
+          print('GEMMA_PRO_NO_SUBMISSION_NO_KERNEL=TRUE')
+          PY
