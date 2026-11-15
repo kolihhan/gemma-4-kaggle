@@ -1,0 +1,34 @@
+name: "Gemma PRO matched failure mechanism research on existing six issue traces"
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-pro-mechanism-existing-readonly.yml]
+permissions: {contents: read}
+jobs:
+  study:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Verify hypothesis reducer and existing trace format
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_gemma_pro_mechanism_existing_traces tests.test_audit_paired_31b_feedback_v2
+          python -m py_compile scripts/gemma_pro_mechanism_existing_traces.py
+      - name: Examine only already existing private six-task paired traces
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/pro-gemma-trace
+          kaggle kernels output kolihhan/gemma4-prompt-v2-paired-43057377220 -p /tmp/pro-gemma-trace -o >/tmp/pro-gemma-download.log 2>&1
+          test -s /tmp/pro-gemma-trace/paired_prompt_v2_31b_results.json
+          python -m scripts.gemma_pro_mechanism_existing_traces --root /tmp/pro-gemma-trace
+          echo "GEMMA_PRO_NEW_GPU=FALSE;NEW_TRAINING=FALSE;SUBMISSION=FALSE;RAW_ISSUES_EXPORTED=FALSE"
