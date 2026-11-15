@@ -1,3 +1,10 @@
+# NOW — 2026-11-15 15:15 MYT PRO real 31B 3-pair V3R-vs-V2 private evaluator launched
+
+- **ACTUAL EXPERIMENT:** [Action #43689217134](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43689217134) verified through successful private kernel push and now polling `kolihhan/gemma4-v3r-v2-pro-nov15-v1`; model inference results and paired task correctness **not yet available**. No official competition submission or training. [Preregistered task/budget contract](experiments/solver-v3/pro-v3r-vs-v2-fresh-paired-20261115.json) uses 3 source-stratified *newly selected public-dev issues*, 6 evaluations, matched 5min/28calls/80turns, pinned V2 and V3R legal Skill hashes. [CPU source+render preflight passed #43689003780](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43689003780).
+- **Decision:** real grader-resolved rescues minus regressions, actual autonomous model uptake/feedback consumption and costs, not green Actions. [Experiment record](docs/research/2026-11-15-pro-v3r-v2-real-private-paired-launch.md). The isolated host callback prototype remains **unproven deployable**; we reused the existing official ADK supported Skill rather than adding another prompt-only arm. Best Kaggle numeric score **0.18**; #58350278 still pending [authenticated #43688525240](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43688525240).
+
+---
+
 # NOW — 2026-11-15 PRO round 2: host feedback tool prototype verified, agent gain untested
 
 - **EXECUTED:** [Action #43683710899](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43683710899) SUCCESS: host-side bounded post-edit test discovery/execution distinguishes PASS, genuine test FAIL, no test, infrastructure/collection error, traversal and timeout handling. Python source [here](scripts/gemma_host_postedit_feedback_prototype_20261115.py).
