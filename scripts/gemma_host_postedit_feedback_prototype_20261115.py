@@ -106,6 +106,13 @@ def smoke() -> None:
         test.write_text("from pkg.logic import answer\ndef test_answer(): assert answer() == 43\n")
         bad = feedback(root, ["pkg/logic.py"])
         assert bad["status"] == "FAIL" and bad["repair_signal"], bad
+        from unittest.mock import patch
+        with patch("subprocess.run", return_value=subprocess.CompletedProcess(
+            args=[], returncode=4, stdout="", stderr=""
+        )):
+            unavailable = feedback(root, ["pkg/logic.py"])
+        assert unavailable["status"] == "TEST_UNAVAILABLE"
+        assert not unavailable["repair_signal"]
         absent = feedback(root, ["pkg/no_test.py"])
         assert absent["status"] == "NO_TARGETED_TEST_DISCOVERED"
         try:
