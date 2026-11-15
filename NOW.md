@@ -1,3 +1,11 @@
+# NOW — 2026-11-15 PRO round 2: host feedback tool prototype verified, agent gain untested
+
+- **EXECUTED:** [Action #43683710899](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43683710899) SUCCESS: host-side bounded post-edit test discovery/execution distinguishes PASS, genuine test FAIL, no test, infrastructure/collection error, traversal and timeout handling. Python source [here](scripts/gemma_host_postedit_feedback_prototype_20261115.py).
+- **EVIDENCE LIMIT:** synthetic workspaces only, **0 real 31B agent tasks**, 0 grader-resolved rescues, 0 new GPU/submission. CI passing is NOT evidence of better task solving. [Experiment design and actual evidence](docs/research/2026-11-15-pro-host-feedback-prototype.md).
+- **NEXT:** integrate this feedback into a private 31B candidate only if host tool/wrapper supports genuine workspace tests, verify that the agent consumes feedback, then run blind, newly selected, same-issue 3-pair V2-vs-feedback grader check with equal 5min/28calls/80turns. Keep best scored **0.18** until actual official numeric update.
+
+---
+
 # NOW — 2026-11-15 PRO decision: real agent edits exist, feedback/semantic repair unresolved
 
 - **New actual existing-trace mechanism audit**, [Action #43682311978](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43682311978) **SUCCESS**, 3 matched old public-development issues / arm. V2 vs alternate Prompt: resolved **0/3 vs 0/3**; each arm **edited 3/3** tasks; first edit late **1/3 vs 2/3**; recognized targeted or inline tests **0/3 vs 0/3**; opaque commands **3/3 vs 2/3**, so we must NOT claim zero actual tests. [Research decision](docs/research/2026-11-15-pro-test-feedback-pivot.md).
