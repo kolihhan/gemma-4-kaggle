@@ -1,0 +1,56 @@
+name: Gemma PRO V3R-vs-V2 exact source private CPU preflight
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-pro-v3r-v2-cpu-preflight-20261115.yml]
+permissions: {contents: read}
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Verify preregistered source, compile, and frozen candidate source without model
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/render_v3r_vs_v2_fresh_31b.py scripts/build_solver_v3r_candidate.py
+          python - <<'PY'
+          from scripts.render_v3r_vs_v2_fresh_31b import validate_manifest, MANIFEST_PATH
+          from pathlib import Path
+          import json
+          plan=json.loads(Path(MANIFEST_PATH).read_text())
+          validate_manifest(plan)
+          assert plan['experiment']['arms'] == ['v2_5min','v3r_5min']
+          assert plan['experiment']['model_task_evaluations']==6
+          assert plan['experiment']['primary'].startswith('paired')
+          print('V3R_FRESH_MANIFEST_GATE=PASS',flush=True)
+          PY
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/v3r-source /tmp/v3r-private
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p /tmp/v3r-source -o >/tmp/v3r-source-pull.log 2>&1
+          python -m scripts.render_v3r_vs_v2_fresh_31b --repo . \
+            --source-zip /tmp/v3r-source/submission.zip \
+            --out /tmp/v3r-private --kernel-ref kolihhan/gemma4-v3r-v2-cpu-preflight
+          python -m py_compile /tmp/v3r-private/paired_v3r_vs_v2_31b_runtime.py
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          m=json.loads(Path('/tmp/v3r-private/kernel-metadata.json').read_text())
+          r=Path('/tmp/v3r-private/paired_v3r_vs_v2_31b_runtime.py').read_text()
+          assert m['is_private'] and m['enable_gpu'] and not m['enable_internet']
+          assert m['competition_sources']==['gemma-4-developer-agent']
+          assert r.count('SkillToolset') == 0
+          assert 'TREATMENT_PAYLOAD_B64' in r and 'run_skill_script' in r
+          assert 'competition_submit_code' not in r
+          assert 'v3r_5min' in r and 'v2_5min' in r
+          assert 'skills/repair-witness/scripts/witness.py' in r
+          print('V3R_FRESH_PRIVATE_RUNTIME_CPU_PREFLIGHT=PASS',flush=True)
+          print('NEW_GPU=FALSE;TRAINING=FALSE;OFFICIAL_SUBMISSION=FALSE',flush=True)
+          PY
