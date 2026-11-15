@@ -1,3 +1,11 @@
+# NOW — 2026-11-15 PRO 31B mechanism proof tool deployed, actual pilot still in flight
+
+- Existing real private **V2 vs V3-R** 3 matched issues / six 31B evaluations: [Actions #43689217134](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43689217134) **in progress**, private kernel successfully pushed and poll in progress; **no resolved-task result yet**. Frozen 5min/28calls/80turns, no repeat GPU.
+- [Read-only real tracer #43690781599](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43690781599) **SUCCESS** for four synthetic tests of `scripts/audit_pro_v3r_real31b_uptake_20261115.py`. Same authenticated check observed private kernel RUNNING at 07:37 UTC. The tracer is ready to compare real grader-resolved rescues/regressions and real model `load_skill`/`run_skill_script` sequence from private outputs **only once terminal**; synthetic tests are not model results.
+- Own scored **0.18**, submission #58350278 still PENDING at previous authenticated receipt. No new competition submission or training.
+
+---
+
 # NOW — 2026-11-15 15:15 MYT PRO real 31B 3-pair V3R-vs-V2 private evaluator launched
 
 - **ACTUAL EXPERIMENT:** [Action #43689217134](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43689217134) verified through successful private kernel push and now polling `kolihhan/gemma4-v3r-v2-pro-nov15-v1`; model inference results and paired task correctness **not yet available**. No official competition submission or training. [Preregistered task/budget contract](experiments/solver-v3/pro-v3r-vs-v2-fresh-paired-20261115.json) uses 3 source-stratified *newly selected public-dev issues*, 6 evaluations, matched 5min/28calls/80turns, pinned V2 and V3R legal Skill hashes. [CPU source+render preflight passed #43689003780](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43689003780).
