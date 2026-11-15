@@ -1,3 +1,9 @@
+# NOW — 2026-11-15 13:17 MYT 31B QLoRA GPU smoke ERROR; dependency evidence (separate training lane)
+
+The other live research branch `research/31b-patch-checkpoint-20261114` confirmed via [existing private Kaggle report](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43609872030) that the 31B synthetic QLoRA kernel **failed at `MODEL_LOAD_4BIT` with `ImportError`**, despite two visible GPUs; no forward/backward/adapter saved. [Actual Kaggle CPU package probe](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43680136092) found `bitsandbytes NOT_INSTALLED` while `transformers 5.20.2`, `accelerate 1.15.0` and `peft 0.21.2` exist. The CPU/GPU package match is *not proven*; missing `bitsandbytes` is the strongest working hypothesis, not a verified GPU-specific cause. [Fail-fast source+4 CPU tests](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43680382483) **PASS**; no new GPU/training/submission. **Do not duplicate the failed smoke** and do not claim tiny synthetic SFT will improve interactive coding-agent success. Current scored best 0.18; official #58350278 remains PENDING as of last authenticated check.
+
+---
+
 # NOW — 2026-11-15 12:49 MYT Gemma 31B matched budget and correctness gate completed
 
 - **Actual old private three-issue paired result replayed, no new GPU:** [Action #43678028748](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43678028748) **SUCCESS** on existing previously completed `kolihhan/gemma4-prompt-v2-paired-43057377220`. At equal 5-min/28-call budgets: pinned V2 **0/3** resolved, **66 tool calls**, **827.61 s** across three; alternative public prompt **0/3**, **71 tool calls**, **828.40 s**. Paired: **both failed 3/3, 0 unique rescues/regressions, net 0**. The alternative spends more calls and time with no correctness gain, so **NO PROMOTION**.
