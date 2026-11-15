@@ -51,3 +51,22 @@ jobs:
           python -m scripts.audit_pro_v3r_real31b_uptake_20261115 \
             --root /tmp/gemma-pro-real-31b-private
           echo 'GEMMA_PRO_NO_RAW_DATA_NO_NEW_GPU_NO_SUBMISSION=TRUE'
+
+      - name: Read-only check of exact already-submitted official Gemma result
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions
+          all_rows=authenticated_submissions()
+          wanted=('58350278','58183466')
+          report=[]
+          for ref in wanted:
+              matches=[x for x in all_rows if str(x.get('ref'))==ref]
+              if len(matches)!=1: raise RuntimeError('MISSING_OR_AMBIGUOUS_EXISTING_REF_'+ref)
+              x=matches[0]
+              report.append({'ref':ref,'status':x.get('status'),'publicScore':x.get('publicScore')})
+          print('GEMMA_PRO_EXISTING_OFFICIAL_SCORE_STATUS='+json.dumps(report,sort_keys=True),flush=True)
+          print('GEMMA_PRO_NO_NEW_SUBMISSION=TRUE',flush=True)
+          PY
