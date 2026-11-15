@@ -1,3 +1,12 @@
+# 2026-11-15 PRO: REAL 31B V3-R mechanism FAILED, retire optional Skill
+
+- [Authenticated PRIVATE 31B real paired grader #43689217134](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43689217134) **COMPLETE**: frozen V2 and V3-R on same 3 newly chosen public-dev issues, both **1/3 resolved**, 3/3 generated patches. **Zero rescues, zero regressions, net 0**. V2 **62 scorer calls, 604.94 s**; V3R **81 calls, 723.06 s** (**+19 calls, +118.12 s**). This is actual correction evidence, not a CI proxy, but not independent Kaggle hidden.
+- [Real Skill uptake audit #43691444649 rerun](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43691444649) found **6/6 trace files** and **ZERO actual V3R `load_skill` or `run_skill_script` calls** across its 3 31B tasks. The added optional witness was never invoked; CPU scripted proof is not evidence of model uptake. **REJECT/RETIRE V3R, no official candidate promotion.**
+- [Actual native-tool exploratory audit #43691841171](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43691841171): neither arm shows a recognized explicit/inline test command; many opaque commands prevent claiming no tests were run. **Raw trace event totals do NOT match scorer tool-call totals**: do not use raw per-function counts as costs or causal mechanism. [Full falsifier/decision](docs/research/2026-11-15-pro-v3r-actual-31b-negative-and-skill-uptake.md).
+- Authenticated scored best remains **0.18** (#58183466); exact earlier submission **#58350278 PENDING** at last [authenticated read-only audit](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43691444649). No new Gemma official submission/training. **NEXT:** consider legal native evidence/action-path change, not more optional prompts/tools, only after a distinct, observable, falsifiable intervention is identified.
+
+---
+
 # NOW — 2026-11-15 PRO 31B mechanism proof tool deployed, actual pilot still in flight
 
 - Existing real private **V2 vs V3-R** 3 matched issues / six 31B evaluations: [Actions #43689217134](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43689217134) **in progress**, private kernel successfully pushed and poll in progress; **no resolved-task result yet**. Frozen 5min/28calls/80turns, no repeat GPU.
