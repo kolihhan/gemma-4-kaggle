@@ -1,0 +1,53 @@
+name: Gemma PRO read-only real 31B V3R uptake and paired grader audit
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-pro-v3r-real-skill-audit-20261115.yml]
+permissions: {contents: read}
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Validate grader-first mechanism reducer against synthetic fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_audit_pro_v3r_real31b_uptake_20261115
+          python -m py_compile scripts/audit_pro_v3r_real31b_uptake_20261115.py
+          echo 'V3R_REAL_31B_AUDIT_REDUCER_SYNTHETIC_TESTS=PASS'
+      - name: Authenticate and analyze ONLY the already-launched private kernel if complete
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          ref=kolihhan/gemma4-v3r-v2-pro-nov15-v1
+          status="$(kaggle kernels status "$ref" 2>&1 || true)"
+          if [[ "$status" == *KernelWorkerStatus.COMPLETE* ]]; then
+              echo 'GEMMA_PRO_EXISTING_31B_KERNEL=COMPLETE'
+          elif [[ "$status" == *KernelWorkerStatus.RUNNING* ]]; then
+              echo 'GEMMA_PRO_EXISTING_31B_KERNEL=RUNNING;NO_MATURE_METRICS=TRUE'
+              exit 0
+          elif [[ "$status" == *KernelWorkerStatus.QUEUED* ]]; then
+              echo 'GEMMA_PRO_EXISTING_31B_KERNEL=QUEUED;NO_MATURE_METRICS=TRUE'
+              exit 0
+          elif [[ "$status" == *KernelWorkerStatus.ERROR* || "$status" == *KernelWorkerStatus.FAILED* ]]; then
+              echo 'GEMMA_PRO_EXISTING_31B_KERNEL=ERROR;NO_MATURE_METRICS=TRUE'
+              exit 0
+          else
+              echo 'GEMMA_PRO_EXISTING_31B_KERNEL=UNKNOWN;NO_MATURE_METRICS=TRUE'
+              exit 0
+          fi
+          mkdir -p /tmp/gemma-pro-real-31b-private
+          kaggle kernels output "$ref" -p /tmp/gemma-pro-real-31b-private -o \
+             >/tmp/gemma-pro-real-31b-download.log 2>&1
+          python -m scripts.audit_pro_v3r_real31b_uptake_20261115 \
+            --root /tmp/gemma-pro-real-31b-private
+          echo 'GEMMA_PRO_NO_RAW_DATA_NO_NEW_GPU_NO_SUBMISSION=TRUE'
