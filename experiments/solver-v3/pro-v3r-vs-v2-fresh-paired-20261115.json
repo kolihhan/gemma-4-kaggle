@@ -1,0 +1,87 @@
+{
+  "version": "v3r-vs-v2-fresh-paired-20261115-v1",
+  "preregistered_date": "2026-11-15",
+  "goal": "Actual 31B adoption + independently graded correction from an existing official ADK runnable skill, before inventing host callbacks",
+  "hypotheses": {
+    "H_feedback": "V3R's official run_skill_script explicit test witness gives usable post-edit signal and rescues independent grader-resolved issues",
+    "H_reasoning": "31B does not invoke/consume skill or still makes semantically wrong edits; extra calls reduce correctness and no rescue"
+  },
+  "model": "gemma-4-31b-it-qat-w4a16-ct",
+  "baseline_zip_sha256": "a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3",
+  "treatment_zip_sha256": "ae8201c0ce30daf581102ef5d22886f8a4dcebfae47236dffb02ffa6426f9b0c",
+  "controls": "Exact pinned 31B V2 model, sampling, same native tools, frozen 5min/28calls/80turns; treatment adds a legal Skill witness and its invocation policy only.",
+  "shared_budget": {
+    "max_time_minutes": 5,
+    "max_tool_calls": 28,
+    "max_turns": 80,
+    "timeout_seconds": 240
+  },
+  "selection": {
+    "salt": "gemma-v3r-fresh-nov15-protocol-frozen-v1-4ed3f8a1",
+    "repo_prefixes": [
+      "fastapi_",
+      "rich_",
+      "requests_"
+    ],
+    "count_per_repo": 1,
+    "exclude_instance_ids": [
+      "fastapi_13920",
+      "fastapi_14266",
+      "fastapi_14303",
+      "fastapi_14361",
+      "fastapi_14448",
+      "fastapi_14463",
+      "fastapi_14487",
+      "fastapi_14609",
+      "fastapi_14873",
+      "fastapi_14986",
+      "fastapi_15280",
+      "fastapi_15661",
+      "fastapi_5077",
+      "fastapi_9425",
+      "fastapi_9555",
+      "requests_6592",
+      "requests_6757",
+      "requests_7328",
+      "requests_7427",
+      "requests_7502",
+      "rich_2725",
+      "rich_3052",
+      "rich_3061",
+      "rich_3064",
+      "rich_3067",
+      "rich_3105",
+      "rich_3180",
+      "rich_3278",
+      "rich_3777",
+      "rich_3782",
+      "rich_3930",
+      "rich_3934",
+      "rich_3942",
+      "rich_4079"
+    ],
+    "method": "Select the min SHA256(salt+'|'+ID) from each repo prefix, excluding all listed spent IDs, without reading issue text or reference patch. IDs are selected at private runtime from public tasks."
+  },
+  "experiment": {
+    "arms": [
+      "v2_5min",
+      "v3r_5min"
+    ],
+    "tasks": 3,
+    "model_task_evaluations": 6,
+    "order": "alternate task order 1 V2 then V3R, 2 V3R then V2, 3 V2 then V3R",
+    "primary": "paired official swegemma grader-resolved tasks; rescue minus regression",
+    "secondary": [
+      "actual V3R load_skill/run_skill_script counts",
+      "test feedback consumed by model where observable",
+      "patch materialized",
+      "tool call/time costs",
+      "error/timeout rates"
+    ],
+    "success": "Any isolated net rescue is preliminary; independently corroborate elsewhere before official competition submission.",
+    "stop": "No usable tool uptake or no net task-resolution rescue (or higher regressions) => retire V3R skill mechanism; don't prompt-tune on these IDs."
+  },
+  "data_safety": "Private Kaggle only: mount competition snapshots at runtime; no publication of raw tasks, traces, reference patches or model output; publish allowlisted aggregates only.",
+  "resource": "One idempotent private 31B Kernel, no training, no competition submission, require >=6 GPU hours before starting, no equivalent live evaluation.",
+  "approval_scope": "User requested continuation of experimental research; no new official submission authorized from this pilot."
+}
