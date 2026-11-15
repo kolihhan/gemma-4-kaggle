@@ -1,0 +1,58 @@
+name: "Gemma 31B failed 4-bit loader actual error log read-only"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma-31b-smoke-error-log-readonly.yml]
+permissions: {contents: read}
+jobs:
+  read_error:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Inspect existing failed private Kaggle kernel logs only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import subprocess, pathlib, re, json, os
+          target="kolihhan/gemma31b-qlora-one-step-43605569270"
+          help_log=subprocess.run(["kaggle","kernels","logs","--help"],capture_output=True,text=True,timeout=30)
+          opts=help_log.stdout+help_log.stderr
+          flags={"has_path_flag":"-p" in opts, "has_show_flag":"--show" in opts}
+          print("GEMMA_31B_LOG_CLI_CAPABILITIES="+json.dumps(flags,sort_keys=True),flush=True)
+          root=pathlib.Path("/tmp/gemma31b-logcheck");root.mkdir(exist_ok=True)
+          cmd=["kaggle","kernels","logs",target,"-p",str(root)]
+          x=subprocess.run(cmd,capture_output=True,text=True,timeout=100)
+          print("GEMMA_31B_LOG_DOWNLOAD_RC="+str(x.returncode),flush=True)
+          files=sorted(p for p in root.rglob("*") if p.is_file())
+          print("GEMMA_31B_LOG_FILES="+json.dumps([{"suffix":p.suffix,"bytes":p.stat().st_size} for p in files],sort_keys=True),flush=True)
+          # No raw prompts, exceptions, paths, or model messages are exported.
+          phrases=[
+             ("bitsandbytes",r"bitsandbytes|bnb"),
+             ("torchao",r"torchao"),
+             ("quantization_error",r"quantiz|4.bit|4bit|nf4"),
+             ("peft",r"peft"),
+             ("version_mismatch",r"version|require|upgrade|install"),
+             ("model_import",r"ImportError|ModuleNotFoundError|cannot import"),
+             ("cuda_error",r"CUDA|GPU"),
+             ("loader_error",r"Traceback|exception|error"),
+          ]
+          lines=[]
+          for f in files:
+              if f.stat().st_size>5_000_000:continue
+              if f.suffix.lower() not in (".log",".txt",".json"):continue
+              text=f.read_text(encoding="utf-8",errors="replace")
+              for line in text.splitlines():
+                  tags=[k for k,p in phrases if re.search(p,line,re.I)]
+                  if tags:
+                      lines.append({"categories":tags})
+          print("GEMMA_31B_LOG_ERROR_CATEGORY_COUNTS="+json.dumps({
+              tag:sum(tag in l["categories"] for l in lines) for tag,_ in phrases},sort_keys=True),flush=True)
+          print("GEMMA_31B_LOG_READ_ONLY_NO_GPU_NO_TRAINING=TRUE",flush=True)
+          PY
