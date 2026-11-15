@@ -15,7 +15,7 @@ import json
 from pathlib import Path
 import re
 
-from scripts.build_v3r_skill_only_control_20261111 import digest
+from scripts.build_public_prompt_only_control_20261111 import digest
 from scripts.build_solver_v3r_candidate import payload as v3r_payload, build as v3r_build
 from scripts.prepare_public_budgetfit_v2 import validate_source_zip, EXPECTED_ZIP_SHA256
 from scripts.render_contract_impact_31b_pilot import replace_one, replace_section
