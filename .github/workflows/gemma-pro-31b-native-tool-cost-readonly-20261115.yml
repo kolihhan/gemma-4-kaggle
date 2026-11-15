@@ -1,0 +1,85 @@
+name: Gemma PRO native tools per matched issue real 31B cost audit
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-pro-31b-native-tool-cost-readonly-20261115.yml]
+permissions: {contents: read}
+jobs:
+  native_audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Analyze real PRIVATE paired traces without model inference or raw content export
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          ref=kolihhan/gemma4-v3r-v2-pro-nov15-v1
+          state="$(kaggle kernels status "$ref" 2>&1)"
+          [[ "$state" == *KernelWorkerStatus.COMPLETE* ]] || { echo 'STOP_EXISTING_31B_NOT_COMPLETE'; exit 1; }
+          mkdir -p /tmp/gemma-native-pro-paired
+          kaggle kernels output "$ref" -p /tmp/gemma-native-pro-paired -o \
+            >/tmp/gemma-native-pro-raw-download.log 2>&1
+          python - <<'PY'
+          from collections import Counter
+          import json
+          from pathlib import Path
+          from scripts.audit_pro_v3r_real31b_uptake_20261115 import (
+              ARMS, validate, trace_path
+          )
+          from scripts.audit_paired_31b_feedback_v2 import reduce_feedback
+          root=Path('/tmp/gemma-native-pro-paired')
+          rows=validate(json.loads((root/'paired_prompt_v2_31b_results.json').read_text()))
+          counters={}
+          for arm in ARMS:
+              matched=[r for r in rows if r['arm']==arm]
+              allstats=[]
+              for r in matched:
+                  p=trace_path(root,arm,r['instance_id'])
+                  if not p: raise RuntimeError('STOP_MISSING_PRIVATE_TRACE')
+                  tr=json.loads(p.read_text())
+                  stats=reduce_feedback(tr)
+                  # For native tool usage classify exact function names only.
+                  names=Counter(str(call.get('function_name')) for step in tr['steps']
+                      if isinstance(step,dict) for call in step.get('tool_calls',[])
+                      if isinstance(call,dict))
+                  allstats.append((r,stats,names))
+              total=Counter()
+              exact_tools=Counter()
+              for r,stat,names in allstats:
+                  total['tasks']+=1
+                  total['resolved']+=int(r['resolved'])
+                  total['edits']+=stat['total_edit_actions']
+                  total['explicit_or_inline_tests']+=stat['explicit_or_inline_tests']
+                  total['test_after_edit']+=int(stat['tests_after_first_edit']>0)
+                  total['test_failed_followed_by_edit']+=int(stat['nonzero_test_then_edit']>0)
+                  total['opaque_commands']+=stat['unclassified_opaque_commands']
+                  total['command_nonzero']+=sum(stat['all_command_structured_exit'].get('nonzero',0) for _ in range(1))
+                  total['command_exit_unknown']+=stat['all_command_structured_exit'].get('unknown',0)
+                  total['first_edit_after_half_calls']+=int(
+                      stat['first_edit_action'] is not None and stat['recorded_action_count']>0
+                      and 2*(stat['first_edit_action']-1)>=stat['recorded_action_count']
+                  )
+                  total['recorded_tool_actions']+=stat['recorded_action_count']
+                  total['native_tool_calls_scorer']+=int(r.get('tool_calls') or 0)
+                  total['time_seconds_round']+=round(float(r.get('duration_seconds') or 0))
+                  exact_tools.update(names)
+              counters[arm]={'task_stats':dict(sorted(total.items())),
+                  'native_tool_function_names':{name:int(n) for name,n in sorted(exact_tools.items())
+                      if name in {'read_file','edit_file','write_file','run_command','submit_patch',
+                       'get_status','get_code_neighbors','get_code_subgraph','search_similar_code',
+                       'load_skill','run_skill_script'}}}
+          out={'version':'fresh-3pair-real31b-native-tool-cost-v1',
+               'source':'previously_uninspected_public_dev_3pair_PRIVATE_ONLY',
+               'groups':counters,'new_model_inference':False,'raw_traces_exported':False,
+               'accuracy_gain_claimed':False,'competition_submission':False,
+               'inference_limits':'Opaque command classification does not establish that no tests ran. Three tasks per arm are insufficient for generalizable causal claims.'}
+          print('GEMMA_PRO_ACTUAL_NATIVE_TOOL_COST_31B='+json.dumps(out,sort_keys=True),flush=True)
+          PY
