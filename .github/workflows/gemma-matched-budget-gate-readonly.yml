@@ -1,0 +1,48 @@
+name: "Gemma 31B Yuanzhe-style matched budget outcome gate CPU read only"
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-matched-budget-gate-readonly.yml]
+permissions: {contents: read}
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Verify budget gate synthetic correctness cases and compile
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_audit_paired_31b_existing_traces
+          python -m py_compile scripts/audit_paired_31b_existing_traces.py
+      - name: Fetch already completed six-result Kaggle private pilot, never launch model
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          TARGET=kolihhan/gemma4-prompt-v2-paired-43057377220
+          raw="$(kaggle kernels status "$TARGET" 2>&1)"
+          if [[ "$raw" != *KernelWorkerStatus.COMPLETE* ]]; then
+            echo "GEMMA_MATCHED_BUDGET_GATE_SOURCE_NOT_COMPLETE=TRUE"
+            exit 1
+          fi
+          mkdir -p /tmp/gemma-budget-readonly
+          kaggle kernels output "$TARGET" -p /tmp/gemma-budget-readonly -o >/tmp/gemma-readonly-pull.log 2>&1
+          test -s /tmp/gemma-budget-readonly/paired_prompt_v2_31b_results.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.audit_paired_31b_existing_traces import audit
+          x=audit(Path('/tmp/gemma-budget-readonly'))
+          assert x['model_task_evaluations']==6
+          assert all(x['by_arm'][arm]['evaluated']==3 for arm in ('v2_5min','public_prompt_5min'))
+          result=x['paired_budget_gate']
+          assert result['matched_issues']==3 and result['promote'] is False
+          print('GEMMA_MATCHED_BUDGET_GATE_ACTUAL='+json.dumps(result,sort_keys=True),flush=True)
+          print('GEMMA_BUDGET_GATE_READ_ONLY=TRUE;NEW_GPU=FALSE;OFFICIAL_SUBMISSION=FALSE',flush=True)
+          PY
