@@ -2,7 +2,9 @@
 import unittest
 from types import SimpleNamespace
 import inspect
-from kaggle.gemma31b_qlora_one_step_smoke import device_map_summary,TRAINING,main
+from unittest.mock import patch
+import importlib.metadata
+from kaggle.gemma31b_qlora_one_step_smoke import device_map_summary,TRAINING,main,require_4bit_dependencies
 
 class QLoraSmokeTests(unittest.TestCase):
     def test_no_cpu_offload_is_falsifiable(self):
@@ -18,6 +20,20 @@ class QLoraSmokeTests(unittest.TestCase):
         ]:
             with self.assertRaises(RuntimeError):
                 device_map_summary(SimpleNamespace(hf_device_map=bad))
+
+    def test_4bit_dependency_fail_fast(self):
+        versions={"bitsandbytes":"0.50.0","accelerate":"1.15.0"}
+        with patch("kaggle.gemma31b_qlora_one_step_smoke.importlib.metadata.version",
+                   side_effect=lambda name:versions[name]):
+            self.assertEqual(require_4bit_dependencies(),versions)
+        def missing(name):
+            if name=="bitsandbytes":
+                raise importlib.metadata.PackageNotFoundError(name)
+            return versions[name]
+        with patch("kaggle.gemma31b_qlora_one_step_smoke.importlib.metadata.version",
+                   side_effect=missing):
+            with self.assertRaisesRegex(RuntimeError,"missing_4bit_dependency_bitsandbytes"):
+                require_4bit_dependencies()
 
     def test_exact_multimodal_model_load_class(self):
         source=inspect.getsource(main)
