@@ -1,0 +1,86 @@
+name: "Gemma31B real Kaggle CPU bitsandbytes dependency smoke once"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma31b-bnb-deps-private-cpu-once.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma31b-bnb-deps-private-cpu-once
+  cancel-in-progress: false
+jobs:
+  deps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma31b-bnb-deps-cpu-nov15
+      KERNEL_DIR: /tmp/gemma31b-cpu-image-probe
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Render one genuine private Kaggle CPU dependency probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m py_compile kaggle/gemma31b_4bit_dependencies_cpu.py
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          mkdir -p "$KERNEL_DIR"
+          cp kaggle/gemma31b_4bit_dependencies_cpu.py "$KERNEL_DIR/entry.py"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          ref=os.environ["KERNEL_REF"]
+          out=Path(os.environ["KERNEL_DIR"])
+          (out/"kernel-metadata.json").write_text(json.dumps({
+              "id":ref,"title":ref.split("/",1)[1],"code_file":"entry.py",
+              "language":"python","kernel_type":"script","is_private":True,
+              "enable_gpu":False,"enable_tpu":False,"enable_internet":False,
+              "competition_sources":[],"dataset_sources":[],
+              "model_sources":[],"kernel_sources":[]
+          },indent=2),encoding="utf-8")
+          print("GEMMA31B_REAL_CPU_DEPENDENCY_KERNEL_RENDER=PASS",flush=True)
+          PY
+      - name: Push at most once and observe bounded private CPU run
+        shell: bash
+        run: |
+          set -euo pipefail
+          old="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+          if [[ "$old" == *KernelWorkerStatus.* ]]; then
+            echo "GEMMA31B_DEPENDENCY_KERNEL_ALREADY_EXISTS=TRUE"
+          else
+            kaggle kernels push -p "$KERNEL_DIR" -t 1200 >/tmp/gemma31b-dep-push.log 2>&1
+            echo "GEMMA31B_DEPENDENCY_NEW_CPU_KERNEL=TRUE"
+          fi
+          for i in $(seq 1 36); do
+            status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            case "$status" in
+              *KernelWorkerStatus.COMPLETE*) echo "GEMMA31B_DEPENDENCY_CPU_STATE=COMPLETE"; break;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*)
+                echo "GEMMA31B_DEPENDENCY_CPU_STATE=ERROR"; break;;
+            esac
+            if [[ "$i" == 36 ]]; then echo "GEMMA31B_DEPENDENCY_CPU_STATE=NOT_TERMINAL"; fi
+            sleep 15
+          done
+          mkdir -p /tmp/gemma31b-dep-result
+          kaggle kernels output "$KERNEL_REF" -p /tmp/gemma31b-dep-result \
+              --file-pattern '^gemma31b-4bit-dependencies-safe[.]json$' -o \
+              >/tmp/gemma31b-dep-output.log 2>&1 || true
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          files=list(Path("/tmp/gemma31b-dep-result").rglob("gemma31b-4bit-dependencies-safe.json"))
+          if len(files)!=1:
+              print("GEMMA31B_CPU_DEPENDENCY_SAFE=NOT_TERMINAL_OR_NOT_AVAILABLE",flush=True)
+          else:
+              obj=json.loads(files[0].read_text())
+              allowed={"kind","versions","bitsandbytes_config_constructible","gemma4_class_available",
+                       "gpu_model_load_proven","training","new_gpu","official_submission",
+                       "status","failure_phase","exception_type","suspected_package_tokens"}
+              print("GEMMA31B_CPU_DEPENDENCY_SAFE="+json.dumps({
+                  k:v for k,v in obj.items() if k in allowed
+              },sort_keys=True),flush=True)
+          print("GEMMA31B_NO_MODEL_WEIGHTS_NO_GPU_NO_OFFICIAL_SUBMISSION=TRUE",flush=True)
+          PY
