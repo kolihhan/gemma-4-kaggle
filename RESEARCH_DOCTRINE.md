@@ -145,3 +145,36 @@ WHAT RESULT WOULD CAUSE AN ARCHITECTURE-LEVEL PIVOT?:
 ```
 
 Do not reflexively continue the existing lineage. Do not reflexively redesign it either. Follow the strongest independent evidence available.
+
+
+## 10. Competition-Grandmaster research operating loop (2026-11-15)
+
+**Purpose:** learn the transferable *experiment-decision process* of strong multi-domain Kaggle competitors, including Yuanzhe Zhou. This is our own synthesis, **not** a claim that this exact protocol is his published checklist. Objective: increase **official coding-agent resolved-task score**, not tool calls, prompt length, CI passes, or successful LoRA initialization. Best authenticated scored Public remains **0.18** until verified otherwise.
+
+**Research beats ritual:** a correct Docker/Kaggle package, model load, dependency fix, timing check, green gate, or an agent that emits a patch is *engineering readiness*, not a resolved bug. Repeating old prompt-only tweaks after controlled 0/3-vs-0/3 evidence is not exploration.
+
+**For each scientific decision:**
+1. **Understand the score and task-generation process.** Describe how actual issue resolution is judged, what the official tools can observe, and the failure chronology on *the same issues*. Separate task localization, root-cause inference, edit correctness, executable validation, and timeout/invalid-patch errors. Inspect leading external solutions **for causal mechanisms**, not code to copy.
+2. **Rank at least two conflicting bottleneck hypotheses** (e.g. wasted pre-edit exploration **versus** insufficient root-cause evidence or bad post-edit tests **versus** model/representation ceiling). State a concrete observation that would falsify each explanation; count *correct issues resolved*, not just changed lines.
+3. **Design the cheapest useful paired test** with frozen model, harness and task selection before examining outcome; report paired rescues/regressions, first actual mutation time, test/repair chronology, calls and end-to-end cost. Never expose reference patches, grader labels or private issue texts to the agent.
+4. **Spend compute for information gain.** Reuse authentic traces first, then a small source-disjoint, fixed-budget blinded cohort only if it can differentiate the hypotheses. A 3-task all-fail comparison is weak for a generalization claim but strong evidence **against promoting that exact prompt**; a synthetic 31B adapter smoke proves neither training benefit nor repair skill.
+5. **Pivot at the research level.** If efficient tools, extra steps and prompt-only changes repeatedly fail to increase *resolved* tasks, investigate better evidence acquisition, representation, policy/training signal, verification feedback or search rather than appending another instruction. RL/QLoRA is neither mandatory nor banned: its scope needs a diagnosed deficiency, training-signal provenance, and held-out task-resolved test.
+6. **Decide and record.** Separate engineering validity, mechanistic evidence, true resolution lift and official score; include regressions, costs, possible confounds, uncertainty and a kill criterion. Do not tune against repeated public leaderboard submissions.
+
+**Minimum executable experiment contract:**
+
+| Field | Required entry |
+| --- | --- |
+| Target | Official resolved-task score, own scored 0.18 reference |
+| Observation | Same-issue error type and chronology, denominator/source |
+| Hypotheses A vs B | At least two distinct mechanisms with falsifying observations |
+| Treatment/control | Exactly one main change and identical budget/task selection |
+| Evidence validity | Disjointness, rights, no reference-patch/oracle exposure |
+| Primary/secondary | Paired resolved count first; edits/tests/time/calls second |
+| Cost/stop | GPU quota, runtime, failures and cutoff preregistered |
+| Outcome | Promote / revise / retire; alternatives and uncertainty |
+
+**Immediate lane:** frozen public-prompt replacement had **0/3 vs 0/3**, more calls (71 vs 66); retire it as a score-improvement candidate. Compare actual traces for *early localization vs patch/test feedback* to choose a different mechanism, then run a small **new** issue-level paired test only when its eligibility and effect falsifier are frozen. Separately, the 31B QLoRA private smoke ended at 4-bit load \`ImportError\`; CPU image lacks bitsandbytes, but the GPU root cause is unconfirmed. That is an infrastructure issue, **not** the main research hypothesis.
+
+When updating \`NOW.md\`, lead with the **scientific decision** and avoid repeated status-only cycles.
+
