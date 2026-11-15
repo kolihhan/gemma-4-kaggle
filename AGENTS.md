@@ -59,6 +59,8 @@ GitHub Release data mirrors are legacy infrastructure, not experiment state and 
 - Prefer a staged gate: static/read-only checks first, then the smallest useful execution, then an expensive run only if the earlier evidence leaves a material uncertainty.
 - Never duplicate a diagnostic or submission while an equivalent run is already active or while an existing artifact answers the question.
 
+- Before spending GPU on a new score-improvement lane, use `RESEARCH_DOCTRINE.md` §10: compare at least two distinct failure hypotheses on real issue traces, preregister a paired resolved-task test, quantify costs and regressions; green CI and prompt polish are not learning.
+
 ### Mechanism-first research
 
 - Do not optimize only for a reliable-looking combination of prompts, tools, topology, or model components. Explain **why** the intervention should work.
