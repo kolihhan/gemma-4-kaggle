@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 from scripts.audit_paired_31b_existing_traces import (
-    audit, read_safe_results, test_invocation
+    audit, read_safe_results, test_invocation, paired_budget_gate
 )
 
 
@@ -46,6 +46,30 @@ class PairedTraceAuditTests(unittest.TestCase):
             self.assertEqual(result["by_arm"]["public_prompt_5min"]["resolved"], 0)
             self.assertTrue(all(r["possible_repair_after_test"] for r in result["tasks"]))
             self.assertTrue(all(r["edits"] == 2 for r in result["tasks"]))
+
+    def test_paired_budget_gate_correctness_beats_tool_count(self):
+        rows=[]
+        for task in ("fastapi_14487","rich_3782","requests_7427"):
+            for arm in ("v2_5min","public_prompt_5min"):
+                rows.append({"instance_id":task,"arm":arm,"resolved":False,
+                             "tool_calls_scorer":5 if arm=="v2_5min" else 2,
+                             "duration_seconds":200 if arm=="v2_5min" else 100})
+        out=paired_budget_gate(rows)
+        self.assertEqual(out["matrix"]["neither_resolved"],3)
+        self.assertEqual(out["net_rescues_minus_regressions"],0)
+        self.assertEqual(out["gate"],"NO_CORRECTNESS_GAIN")
+        self.assertFalse(out["promote"])
+        rows[1]["resolved"]=True
+        out=paired_budget_gate(rows)
+        self.assertEqual(out["matrix"]["treatment_only"],1)
+        self.assertEqual(out["gate"],"PRELIMINARY_ONLY_NEEDS_DISJOINT_CONFIRMATION")
+        self.assertFalse(out["promote"])
+        rows[0]["resolved"]=True
+        out=paired_budget_gate(rows)
+        self.assertEqual(out["matrix"]["both_resolved"],1)
+        self.assertEqual(out["gate"],"NO_CORRECTNESS_GAIN")
+        with self.assertRaises(ValueError):
+            paired_budget_gate(rows[:-1])
 
     def test_absent_trace_is_unobserved(self):
         with tempfile.TemporaryDirectory() as tmp:
