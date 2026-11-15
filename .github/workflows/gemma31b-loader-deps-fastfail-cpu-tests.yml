@@ -1,0 +1,22 @@
+name: "Gemma31B preflight 4bit no-wasted-GPU regression gate"
+on:
+  push:
+    branches: [research/31b-patch-checkpoint-20261114]
+    paths: [.github/workflows/gemma31b-loader-deps-fastfail-cpu-tests.yml]
+permissions: {contents: read}
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Guard future private 31B GPU against absent bnb before allocating weights
+        run: |
+          set -euo pipefail
+          python -m py_compile kaggle/gemma31b_qlora_one_step_smoke.py
+          python -m unittest -q tests.test_gemma31b_qlora_one_step_smoke
+          echo "GEMMA31B_MISSING_BNB_FAILFAST_CPU_TESTS=PASS"
+          echo "GEMMA31B_NEW_GPU=FALSE;TRAINING=FALSE;OFFICIAL_SUBMISSION=FALSE"
