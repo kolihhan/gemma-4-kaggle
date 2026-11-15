@@ -8,7 +8,7 @@ The repo already has a distinct, legal **V3-R `repair-witness` Skill** that was 
 
 ## Actual execution and immutable contract
 
-- **Preregistered** [3-issue paired manifest](../../experiments/solver-v3/pro-v3r-vs-v2-fresh-paired-20261115.json) before private execution. 1 randomly ID-hash-selected public-dev issue from FastAPI, Rich and Requests, excluding 34 previously exposed IDs; no issue text/reference solution consulted for selection.
+- **Preregistered** [3-issue paired manifest](../../experiments/solver-v3/pro-v3r-vs-v2-fresh-paired-20261115.json) before private execution. 1 deterministically ID-hash-selected public-dev issue from FastAPI, Rich and Requests, excluding 34 previously exposed IDs; no issue text/reference solution consulted for selection.
 - Actual model: **Gemma 4 31B**. Pinned source V2 ZIP SHA256 `a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3` vs legal V3R ZIP SHA256 `ae8201c0ce30daf581102ef5d22886f8a4dcebfae47236dffb02ffa6426f9b0c`.
 - Equal per-task budget **5 minutes / 28 calls / 80 turns**, identical model+sampling, 3 matched issues and 6 actual independent grader task evaluations, alternating order. Only difference is the real Skill and instructions to use it, not a larger model or extra time.
 - **CPU authentic-source preflight PASS**, [Action #43689003780](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43689003780). It rendered a full private kernel with exact known candidate SHA, no GPU, no competition submission.
