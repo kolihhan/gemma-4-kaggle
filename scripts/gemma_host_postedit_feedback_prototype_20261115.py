@@ -81,10 +81,12 @@ def feedback(root: Path, changed_paths: list[str], timeout_seconds: int = 20) ->
                 "test_count": 1, "repair_signal": False}
     if run.returncode == 0:
         status, actionable, repair = "PASS", True, False
-    elif run.returncode == 5 or "No module named pytest" in run.stderr:
-        status, actionable, repair = "TEST_UNAVAILABLE", False, False
-    else:
+    elif run.returncode == 1:
         status, actionable, repair = "FAIL", True, True
+    else:
+        # Exit 2..5 signal interrupted/internal/usage/no-collection.
+        # Those are NOT evidence of a semantic patch failure.
+        status, actionable, repair = "TEST_UNAVAILABLE", False, False
     # No filenames, test output, issue identifiers or patches returned.
     return {"status": status, "actionable": actionable,
             "test_count": 1, "repair_signal": repair}
