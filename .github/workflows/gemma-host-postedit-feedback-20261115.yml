@@ -1,0 +1,24 @@
+name: "Gemma host feedback bounded test selection synthetic contract"
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-host-postedit-feedback-20261115.yml]
+permissions: {contents: read}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Install targeted-test runner
+        run: python -m pip install -q --disable-pip-version-check pytest
+      - name: Exercise real subprocess test-feedback channel on controlled fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/gemma_host_postedit_feedback_prototype_20261115.py
+          python scripts/gemma_host_postedit_feedback_prototype_20261115.py --smoke
+          echo "GEMMA_REAL_AGENT_TASKS_EVALUATED=0;SCORER_GAIN_UNPROVEN=TRUE;NEW_GPU=FALSE;OFFICIAL_SUBMISSION=FALSE"
