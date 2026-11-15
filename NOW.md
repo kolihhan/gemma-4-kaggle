@@ -1,3 +1,10 @@
+# 2026-11-16 01:55 MYT — official #58350278 COMPLETE with NO numeric public score
+
+- [Authenticated read-only Kaggle Action #43743767264](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43743767264): existing official submission `#58350278` description `attributed-scored-v10-exact-one-shot-20261112` is now **`SubmissionStatus.COMPLETE` but `publicScore` BLANK**. This is **NOT** a scored improvement; do not equate COMPLETE with success. Verified previous `#58183466` remains COMPLETE **0.18**.
+- Real 31B V3-R vs V2 experiment remains a **negative** on 3 matched development issues (1/3 both, no rescues; Skill uptake 0). Do not resubmit or retry that mechanism. Investigate no-score receipt provenance separately from actual task-resolved architecture improvement.
+
+---
+
 # 2026-11-15 PRO: REAL 31B V3-R mechanism FAILED, retire optional Skill
 
 - [Authenticated PRIVATE 31B real paired grader #43689217134](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43689217134) **COMPLETE**: frozen V2 and V3-R on same 3 newly chosen public-dev issues, both **1/3 resolved**, 3/3 generated patches. **Zero rescues, zero regressions, net 0**. V2 **62 scorer calls, 604.94 s**; V3R **81 calls, 723.06 s** (**+19 calls, +118.12 s**). This is actual correction evidence, not a CI proxy, but not independent Kaggle hidden.
