@@ -59,6 +59,17 @@ def ensure_peft_dependency_compatible()->str:
     return "torchao_compatible"
 
 
+def require_4bit_dependencies()->dict:
+    """Fail before model allocation when the running Kaggle image lacks 4bit deps."""
+    versions={}
+    for package in ("bitsandbytes","accelerate"):
+        try:
+            versions[package]=importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError as exc:
+            raise RuntimeError("missing_4bit_dependency_"+package) from exc
+    return versions
+
+
 def main()->dict:
     stage="START"
     report={"model_source":"google/gemma-4-31b-it-qat-q4_0-unquantized/2",
@@ -88,6 +99,8 @@ def main()->dict:
         tokenizer=getattr(processor,"tokenizer",None)
         if tokenizer is None:
             raise RuntimeError("no_tokenizer")
+        stage="FOUR_BIT_DEPENDENCY"
+        report["fourbit_dependency_versions"]=require_4bit_dependencies()
         stage="MODEL_LOAD_4BIT"
         dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
         quant=BitsAndBytesConfig(load_in_4bit=True,bnb_4bit_quant_type="nf4",
