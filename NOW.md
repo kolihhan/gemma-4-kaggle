@@ -1,3 +1,9 @@
+# 2026-11-16 02:06 MYT — official Gemma complete-unscored, 0.18 remains best
+
+- [Read-only authenticated Kaggle ledger #43743767264](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43743767264): `#58350278` is COMPLETE with **empty numeric Public Score**; previous `#58183466` is COMPLETE **0.18**. Do not misreport the completed but unscored reference as new quality evidence. Real V3-R 31B paired experiment [#43689217134](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43689217134) had **1/3 vs 1/3** and never invoked optional Skill; reject V3-R and investigate legal native-action evidence policy, not another optional tool or larger prompt.
+
+---
+
 # 2026-11-16 01:55 MYT — official #58350278 COMPLETE with NO numeric public score
 
 - [Authenticated read-only Kaggle Action #43743767264](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43743767264): existing official submission `#58350278` description `attributed-scored-v10-exact-one-shot-20261112` is now **`SubmissionStatus.COMPLETE` but `publicScore` BLANK**. This is **NOT** a scored improvement; do not equate COMPLETE with success. Verified previous `#58183466` remains COMPLETE **0.18**.
