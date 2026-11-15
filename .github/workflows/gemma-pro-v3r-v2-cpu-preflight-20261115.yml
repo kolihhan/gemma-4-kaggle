@@ -2,7 +2,7 @@ name: Gemma PRO V3R-vs-V2 exact source private CPU preflight
 on:
   push:
     branches: [research/dual-agent-recovery-v0-20261108]
-    paths: [.github/workflows/gemma-pro-v3r-v2-cpu-preflight-20261115.yml]
+    paths: [.github/workflows/gemma-pro-v3r-v2-cpu-preflight-20261115.yml, scripts/render_v3r_vs_v2_fresh_31b.py, experiments/solver-v3/pro-v3r-vs-v2-fresh-paired-20261115.json]
 permissions: {contents: read}
 jobs:
   preflight:
