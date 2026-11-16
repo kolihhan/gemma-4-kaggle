@@ -51,14 +51,20 @@ jobs:
           from pathlib import Path
           s=Path('/tmp/seq31b-kaggle-output.log').read_text(errors='replace').lower()
           status=Path('/tmp/seq31b-kernel-status.log').read_text(errors='replace').lower()
-          if '403' in s or 'permission' in s or 'forbidden' in s: code='PERMISSION'
+          if '401' in s or 'unauthorized' in s or 'authentication' in s or 'invalid token' in s: code='UNAUTHORIZED'
+          elif '403' in s or 'permission' in s or 'forbidden' in s: code='PERMISSION'
           elif '404' in s or 'not found' in s: code='NOT_FOUND'
           elif '429' in s or 'rate limit' in s: code='RATE_LIMIT'
           elif 'network' in s or 'timeout' in s or 'connection' in s: code='TRANSPORT'
+          elif '400' in s or 'bad request' in s: code='BAD_REQUEST'
+          elif 'usage: kaggle' in s or 'unrecognized arguments' in s: code='CLI_USAGE'
+          elif 'kaggle.json' in s or 'api token' in s: code='CREDENTIAL_CONFIG'
+          elif 'traceback' in s: code='CLI_EXCEPTION'
           elif 'kernelworkerstatus.' in status: code='DOWNLOAD_FAILED_KERNEL_STATUS_KNOWN'
           else: code='OTHER'
           print('GEMMA_SEQ31B_UPTAKE_OUTPUT_CLASS='+code)
           print('GEMMA_SEQ31B_UPTAKE_STATUS_TERMINAL='+str('kernelworkerstatus.complete' in status))
+          print('GEMMA_SEQ31B_UPTAKE_STATUS_CLASS='+('UNAUTHORIZED' if '401' in status or 'unauthorized' in status else 'ERROR' if 'traceback' in status or 'error' in status else 'OTHER'))
           print('GEMMA_SEQ31B_UPTAKE_BLOCKER=EXISTING_KERNEL_OUTPUT_UNAVAILABLE')
           PY
             exit 1
