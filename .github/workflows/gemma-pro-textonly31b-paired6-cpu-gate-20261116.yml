@@ -69,3 +69,5 @@ jobs:
           PY
 
 # CPU rerun after frozen builder-path fix; same scientific candidate, no GPU.
+
+# Frozen SHA recorded from authenticated CPU output. No changes to candidate.
