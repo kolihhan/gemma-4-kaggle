@@ -1,4 +1,4 @@
-name: Gemma PRO mandatory two-stage native verifier from frozen 31B CPU contract gate
+name: Gemma PRO two-stage native verifier reproducible frozen ZIP and YAML CPU gate
 on:
   push:
     branches: [research/dual-agent-recovery-v0-20261108]
