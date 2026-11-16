@@ -1,3 +1,11 @@
+## 2026-11-17 MYT — 31B text-only ablation fails: 0/6 versus 0/6
+
+- [Authenticated actual private grader #43900577392](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43900577392) finished with all 12 evaluations on six matched public-dev issues. V2 **0/6**, text-only **0/6**, **0 rescues / 0 regressions**, 6/6 emitted patches per arm and zero evaluator exceptions. Calls **122 → 106**, summed scorer wall time **1727.39 s → 1683.92 s**. **Retire this exact graph-tool removal** under its frozen two-rescue gate. The six issues lack current reference/no-op validation, so the result does not isolate agent correctness from evaluator or task-specification failure.
+- Next discriminating control: use the exact six IDs emitted by the completed private kernel. Run official verification with an empty patch and with the reference patch in a private CPU kernel. If at least three tasks exhibit reference pass and no-op fail, examine model evidence and patch semantics on those tasks. If fewer than three do, prioritize a reliable fresh score cohort before spending GPU. This diagnostic does not qualify the pilot for promotion. A new candidate requires at least 30 genuinely independent, valid paired issues.
+- [Refreshed official receipts](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43743767264/attempts/2) still show **0.18 (#58183466)** and **#58350278 COMPLETE with blank score**. No new competition submission.
+
+---
+
 ## 2026-11-16 23:54 MYT — REAL Gemma 31B 6-pair text-only search ablation RUNNING; no score yet
 
 - New mechanism: remove exactly three optional graph/code-intelligence tools from source-pinned 31B V2 and replace only the now-obsolete graph fallback instruction; SAME 31B, sampling, native core tools, 5min/28calls/80 turns. New salted six-task FastAPI/Rich/Requests matched cohort excludes prior selected development issues; **12 real model-task evaluations**. Research-only, not 30-task confirmation.
