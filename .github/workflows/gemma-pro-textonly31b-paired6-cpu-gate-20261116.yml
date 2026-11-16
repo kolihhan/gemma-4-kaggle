@@ -44,6 +44,13 @@ jobs:
             echo GEMMA_TEXTONLY_CPU_STOP=FROZEN_PUBLIC_SOURCE_UNAVAILABLE
             exit 1
           fi
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          from scripts.build_gemma_31b_textonly_search_v0_20261116 import build
+          source=Path('/tmp/gemma-textonly-src/submission.zip').read_bytes()
+          print('GEMMA_TEXTONLY_FROZEN_CANDIDATE_ZIP_SHA256='+hashlib.sha256(build(source)).hexdigest(),flush=True)
+          PY
           python -m scripts.render_gemma_textonly31b_paired6_20261116 --repo . --source-zip /tmp/gemma-textonly-src/submission.zip --out /tmp/gemma-textonly-frozen-cpu --kernel-ref kolihhan/gemma4-textonly31b-six-nov16
           python -m py_compile /tmp/gemma-textonly-frozen-cpu/paired_textonly31b_runtime.py
           python - <<'PY'
