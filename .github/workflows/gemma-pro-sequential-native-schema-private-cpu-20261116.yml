@@ -1,0 +1,155 @@
+name: Gemma PRO 31B SequentialAgent exact official parser CPU-only smoke
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-pro-sequential-native-schema-private-cpu-20261116.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-sequential31b-official-schema-cpu-once-20261116
+  cancel-in-progress: false
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 56
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      NEW: /tmp/gemma-seq31b-schema-cpu
+      SOURCE: /tmp/gemma-seq31b-src
+      REF: kolihhan/gemma4-sequential31b-schema-cpu-20261116
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Exact source and idempotent existing CPU kernel guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q kaggle==2.2.5 six==1.17.0
+          state="$(kaggle kernels status "$REF" 2>&1 || true)"
+          if [[ "$state" == *KernelWorkerStatus.* ]]; then
+            echo "STOP_EXISTING_GEMMA_SEQUENTIAL_OFFICIAL_SCHEMA_CPU_KERNEL"
+            exit 1
+          fi
+          mkdir -p "$SOURCE"
+          kaggle kernels output kolihhan/gemma4-budgetfit-v2-reference-42008171687/1 \
+             -p "$SOURCE" -o >/tmp/gemma-seq-source.log 2>&1
+          python -m scripts.build_gemma_sequential_native_verifier_v0_20261116 \
+             --source-zip "$SOURCE/submission.zip" --out /tmp/gemma-sequential-candidate.zip
+      - name: Build authenticated private CPU validation using official wheelhouse only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$NEW"
+          python - <<'PY'
+          import base64,hashlib,json,os
+          from pathlib import Path
+          raw=Path('/tmp/gemma-sequential-candidate.zip').read_bytes()
+          assert hashlib.sha256(raw).hexdigest()=='0aec67997635995ba5a82113e2e5ed54a8c8f7f780388e6fe325ac135eb16a57'
+          blob=base64.b64encode(raw).decode('ascii')
+          code="""from pathlib import Path
+          import base64,hashlib,io,zipfile,subprocess,sys,glob,os,importlib,json
+          WHEEL=Path('/kaggle/input/datasets/metric/gemma-4-developer-agent-wheelhouse')
+          SHA='0aec67997635995ba5a82113e2e5ed54a8c8f7f780388e6fe325ac135eb16a57'
+          ZIP=base64.b64decode('___ZIP___')
+          assert hashlib.sha256(ZIP).hexdigest()==SHA
+          if not WHEEL.is_dir():raise RuntimeError('STOP_OFFICIAL_WHEELHOUSE_NOT_MOUNTED')
+          for pattern in ('/usr/local/lib/python*/dist-packages/*cutlass*.pth',
+                          '/usr/local/lib/python*/site-packages/*cutlass*.pth'):
+              for p in glob.glob(pattern):
+                  try:os.unlink(p)
+                  except OSError:pass
+          fixed=Path('/tmp/gemma-pro-legal-seq-wheelhouse')
+          fixed.mkdir(parents=True,exist_ok=True)
+          for wheel in WHEEL.glob('*.whl'):
+              if 'cutlass' in wheel.name.lower():continue
+              name=wheel.name.replace('cu128','+cu128') if 'cu128' in wheel.name and '+' not in wheel.name else wheel.name
+              link=fixed/name
+              if not link.exists():
+                  try:link.symlink_to(wheel)
+                  except OSError:link.write_bytes(wheel.read_bytes())
+          wheels=sorted(str(p) for p in fixed.glob('*.whl'))
+          if not wheels:raise RuntimeError('STOP_OFFICIAL_WHEELHOUSE_EMPTY')
+          subprocess.run([sys.executable,'-m','pip','install','-q','--no-deps','--force-reinstall',*wheels],
+                        check=True,timeout=480)
+          importlib.invalidate_caches()
+          from adk_submission import validate_directory
+          from adk_submission.discovery import discover_declared_models
+          from swegemma.config import build_submission_limits
+          root=Path('/kaggle/working/seq31b-package')
+          root.mkdir(parents=True,exist_ok=True)
+          with zipfile.ZipFile(io.BytesIO(ZIP)) as z:
+              for name in z.namelist():
+                  target=(root/name).resolve()
+                  if root.resolve() not in target.parents:raise RuntimeError('unsafe_zip_member')
+                  target.parent.mkdir(parents=True,exist_ok=True)
+                  target.write_bytes(z.read(name))
+          limits,_=build_submission_limits()
+          validate_directory(root,limits=limits)
+          models=discover_declared_models(root)
+          if models!={'gemma-4-31b-it-qat-w4a16-ct'}:
+              raise RuntimeError('STOP_SINGLE_31B_MODEL_VALIDATION')
+          # This CPU gate tests the OFFICIAL schema parser, NOT model-run handoff
+          # or task correctness. Further GPU scoring needs a new preregistered test.
+          print('GEMMA_PRO_SEQUENTIAL_OFFICIAL_SCHEMA_VALIDATE_DIRECTORY=PASS',flush=True)
+          print('GEMMA_PRO_SEQUENTIAL_DISCOVER_SINGLE_31B_MODEL=PASS',flush=True)
+          print('GEMMA_PRO_SEQUENTIAL_NO_GPU_NO_TASK_INFERENCE_NO_OFFICIAL_SUBMISSION=TRUE',flush=True)
+          """
+          code='\n'.join(line[10:] if line.startswith('          ') else line for line in code.splitlines())
+          code=code.replace('___ZIP___',blob)
+          compile(code,'official_schema_cpu.py','exec')
+          root=Path(os.environ['NEW'])
+          (root/'official_schema_cpu.py').write_text(code)
+          meta={
+             'id':os.environ['REF'],
+             'title':os.environ['REF'].split('/')[1],
+             'code_file':'official_schema_cpu.py',
+             'language':'python','kernel_type':'script',
+             'is_private':True,'enable_gpu':False,'enable_tpu':False,
+             'enable_internet':False,
+             'dataset_sources':['metric/gemma-4-developer-agent-wheelhouse'],
+             'competition_sources':['gemma-4-developer-agent'],
+             'kernel_sources':[],'model_sources':[],
+          }
+          (root/'kernel-metadata.json').write_text(json.dumps(meta,indent=2))
+          print('GEMMA_PRO_OFFICIAL_SCHEMA_CPU_KERNEL_RENDER=PASS',flush=True)
+          PY
+      - name: Push only ONE private CPU schema validation kernel and read terminal receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle kernels push -p "$NEW" >/tmp/gemma-seq-cpu-push.log 2>&1
+          if ! grep -q 'Kernel version 1 successfully pushed' /tmp/gemma-seq-cpu-push.log; then
+            echo "STOP_GEMMA_SEQ_CPU_PUSH_RECEIPT_UNVERIFIED"
+            exit 1
+          fi
+          echo "GEMMA_PRO_OFFICIAL_SCHEMA_CPU_PRIVATE_LAUNCHED=$REF"
+          state=UNOBSERVED
+          for i in $(seq 1 56); do
+              state_text="$(kaggle kernels status "$REF" 2>&1 || true)"
+              case "$state_text" in
+                *KernelWorkerStatus.COMPLETE*)state=COMPLETE;break;;
+                *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*)state=ERROR;break;;
+              esac
+              sleep 25
+          done
+          echo "GEMMA_PRO_OFFICIAL_SCHEMA_CPU_STATE=$state"
+          if [ "$state" != COMPLETE ]; then
+             echo "GEMMA_PRO_SEQUENTIAL_OFFICIAL_SCHEMA_NOT_VERIFIED=TRUE"
+             exit 0
+          fi
+          mkdir -p /tmp/gemma-seq-cpu-result
+          kaggle kernels output "$REF" -p /tmp/gemma-seq-cpu-result -o >/tmp/gemma-seq-cpu-out.log 2>&1
+          python - <<'PY'
+          from pathlib import Path
+          root=Path('/tmp/gemma-seq-cpu-result')
+          logs=sorted([p for p in root.rglob('*.log') if p.is_file() and p.stat().st_size<2_000_000])
+          if not logs:
+              print('GEMMA_PRO_OFFICIAL_SCHEMA_CPU_RESULT_LOG_NOT_DOWNLOADED',flush=True)
+          for path in logs[:4]:
+              content=path.read_text(errors='replace')
+              for line in content.splitlines():
+                  if line.startswith('GEMMA_PRO_SEQUENTIAL_'):
+                      print('OFFICIAL_CPU_RECEIPT_'+line,flush=True)
+          PY
