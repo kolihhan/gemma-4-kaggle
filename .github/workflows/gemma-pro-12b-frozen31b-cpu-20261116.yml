@@ -43,12 +43,22 @@ jobs:
             -p "$RAW" -o >/tmp/gemma-pro-modelsize12b-source.log 2>&1; then
               python - <<'PY'
           from pathlib import Path
+          import re
           log=Path('/tmp/gemma-pro-modelsize12b-source.log').read_text(errors='replace')
-          for code in ('403','404','429','500','503','Unauthorized','Forbidden','not found','Permission denied','Version not found'):
-              if code.lower() in log.lower():
-                  print('STOP_OWN_FROZEN_SOURCE_DOWNLOAD_CLASS='+code,flush=True)
-                  break
-          else:print('STOP_OWN_FROZEN_SOURCE_DOWNLOAD_UNCLASSIFIED',flush=True)
+          print('STOP_SOURCE_DOWNLOAD_LOG_LENGTH='+str(len(log)),flush=True)
+          keywords=('403','404','429','500','503','401','Unauthorized','Forbidden',
+                    'not found','Permission denied','Version not found','Traceback',
+                    'FileNotFoundError','BadRequest','Error','Exception','NotImplemented',
+                    'kaggle','KernelWorkerStatus','permission','credential')
+          present=[v for v in keywords if v.lower() in log.lower()]
+          print('STOP_SOURCE_DOWNLOAD_ERROR_TOKENS='+str(present),flush=True)
+          lines=[line.strip() for line in log.splitlines() if line.strip()]
+          redacted=[]
+          for line in lines[-3:]:
+              line=re.sub(r'(?i)(token|password|authorization|api.key|secret)[\\s\\"\\x27:=]+[A-Za-z0-9_+.~\\/-]+','[REDACTED]',line)
+              line=re.sub(r'[A-Za-z0-9_\\-]{80,}','[LONG_STRING]',line)
+              redacted.append(line[:350])
+          print('STOP_SOURCE_DOWNLOAD_SANITIZED_TAIL='+repr(redacted),flush=True)
           PY
               exit 1
           fi
