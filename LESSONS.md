@@ -1,0 +1,13 @@
+# LESSONS — Gemma 4 (2026-11-16)
+Authoritative prior run provenance: [NOW](NOW.md), [VALIDATION](VALIDATION.md). A green Action is not a successful fix; numeric score must be official.
+
+| Item | Status | Evidence and bounded interpretation |
+| --- | --- | --- |
+| 0.18 is last authenticated official numerical best | **已证实** | #58183466; [NOW](NOW.md). #58350278 COMPLETE has no numeric Public score |
+| 12B size-only matched config beats 31B | **已证伪 on spent 3**, **证据不足 general** | 0/3 versus 1/3, 0 rescues/1 regression, paired 95% bootstrap [-100,0] pp [Action 43781086310](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43781086310). Don't repeat same three; don't ban architecture class |
+| Optional Skill automatically used by 31B model | **已证伪 on 3** | 0 recognized uptake, 1/3 PASS both arms [Action 43691444649](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43691444649). Not proof any test-feedback policy fails |
+| Early-Edit reliably improves issue resolution | **证据不足** | 3/4 vs 3/4, 1 rescue + 1 regression, paired CI [-75,+75] pp [Action 43178431152](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43178431152) |
+| New legal native post-edit test feedback improves true grader pass | **未测试** | Existing test-feedback prototype only synthetic; legality+model uptake+new paired issues required |
+| Yuanzhe's exact Konwinski 8th-place search/verify method transfers to Gemma | **未测试; original method not documented** | Kaggle rank verified; no attributable detailed solution acquired; see [method cards in NTL repo](https://github.com/kolihhan/name-kaggle/blob/research/attribution-bottleneck-review-20261106/docs/research/yuanzhe-method-cards-2026-11-16.md) |
+
+**Decision audit (round 1/5):** Earlier "retire 12B" means *do not resubmit/retest exact defeated 3-task size-only variant*. Reopen the architecture-level hypothesis, because n=3 cannot satisfy the user-proposed >=30-task evidence gate. No official submission or model GPU was launched by this update.
