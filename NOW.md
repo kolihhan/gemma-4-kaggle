@@ -1,3 +1,11 @@
+## 2026-11-16 — VERIFIED mandatory SequentialAgent 31B real grader: no rescue; NOT PROMOTED
+
+- [Actual paired grader job #43808826562](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43808826562) SUCCESS, but importantly printed real model PASS on the *same* 3 previously selected public-dev issues: pinned single-stage 31B V2 **1/3**, 62 calls, 604.94 seconds versus mandatory 31B SequentialAgent **1/3**, 69 calls, 606.50 seconds. **0 rescues, 0 regressions, n=3, +7 calls, +1.56s.** Matched candidate ran actual private Kaggle GPU earlier; this read-only audit and documentation create no new inference.
+- [Preregistered result and limits](docs/research/2026-11-16-sequential31b-real-grader-decision.md): this exact frozen topology **fails its 2/3 promotion gate**, so **do not repeat** on those issues or submit it. Reviewer-stage native test uptake **NOT ESTABLISHED** from job logs; no causal claim that testing cannot help. No independent 30-task evidence or meaningful power to reject architecture generally.
+- **Official numeric Kaggle best remains 0.18** (#58183466). **NEXT ONE ACTION:** CPU-only reviewer-stage trace uptake audit if existing private kernel output is accessible; otherwise keep mechanism unknown and redesign only with legal observable test feedback.
+
+---
+
 ## PRO 2026-11-16 — official legal SequentialAgent 31B native-test intervention is in REAL private Kaggle grader
 
 - **MECHANISM:** not another optional Skill. New frozen source [legal SequentialAgent 31B builder](scripts/build_gemma_sequential_native_verifier_v0_20261116.py) replaces original single V2 with a mandatory first coder (no `submit_patch` tool) then verifier (native `run_command`, `read_file`, `edit_file`, `get_status`, unique `submit_patch` tool). Same model 31B and original sampling; official four agent classes support SequentialAgent. Coder prompt preserves exact original, appending narrow stage boundary; reviewer performs bounded targeted tests if available. No custom host callbacks or grader oracle.
