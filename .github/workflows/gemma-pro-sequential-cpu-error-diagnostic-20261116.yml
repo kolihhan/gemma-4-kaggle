@@ -1,0 +1,58 @@
+name: Gemma PRO failed exact private SequentialAgent CPU parser diagnostic read only
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-pro-sequential-cpu-error-diagnostic-20261116.yml]
+permissions: {contents: read}
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Read existing CPU kernel stderr-only evidence; no new GPU, no source uploads
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q kaggle==2.2.5 six==1.17.0
+          ref=kolihhan/gemma4-sequential31b-schema-cpu-20261116
+          state="$(kaggle kernels status "$ref" 2>&1 || true)"
+          case "$state" in
+             *KernelWorkerStatus.ERROR*)echo "GEMMA_PRO_SEQUENTIAL_CPU_ORIGINAL_STATE=ERROR";;
+             *KernelWorkerStatus.FAILED*)echo "GEMMA_PRO_SEQUENTIAL_CPU_ORIGINAL_STATE=FAILED";;
+             *)echo "STOP_ORIGINAL_ERROR_STATE_CHANGED";exit 1;;
+          esac
+          mkdir -p /tmp/gemma-sequential-cpu-traces
+          if ! kaggle kernels output "$ref" \
+               -p /tmp/gemma-sequential-cpu-traces -o \
+               >/tmp/gemma-sequential-cpu-result-download.log 2>&1; then
+            echo "GEMMA_PRO_SCHEMA_CPU_OUTPUT_DOWNLOAD_NOT_SUPPORTED_AFTER_ERROR"
+          fi
+          python - <<'PY'
+          import re,json
+          from pathlib import Path
+          root=Path('/tmp/gemma-sequential-cpu-traces')
+          files=sorted(p for p in root.rglob('*') if p.is_file())
+          print('GEMMA_PRO_SCHEMA_CPU_ERROR_OUTPUT_FILES='+json.dumps(
+             [{'name':p.name,'size':p.stat().st_size} for p in files[:20]],
+             sort_keys=True),flush=True)
+          signals=[]
+          for p in files:
+              if p.stat().st_size>3_000_000:continue
+              if p.suffix not in ('.log','.txt','.json','.out'):continue
+              try:s=p.read_text(errors='replace')
+              except Exception:continue
+              for line in s.splitlines():
+                  if any(needle in line for needle in
+                    ('Traceback', 'ERROR', 'Exception', 'ModuleNotFound',
+                     'ImportError','SyntaxError','AttributeError','TypeError',
+                     'RuntimeError','Pip subprocess','failed','No module named',
+                     'validate_directory','STOP_','GEMMA_PRO_SEQUENTIAL_')):
+                    if 'base64' in line.lower() or len(line)>650:continue
+                    signals.append(line[:380])
+          print('GEMMA_PRO_SCHEMA_CPU_SAFE_DIAGNOSTIC_TAIL='+json.dumps(
+              signals[-25:]),flush=True)
+          PY
