@@ -32,15 +32,26 @@ jobs:
           assert a['primary'].startswith('Paired')
           print('GEMMA_12B_EXACT_PRIOR_31B_PAIRED_PROTOCOL=PASS',flush=True)
           PY
-      - name: Download exact publicly licensed baseline ZIP, source-only, no model
+      - name: Reuse existing OWN immutable verified Budget-Fit CPU reference, no external notebook or model
         shell: bash
         run: |
           set -euo pipefail
           test -n "$KAGGLE_API_TOKEN"
           python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
           mkdir -p "$RAW"
-          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 \
-            -p "$RAW" -o >/tmp/gemma-pro-modelsize12b-source.log 2>&1
+          if ! kaggle kernels output kolihhan/gemma4-budgetfit-v2-reference-42008171687/1 \
+            -p "$RAW" -o >/tmp/gemma-pro-modelsize12b-source.log 2>&1; then
+              python - <<'PY'
+          from pathlib import Path
+          log=Path('/tmp/gemma-pro-modelsize12b-source.log').read_text(errors='replace')
+          for code in ('403','404','429','500','503','Unauthorized','Forbidden','not found','Permission denied','Version not found'):
+              if code.lower() in log.lower():
+                  print('STOP_OWN_FROZEN_SOURCE_DOWNLOAD_CLASS='+code,flush=True)
+                  break
+          else:print('STOP_OWN_FROZEN_SOURCE_DOWNLOAD_UNCLASSIFIED',flush=True)
+          PY
+              exit 1
+          fi
           python - <<'PY'
           import hashlib,os
           from pathlib import Path
