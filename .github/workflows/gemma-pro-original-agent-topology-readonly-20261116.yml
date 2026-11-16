@@ -1,0 +1,49 @@
+name: Gemma PRO inspect exact frozen 31B original agent YAML topology for legal SequentialAgent split
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-pro-original-agent-topology-readonly-20261116.yml]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Extract SHA-pinned PUBLIC Apache-2.0 submission config only, not issue content
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q kaggle==2.2.5 six==1.17.0 pyyaml==6.0.3
+          mkdir -p /tmp/gemma-legal-sequential-source
+          kaggle kernels output kolihhan/gemma4-budgetfit-v2-reference-42008171687/1 \
+            -p /tmp/gemma-legal-sequential-source -o \
+            >/tmp/gemma-legal-source-download.log 2>&1
+          python - <<'PY'
+          from pathlib import Path
+          import json,hashlib
+          from scripts.prepare_public_budgetfit_v2 import validate_source_zip, EXPECTED_ZIP_SHA256
+          p=Path('/tmp/gemma-legal-sequential-source/submission.zip')
+          raw=p.read_bytes()
+          assert hashlib.sha256(raw).hexdigest()==EXPECTED_ZIP_SHA256
+          src=validate_source_zip(raw)
+          # This config is third-party Apache 2.0 publicly shared. Only YAML
+          # structure, tool names, scalar settings and hashes, no prompt content.
+          a=src['agent.yaml']
+          cfg=src['eval_config.yaml']
+          print('GEMMA_PRO_FROZEN_ROOT_YAML_STRUCTURE='+json.dumps({
+             'exact_source_sha256':EXPECTED_ZIP_SHA256,
+             'agent_yaml_original':a,
+             'eval_budget_file':cfg,
+             'original_prompt_sha':hashlib.sha256(src['prompts/system.md'].encode()).hexdigest(),
+             'original_prompt_bytes':len(src['prompts/system.md']),
+             'sampling_sha':hashlib.sha256(src['configs/sampling.yaml'].encode()).hexdigest(),
+             'new_GPU':False,'new_submission':False,'new_training':False,
+           },sort_keys=True),flush=True)
+          PY
