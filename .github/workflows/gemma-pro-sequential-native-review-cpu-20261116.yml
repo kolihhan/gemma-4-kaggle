@@ -1,0 +1,70 @@
+name: Gemma PRO mandatory two-stage native verifier from frozen 31B CPU contract gate
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-pro-sequential-native-review-cpu-20261116.yml]
+permissions: {contents: read}
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Validate frozen V2 baseline source and new actual YAML without any model inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0 pyyaml==6.0.3
+          python -m py_compile scripts/build_gemma_sequential_native_verifier_v0_20261116.py
+          mkdir -p /tmp/gemma-pro-sequential-source
+          kaggle kernels output kolihhan/gemma4-budgetfit-v2-reference-42008171687/1 \
+            -p /tmp/gemma-pro-sequential-source -o >/tmp/gemma-pro-sequential-source-download.log 2>&1
+          python -m scripts.build_gemma_sequential_native_verifier_v0_20261116 \
+              --source-zip /tmp/gemma-pro-sequential-source/submission.zip \
+              --out /tmp/gemma-pro-sequential-v0.zip
+          python - <<'PY'
+          import io,json,hashlib,zipfile
+          from pathlib import Path
+          import yaml
+          from scripts.build_gemma_sequential_native_verifier_v0_20261116 import (
+              MODEL,build_payload,build_zip
+          )
+          src=Path('/tmp/gemma-pro-sequential-source/submission.zip').read_bytes()
+          payload=build_payload(src)
+          z=Path('/tmp/gemma-pro-sequential-v0.zip').read_bytes()
+          assert z==build_zip(src), 'non-deterministic stage pack'
+          assert set(payload)==set(zipfile.ZipFile(io.BytesIO(z)).namelist())
+          class SafeIncludeLoader(yaml.SafeLoader): pass
+          SafeIncludeLoader.add_constructor('!include',lambda loader,node: loader.construct_scalar(node))
+          configs={k:yaml.load(v,Loader=SafeIncludeLoader) for k,v in payload.items()
+                   if k.endswith('.yaml')}
+          root=configs['agent.yaml']
+          assert root['agent_class']=='SequentialAgent'
+          assert len(root['sub_agents'])==2
+          assert root['sub_agents'][0]['config_path']=='sub_agents/coder.yaml'
+          assert root['sub_agents'][1]['config_path']=='sub_agents/verifier.yaml'
+          coder=configs['sub_agents/coder.yaml']
+          reviewer=configs['sub_agents/verifier.yaml']
+          assert coder['agent_class']==reviewer['agent_class']=='LlmAgent'
+          assert coder['model']==reviewer['model']==MODEL
+          assert 'submit_patch' not in coder['tools']
+          assert reviewer['tools'].count('submit_patch')==1
+          assert 'run_command' in coder['tools'] and 'run_command' in reviewer['tools']
+          assert set(coder['tools'])<=set((
+             'run_command','read_file','edit_file','write_file','get_status',
+             'get_code_neighbors','search_similar_code','get_code_subgraph'))
+          assert set(reviewer['tools'])=={'run_command','read_file','edit_file','get_status','submit_patch'}
+          assert configs['eval_config.yaml']['evaluation']['max_tool_calls']==28
+          assert configs['eval_config.yaml']['evaluation']['max_time_minutes']==5
+          assert 'path/to/test_file.py' in payload['sub_agents/verifier_prompt.md']
+          assert all('..' not in k for k in payload)
+          print('GEMMA_PRO_MANDATORY_NATIVE_TWO_STAGE_YAML_GUARDS=PASS',flush=True)
+          print('GEMMA_PRO_SEQUENTIAL_31B_FINAL_PACKAGE_SHA='+hashlib.sha256(z).hexdigest(),flush=True)
+          print('GEMMA_PRO_SEQUENTIAL_NEW_GPU=FALSE;NEW_COMPETITION_SUBMISSION=FALSE;REAL_RESOLVED_GAIN_UNPROVEN=TRUE',flush=True)
+          PY
