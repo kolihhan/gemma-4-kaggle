@@ -1,0 +1,78 @@
+name: Gemma existing TEXTONLY six-pair score recovery
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-textonly31b-paired6-existing-score-20261117.yml]
+permissions:
+  contents: read
+jobs:
+  existing_result:
+    if: "${{ github.event.head_commit.message == 'Read existing Gemma 31B paired Kaggle result once' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Retrieve the existing private status and allowlisted aggregates
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip -q install --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          import re
+          import subprocess
+          from tempfile import TemporaryDirectory
+
+          kernel = "kolihhan/gemma4-textonly31b-six-nov16"
+          status = subprocess.run(["kaggle", "kernels", "status", kernel],
+                                  capture_output=True, text=True, timeout=75)
+          match = re.search(r"KernelWorkerStatus\.([A-Z_]+)", status.stdout + status.stderr)
+          if status.returncode or not match:
+              raise SystemExit("EXISTING_PRIVATE_STATUS_UNVERIFIED")
+          state = match[1]
+          print("GEMMA_EXISTING_PAIRED_KAGGLE_STATE=" + state, flush=True)
+          if state != "COMPLETE":
+              raise SystemExit(0)
+          with TemporaryDirectory() as directory:
+              result = subprocess.run(["kaggle", "kernels", "output", kernel, "-p", directory, "-o"],
+                                      capture_output=True, text=True, timeout=180)
+              if result.returncode:
+                  raise SystemExit("EXISTING_SCORE_DOWNLOAD_FAILED")
+              paths = list(Path(directory).rglob("paired_textonly31b_results.json"))
+              if len(paths) != 1:
+                  raise SystemExit("EXACT_ONE_PAIRED_RESULT_REQUIRED")
+              raw = paths[0].read_bytes()
+              source = json.loads(raw)
+          if source.get("version") != "gemma-textonly-toolmenu-v0-20261116":
+              raise SystemExit("EXISTING_SCORE_VERSION_MISMATCH")
+          rows = source.get("results") or []
+          arms = ("v2_5min", "textonly_5min")
+          ids = {row["instance_id"] for row in rows}
+          if len(rows) != 12 or len(ids) != 6 or {
+              (row["instance_id"], row["arm"]) for row in rows
+          } != {(key, arm) for key in ids for arm in arms}:
+              raise SystemExit("EXISTING_SCORE_PAIR_MISMATCH")
+          paired = {(row["instance_id"], row["arm"]): row["resolved"] is True for row in rows}
+          rescues = sum(paired[key, arms[1]] and not paired[key, arms[0]] for key in ids)
+          regressions = sum(paired[key, arms[0]] and not paired[key, arms[1]] for key in ids)
+          by_arm = {}
+          for arm in arms:
+              selected = [row for row in rows if row["arm"] == arm]
+              by_arm[arm] = {
+                  "resolved": sum(row["resolved"] is True for row in selected),
+                  "patch_count": sum(row.get("has_patch") is True for row in selected),
+                  "total_calls": sum(row.get("tool_calls") or 0 for row in selected),
+                  "total_seconds": round(sum(row.get("duration_seconds") or 0 for row in selected), 2),
+                  "errors": sum(row.get("status") != "completed" for row in selected),
+              }
+          print("GEMMA_EXISTING_PAIRED_KAGGLE_RESULT=" + json.dumps({
+              "pairs": len(ids), "rescues": rescues, "regressions": regressions, "by_arm": by_arm,
+              "result_sha256": hashlib.sha256(raw).hexdigest(), "new_gpu_launches": 0, "official_submissions": 0,
+          }, sort_keys=True), flush=True)
+          PY
