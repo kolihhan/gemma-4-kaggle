@@ -1,0 +1,84 @@
+name: Gemma PRO existing real 31B native test feedback vs resolution mechanism audit read only
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-pro-31b-real-native-feedback-gate-20261116.yml]
+permissions: {contents: read}
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Inspect six existing private 31B genuine grader traces for model-visible feedback, never run inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m py_compile scripts/audit_paired_31b_feedback_v2.py scripts/audit_pro_v3r_real31b_uptake_20261115.py
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/gemma-existing-v3r-real31b
+          kaggle kernels output kolihhan/gemma4-v3r-v2-pro-nov15-v1 \
+             -p /tmp/gemma-existing-v3r-real31b -o >/tmp/gemma-real31b-existing-download.log 2>&1
+          python - <<'PY'
+          import json,collections
+          from pathlib import Path
+          from scripts.audit_pro_v3r_real31b_uptake_20261115 import validate,trace_path
+          from scripts.audit_paired_31b_feedback_v2 import reduce_feedback
+          root=Path('/tmp/gemma-existing-v3r-real31b')
+          payload=json.loads((root/'paired_prompt_v2_31b_results.json').read_text())
+          rows=validate(payload)
+          stats=[]
+          for row in rows:
+              path=trace_path(root,row['arm'],row['instance_id'])
+              if path is None:raise SystemExit('STOP_ONE_31B_GENUINE_TRACE_MISSING')
+              trace=json.loads(path.read_text())
+              out=reduce_feedback(trace)
+              stats.append({'arm':row['arm'],'resolved':bool(row['resolved']),
+                  'actual_scorer_calls':int(row.get('tool_calls') or 0),
+                  'actual_elapsed_seconds':float(row.get('duration_seconds') or 0),
+                  'has_edit_event':bool(out['total_edit_actions']),
+                  'has_explicit_test_event':bool(out['explicit_or_inline_tests']),
+                  'has_model_command_exit_code':bool(
+                    out['all_command_structured_exit'].get('zero',0)
+                    or out['all_command_structured_exit'].get('nonzero',0)),
+                  'has_post_edit_test_event':bool(out['tests_after_first_edit']),
+                  'has_nonzero_command_followed_by_edit':bool(
+                    out['nonzero_commands_followed_by_edit']),
+                  'all_command_events_classifiable':out['unclassified_opaque_commands']==0,
+                  'no_explicit_test_does_not_prove_no_test':True,
+                  'trace_raw_events_may_duplicate_physical_calls':True})
+          assert len(stats)==6
+          labels=('v2_5min','v3r_5min')
+          by={}
+          for arm in labels:
+              x=[s for s in stats if s['arm']==arm]
+              if len(x)!=3:raise SystemExit('STOP_WRONG_CONTROL_TREATMENT_DENOMINATOR')
+              by[arm]={
+                'tasks':3,'resolved':sum(s['resolved'] for s in x),
+                'native_edit_trace_present':sum(s['has_edit_event'] for s in x),
+                'explicit_test_trace_present':sum(s['has_explicit_test_event'] for s in x),
+                'post_edit_test_trace_present':sum(s['has_post_edit_test_event'] for s in x),
+                'model_observed_structured_command_exit_present':sum(s['has_model_command_exit_code'] for s in x),
+                'opaque_command_trace_count_has_some':sum(not s['all_command_events_classifiable'] for s in x),
+                'nonzero_command_then_reedit_trace_present':sum(s['has_nonzero_command_followed_by_edit'] for s in x),
+                'true_scorer_tool_calls':sum(s['actual_scorer_calls'] for s in x),
+                'true_scorer_elapsed_seconds':round(sum(s['actual_elapsed_seconds'] for s in x),2),
+              }
+          if by['v2_5min']['resolved']!=1 or by['v3r_5min']['resolved']!=1:
+              raise SystemExit('STOP_REAL31B_GRADE_DRIFT')
+          print('GEMMA_PRO_ACTUAL_FROZEN31B_NATIVE_FEEDBACK_BY_ARM='+json.dumps({
+              'source':'PREEXISTING_GENUINE_GEMMA31B_PRIVATE_PUBLIC_DEVELOPMENT_GRADER',
+              'results':by,
+              'arm_task_lens_without_identifiers':stats,
+              'raw_tool_events_are_not_physical_scorer_calls':True,
+              'no_reliable_semantic_validation_from_trace_names_alone':True,
+              'new_31b_evaluations':0,'new_training':False,
+              'new_gpu':False,'new_official_submission':False,
+          },sort_keys=True),flush=True)
+          PY
