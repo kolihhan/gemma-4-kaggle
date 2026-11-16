@@ -1,0 +1,62 @@
+name: Gemma PRO 31B behavioral witness frozen real-scoring CPU preflight
+on:
+  push:
+    branches:
+      - research/dual-agent-recovery-v0-20261108
+    paths:
+      - .github/workflows/gemma-pro-behavioral-witness31b-cpu-gate-20261116.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cpu_gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Freeze and validate scored candidate source without GPU
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/build_gemma_31b_contract_counterexample_v0_20261116.py scripts/render_gemma_behavioral_witness31b_paired_20261116.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.render_gemma_behavioral_witness31b_paired_20261116 import validate_manifest
+          spec=json.loads(Path('experiments/solver-v3/pro-behavioral-witness31b-independent-20261116.json').read_text())
+          validate_manifest(spec)
+          assert spec['experiment']['tasks']==3
+          assert spec['selection']['previous_pilot_salt'] != spec['selection']['salt']
+          assert spec['resources']['official_kaggle_submit'] is False
+          print('GEMMA_BEHAVIORAL_CPU_FROZEN_CONTRACT=PASS')
+          PY
+          test -n "${KAGGLE_API_TOKEN:-}" || { echo GEMMA_BEHAVIORAL_CPU_STOP=MISSING_KAGGLE_AUTH; exit 1; }
+          python -m pip install -q kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/gemma-behavioral-src
+          if ! kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p /tmp/gemma-behavioral-src -o >/tmp/gemma-behavioral-source-fetch.log 2>&1; then
+            echo GEMMA_BEHAVIORAL_CPU_STOP=FROZEN_PUBLIC_SOURCE_UNAVAILABLE
+            exit 1
+          fi
+          python -m scripts.render_gemma_behavioral_witness31b_paired_20261116 --repo . --source-zip /tmp/gemma-behavioral-src/submission.zip --out /tmp/gemma-behavioral-frozen-cpu --kernel-ref kolihhan/gemma4-semantic-witness31b-nov16
+          python -m py_compile /tmp/gemma-behavioral-frozen-cpu/paired_semantic_witness31b_runtime.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('/tmp/gemma-behavioral-frozen-cpu')
+          meta=json.loads((root/'kernel-metadata.json').read_text())
+          assert meta['is_private'] and meta['enable_gpu'] and not meta['enable_internet']
+          assert meta['model_sources']==['google/gemma-4/Other/gemma-4-31b-it-qat-w4a16-ct/2']
+          code=(root/meta['code_file']).read_text()
+          assert 'behavioral_witness_5min' in code
+          assert 'v2_5min' in code
+          assert 'previous_pilot_salt' in code
+          assert 'PAIRED_WITNESS_FROZEN_SELECTED_PUBLIC_DEV_COUNT' in code
+          print('GEMMA_BEHAVIORAL_CPU_PAIR_SCORER=PASS;NO_GPU=TRUE;NO_COMPETITION_SUBMISSION=TRUE')
+          PY
