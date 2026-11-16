@@ -180,7 +180,10 @@ def build_zip(source_zip: bytes) -> bytes:
         for name, body in sorted(files.items()):
             if name.startswith("/") or ".." in Path(name).parts:
                 raise ValueError("unsafe archive path")
-            z.writestr(name, body.encode("utf-8"))
+            info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            z.writestr(info, body.encode("utf-8"))
     return bio.getvalue()
 
 
