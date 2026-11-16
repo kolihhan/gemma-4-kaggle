@@ -1,0 +1,36 @@
+name: Gemma PRO pinned V2 available-tool evidence before research intervention
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-pro-v2-tool-value-census-once-20261116.yml]
+permissions: {contents: read}
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/pro-graph-tool
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p /tmp/pro-graph-tool -o >/tmp/pro-graph-tool.log 2>&1
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.prepare_public_budgetfit_v2 import validate_source_zip
+          files=validate_source_zip(Path('/tmp/pro-graph-tool/submission.zip').read_bytes())
+          a=files['agent.yaml']
+          p=files['prompts/system.md'].lower()
+          names=('get_code_subgraph','get_code_neighbors','search_similar_code','run_command','read_file','edit_file','get_status','submit_patch','write_file')
+          declared=[name for name in names if ('  - '+name) in a]
+          mentioned=[name for name in names if name in p]
+          output={'declared':declared,'mentioned_in_original_prompt':mentioned,'original_prompt_chars':len(p),'baseline_verified':True}
+          print('GEMMA_PRO_PUBLIC_V2_TOOL_CENSUS='+json.dumps(output,sort_keys=True),flush=True)
+          PY
