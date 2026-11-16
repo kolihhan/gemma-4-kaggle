@@ -34,7 +34,7 @@ jobs:
           validate_manifest(spec)
           assert spec['experiment']['tasks']==6
           assert spec['selection']['previous_pilot_salt'] != spec['selection']['salt'] and spec['selection']['previous_semantic_salt'] != spec['selection']['salt']
-          assert spec['resource']['official_kaggle_submit'] is False
+          assert spec['resource']['official_competition_submit'] is False
           print('GEMMA_TEXTONLY_CPU_FROZEN_CONTRACT=PASS')
           PY
           test -n "${KAGGLE_API_TOKEN:-}" || { echo GEMMA_TEXTONLY_CPU_STOP=MISSING_KAGGLE_AUTH; exit 1; }
