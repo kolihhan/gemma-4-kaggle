@@ -39,9 +39,29 @@ jobs:
           fi
           python -m pip install -q kaggle==2.2.5
           mkdir -p /tmp/gemma31b-private-readonly
-          if ! kaggle kernels output "$KERNEL_REF" -p /tmp/gemma31b-private-readonly -o >/tmp/seq31b-kaggle-output.log 2>&1; then
-            echo 'GEMMA_SEQ31B_UPTAKE_BLOCKER=EXISTING_KERNEL_OUTPUT_UNAVAILABLE'
-            exit 0
+          set +e
+          kaggle kernels status "$KERNEL_REF" >/tmp/seq31b-kernel-status.log 2>&1
+          status_rc=$?
+          kaggle kernels output "$KERNEL_REF" -p /tmp/gemma31b-private-readonly -o >/tmp/seq31b-kaggle-output.log 2>&1
+          output_rc=$?
+          set -e
+          if [ "$output_rc" -ne 0 ]; then
+            python - <<'PY'
+import re
+from pathlib import Path
+s=Path('/tmp/seq31b-kaggle-output.log').read_text(errors='replace').lower()
+status=Path('/tmp/seq31b-kernel-status.log').read_text(errors='replace').lower()
+if '403' in s or 'permission' in s or 'forbidden' in s: code='PERMISSION'
+elif '404' in s or 'not found' in s: code='NOT_FOUND'
+elif '429' in s or 'rate limit' in s: code='RATE_LIMIT'
+elif 'network' in s or 'timeout' in s or 'connection' in s: code='TRANSPORT'
+elif 'kernelworkerstatus.' in status: code='DOWNLOAD_FAILED_KERNEL_STATUS_KNOWN'
+else: code='OTHER'
+print('GEMMA_SEQ31B_UPTAKE_OUTPUT_CLASS='+code)
+print('GEMMA_SEQ31B_UPTAKE_STATUS_TERMINAL='+str('kernelworkerstatus.complete' in status))
+print('GEMMA_SEQ31B_UPTAKE_BLOCKER=EXISTING_KERNEL_OUTPUT_UNAVAILABLE')
+PY
+            exit 1
           fi
           python -m scripts.audit_sequential31b_private_uptake_20261116 --root /tmp/gemma31b-private-readonly
           echo 'GEMMA_SEQ31B_READONLY_NO_NEW_GPU_NO_TRAINING_NO_SUBMISSION=TRUE'
