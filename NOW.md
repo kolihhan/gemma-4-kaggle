@@ -1,3 +1,11 @@
+## PRO 2026-11-16 — 12B genuine model-size experiment NEGATIVE; official best 0.18
+
+- **ACTUAL GRADED Kaggle private 12B 3-task trial COMPLETE**, [Action #43781086310](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43781086310), verified actual grader: *same* three public-development FastAPI/Rich/Requests tasks and identical 5min/28 scorer calls limit/native tools/prompt/sampling. Frozen V2 **31B resolved 1/3**, 62 scorer calls, 604.94s. New **12B 0/3**, 84 calls, 820.42s; 3 patches in each arm, zero errors, 0 rescues, 1 regression, net -1. **Retire size-only model change**. It is weak spent-three-task evidence, not proof all 12B agents are bad. [Final negative report](docs/research/2026-11-16-gemma-12b-real-negative-final.md).
+- No new training/official Kaggle submission. Own actual scored official reference remains **0.18**, #58183466. Official older #58350278 COMPLETE but blank numeric score.
+- Research next step is **not** V3R optional Skill, 12B microtuning, or repeated 31B prompt-only A/B; investigate mandatory legal native evidence / actual patch correctness versus representation, using existing chronologies before new GPU. Only pursue independently predeclared source-disjoint treatment when it can realistically overcome 1/3 baseline.
+
+---
+
 # 2026-11-16 PRO: model-size pivot on actual private 12B, exact old 31B tasks and budget
 
 - Official Kaggle competition supports **Gemma 4 12B**, and its vLLM 12B requires `--hf-overrides` for unified architecture. [Staff clarification](https://www.kaggle.com/competitions/gemma-4-developer-agent/discussion/748287). **No mixed model variants in a single official submission.**
