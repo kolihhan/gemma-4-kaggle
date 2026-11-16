@@ -1,0 +1,60 @@
+{
+  "version": "gemma-12b-vs-existing31b-20261116-v1",
+  "date": "2026-11-16",
+  "reason": "Official Kaggle staff now supports 12B. Previous matched 31B V2 5min/28call trial resolves 1/3 on fixed repo-stratified tasks while optional Skill was never invoked.",
+  "reference_doc": "https://www.kaggle.com/competitions/gemma-4-developer-agent/discussion/748287",
+  "hypotheses": {
+    "H_capacity": "31B semantic patch quality dominates; 12B may fail more tasks despite more throughput",
+    "H_throughput": "12B faster inference improves patch revision/time budget enough to rescue at least one of three previously 31B-unsolved tasks",
+    "H_infra": "12B unified architecture requires vLLM hf-overrides and may fail loading; startup success is feasibility, not quality"
+  },
+  "control": {
+    "old_run": "https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43689217134",
+    "model": "gemma-4-31b-it-qat-w4a16-ct",
+    "arm": "v2_5min",
+    "task_count": 3,
+    "resolved": 1,
+    "tool_calls": 62,
+    "seconds_total": 604.94,
+    "pinned_source_zip_sha256": "a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3",
+    "model_note": "Same exact official V2 controls with original sampling and native tools, no optional Skill. This is previously used public development evidence."
+  },
+  "treatment": {
+    "model": "gemma-4-12b-it-qat-w4a16-ct",
+    "model_source": "google/gemma-4/Other/gemma-4-12b-it-qat-w4a16-ct/2",
+    "reference": "kolihhan/gemma4-model12b-v2-matched-20261116",
+    "changes": [
+      "one agent.yaml model name 31B ->12B",
+      "runtime model checkpoint path and vllm --hf-overrides required by official 12B support"
+    ],
+    "no_changes": [
+      "prompts/system.md",
+      "configs/sampling.yaml",
+      "all native tools",
+      "eval time/max tool calls",
+      "selection and task semantics",
+      "no adapters/no training"
+    ]
+  },
+  "shared": {
+    "max_time_minutes": 5,
+    "max_tool_calls": 28,
+    "max_turns": 80,
+    "benchmark": "swegemma official public-development task grader on existing 3 issue IDs, no gold/reference patch exposed to model",
+    "selection_existing_manifest": "experiments/solver-v3/pro-v3r-vs-v2-fresh-paired-20261115.json",
+    "selection_rule": "Recompute EXACT identical salted-hash minimum unexcluded ID from each fastapi_,rich_,requests_ group from frozen original manifest; never use 31B outcomes to pick new IDs.",
+    "n_tasks": 3,
+    "n_new_evaluations": 3
+  },
+  "primary": "Paired per-ID grader resolved 12B-vs-existing 31B control, including rescues and regressions",
+  "secondary": [
+    "completed evaluation count",
+    "model actually started and native tool calls",
+    "patch_count",
+    "tool_calls and task durations"
+  ],
+  "promotion_rule": "12B >=2/3 with no infrastructure errors is preliminary only; require NEW disjoint paired cohort before any official competition submission. Otherwise reject size-only hypothesis as this task evidence.",
+  "stop": "No 12B model availability, wheelhouse/compiler mismatch, GPU quota <4h, malformed package or no matched result => stop and report without claiming score.",
+  "privacy": "No reference patch, raw issue text, commands or trace are copied from private Kaggle to public GitHub; metrics only.",
+  "status": "preregistered; no inference launched at time of manifest commit"
+}
