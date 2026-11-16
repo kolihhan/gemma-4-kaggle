@@ -1,0 +1,60 @@
+name: Gemma PRO read exact successful official Python3.12 SequentialAgent parser receipt
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-pro-sequential-py312-schema-receipt-20261116.yml]
+permissions: {contents: read}
+jobs:
+  read_only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Read ONLY completed existing private CPU kernel; no new GPU or resubmission
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q kaggle==2.2.5 six==1.17.0
+          ref=kolihhan/gemma4-sequential31b-schema-py312-cpu-20261116
+          status="$(kaggle kernels status "$ref" 2>&1 || true)"
+          [[ "$status" == *KernelWorkerStatus.COMPLETE* ]] || {
+             echo "STOP_OFFICIAL_SCHEMA_CPU_KERNEL_NOT_COMPLETE"; exit 1;
+          }
+          mkdir -p /tmp/gemma-sequential-py312-cpu-output
+          kaggle kernels output "$ref" -o -p /tmp/gemma-sequential-py312-cpu-output \
+            >/tmp/gemma-sequential-py312-output.log 2>&1
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('/tmp/gemma-sequential-py312-cpu-output')
+          logs=list(root.rglob('*.log'))
+          if len(logs)!=1:raise RuntimeError('STOP_NO_SINGLE_EXACT_SCHEMA_LOG')
+          messages=[]
+          for line in logs[0].read_text(errors='replace').splitlines():
+              try:
+                  chunk=json.loads(line)
+                  if isinstance(chunk,list):
+                      for part in chunk:
+                          if isinstance(part,dict):messages.append(part.get('data',''))
+                  elif isinstance(chunk,dict):messages.append(chunk.get('data',''))
+              except ValueError:
+                  messages.append(line)
+          body='\n'.join(messages)
+          required=(
+             'GEMMA_PRO_SEQUENTIAL_OFFICIAL_SCHEMA_VALIDATE_DIRECTORY=PASS',
+             'GEMMA_PRO_SEQUENTIAL_DISCOVER_SINGLE_31B_MODEL=PASS',
+             'GEMMA_PRO_SEQUENTIAL_NO_GPU_NO_TASK_INFERENCE_NO_OFFICIAL_SUBMISSION=TRUE'
+          )
+          if not all(s in body for s in required):
+              markers=[m for m in ('Traceback','ValueError','RuntimeError',
+                  'TypeError','ModuleNotFoundError','ImportError','Error:') if m in body]
+              print('GEMMA_PRO_OFFICIAL_SEQUENTIAL_CPU_FAILURE_CLASSES='+str(markers),flush=True)
+              raise SystemExit('STOP_OFFICIAL_PARSER_ACCEPTANCE_NOT_PROVEN')
+          print('GEMMA_PRO_OFFICIAL_SEQ_31B_PARSER_VALIDATE_DIRECTORY=PASS',flush=True)
+          print('GEMMA_PRO_OFFICIAL_SEQ_31B_SINGLE_MODEL_DISCOVERY=PASS',flush=True)
+          print('GEMMA_PRO_OFFICIAL_SEQ_31B_ACTUAL_GRADER_RESOLUTION=NOT_TESTED',flush=True)
+          print('GEMMA_PRO_OFFICIAL_SEQ_31B_NEW_GPU=FALSE;NEW_TRAINING=FALSE;NEW_OFFICIAL_SUBMISSION=FALSE',flush=True)
+          PY
