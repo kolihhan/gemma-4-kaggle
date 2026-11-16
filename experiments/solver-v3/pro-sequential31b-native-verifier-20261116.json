@@ -1,5 +1,5 @@
 {
-  "version": "pro-sequential31b-native-verifier-v0-20261116",
+  "version": "gemma-sequential-native-verify-20261116-v0",
   "current_best_official_public": 0.18,
   "current_best_official_ref": "58183466",
   "research_evidence": {
@@ -61,5 +61,6 @@
     "new_official_submissions": 0
   },
   "privacy": "All raw task prompts/tests/patches are exclusively within private Kaggle runtime; only derived per-task resolving metrics to public GitHub.",
-  "status": "official CPU schema gate pending; no 31B inference yet"
+  "status": "official CPU schema gate pending; no 31B inference yet",
+  "protocol_id": "pro-sequential31b-native-verifier-v0-20261116"
 }
