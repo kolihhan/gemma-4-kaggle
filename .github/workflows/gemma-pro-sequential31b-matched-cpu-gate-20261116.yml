@@ -43,7 +43,7 @@ jobs:
           assert 'GEMMA_PRO_SEQUENTIAL_MATCHED_TASK_COUNT' in code
           assert "MODEL_NAME = \"gemma-4-31b-it-qat-w4a16-ct\"" in code
           assert "max_model_len=32768" in code
-          assert "seq31b" in code
+          assert "native-sequential31b" in code
           assert "competition_submit" not in code
           print('GEMMA_PRO_SEQUENTIAL31B_CPU_REAL_GRADER_RENDER_GATE=PASS',flush=True)
           print('GEMMA_PRO_SEQUENTIAL31B_REAL_GRADER_SOURCE_SHA256='+hashlib.sha256(code.encode()).hexdigest(),flush=True)
