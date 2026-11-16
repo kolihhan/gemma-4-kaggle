@@ -10,7 +10,7 @@
   "baseline_zip_sha256": "a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3",
   "candidate_builder_path": "scripts/build_gemma_31b_textonly_search_v0_20261116.py",
   "candidate_builder_blob_sha": "99c8439fcdab769dfa8c2f5bac68e3d1d85d2302",
-  "candidate_zip_sha256": "frozen after actual CPU render and before private GPU push",
+  "candidate_zip_sha256": "f60429bcd3e9f4f149cc1e85381dfa7b58c4e02feee46fde3bb99de08b6e53eb",
   "shared_budget": {
     "max_time_minutes": 5,
     "max_tool_calls": 28,
