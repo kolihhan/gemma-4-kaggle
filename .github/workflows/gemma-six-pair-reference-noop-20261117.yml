@@ -1,0 +1,141 @@
+name: Gemma completed six-pair official verifier counterfactual
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-six-pair-reference-noop-20261117.yml]
+permissions:
+  contents: read
+concurrency:
+  group: gemma-six-pair-reference-noop-20261117
+  cancel-in-progress: false
+jobs:
+  reference_noop:
+    if: "${{ github.event.head_commit.message == 'Run official gold and no-op controls on exact Gemma six-pair cohort' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      SOURCE_REF: kolihhan/gemma4-textonly31b-six-nov16
+      CONTROL_REF: kolihhan/gemma4-textonly-six-integrity-nov17-v1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Freeze membership from the actual scorer and run official private CPU controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m unittest -q tests.test_paired_three_task_integrity_cpu
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          work="$(mktemp -d)"
+          export SIX_PAIR_DIR="$work"
+          trap 'rm -rf "$work"' EXIT
+          mkdir "$work/prior" "$work/kernel" "$work/result"
+          kaggle kernels output "$SOURCE_REF" -p "$work/prior" -o >"$work/source-download.log" 2>&1
+          python - <<'PY'
+          from collections import Counter
+          from hashlib import sha256
+          import json
+          import os
+          from pathlib import Path
+          import re
+
+          root = Path(os.environ["SIX_PAIR_DIR"])
+          paths = list((root / "prior").rglob("paired_textonly31b_results.json"))
+          if len(paths) != 1:
+              raise SystemExit("EXACT_SIX_PAIR_SOURCE_REQUIRED")
+          source = json.loads(paths[0].read_bytes())
+          assert source["version"] == "gemma-textonly-toolmenu-v0-20261116"
+          assert source["model"] == "gemma-4-31b-it-qat-w4a16-ct" and source["status"] == "completed"
+          ids = source["selected_public_dev_ids"]
+          repos = {"fastapi": "fastapi/fastapi", "rich": "Textualize/rich", "requests": "psf/requests"}
+          strata = [task.split("_", 1)[0] for task in ids]
+          assert len(set(ids)) == len(ids) == 6 and all(re.fullmatch(r"(fastapi|rich|requests)_\d+", x) for x in ids)
+          assert Counter(strata) == Counter({repo: 2 for repo in repos})
+          rows = source["results"]
+          assert len(rows) == 12 and {(r["instance_id"], r["arm"]) for r in rows} == {
+              (x, arm) for x in ids for arm in ("v2_5min", "textonly_5min")}
+          assert all(r["status"] == "completed" and r["resolved"] is False for r in rows)
+          source_path = Path("kaggle/paired_three_task_integrity_cpu.py")
+          original = source_path.read_bytes()
+          assert sha256(original).hexdigest() == "9f1cd4ea2c0967520f13613037ebc4d6c3a9fe7be32e92e5077cf4861cf4ff6a"
+          cohort = tuple((task, repos[stratum]) for task, stratum in zip(ids, strata, strict=True))
+          code, n = re.subn(r"(?ms)^TASKS = \(.+?^\)", lambda _: "TASKS = " + repr(cohort), original.decode())
+          assert n == 1
+          code = code.replace("gemma4-paired-31b-three-task-integrity-v1", "gemma4-paired-31b-six-task-integrity-v1")
+          code = code.replace("43057377220", "43900577392").replace("exact preregistered three tasks", "exact six paired tasks")
+          compile(code, "six_pair_integrity.py", "exec")
+          ref = os.environ["CONTROL_REF"]
+          (root / "kernel" / "six_pair_integrity.py").write_text(code)
+          metadata = {
+              "id": ref, "title": ref.split("/")[1], "code_file": "six_pair_integrity.py",
+              "language": "python", "kernel_type": "script",
+              "is_private": True, "enable_gpu": False, "enable_tpu": False, "enable_internet": False,
+              "docker_image": "gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461",
+              "competition_sources": ["gemma-4-developer-agent"],
+              "dataset_sources": ["metric/gemma-4-developer-agent-wheelhouse"], "model_sources": [], "kernel_sources": [],
+          }
+          (root / "kernel" / "kernel-metadata.json").write_text(json.dumps(metadata))
+          (root / "membership.json").write_text(json.dumps(ids))
+          print("EXACT_EXISTING_PAIR_MEMBERSHIP_VERIFIED=6", flush=True)
+          PY
+          if kaggle kernels status "$CONTROL_REF" >"$work/already-exists.log" 2>&1; then
+            echo PRIVATE_CPU_CONTROL_ALREADY_EXISTS
+            exit 1
+          fi
+          kaggle kernels push -p "$work/kernel" -t 4500 >"$work/cpu-push.log" 2>&1
+          python scripts/check_capacity_31b_push_v0.py --log "$work/cpu-push.log" --client-exit-code 0
+          echo "EXACT_PRIVATE_CPU_CONTROL_PUSHED=$CONTROL_REF"
+          state=UNOBSERVED
+          for i in $(seq 1 130); do
+            raw="$(kaggle kernels status "$CONTROL_REF" 2>&1 || true)"
+            case "$raw" in
+              *KernelWorkerStatus.COMPLETE*) state=COMPLETE; break ;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*|*KernelWorkerStatus.CANCELLED*) state=ERROR; break ;;
+            esac
+            sleep 30
+          done
+          echo "SIX_PAIR_CPU_CONTROL_STATE=$state"
+          test "$state" = COMPLETE
+          kaggle kernels output "$CONTROL_REF" -p "$work/result" -o >"$work/control-download.log" 2>&1
+          python - <<'PY'
+          from collections import Counter, defaultdict
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["SIX_PAIR_DIR"])
+          files = list((root / "result").rglob("paired_three_task_integrity_cpu.json"))
+          assert len(files) == 1
+          report = json.loads(files[0].read_bytes())
+          wanted = json.loads((root / "membership.json").read_text())
+          rows = report["results"]
+          assert report["version"] == "gemma4-paired-31b-six-task-integrity-v1"
+          assert [x["instance_id"] for x in rows] == wanted
+          assert all(report[k] is True for k in ("no_model_inference", "no_gpu", "no_official_submission"))
+          counts = Counter()
+          by_repo = defaultdict(Counter)
+          for row in rows:
+              g, n = row["gold"], row["noop"]
+              if g["status"] != "completed" or n["status"] != "completed":
+                  category = "evaluation_error"
+              elif g["resolved"] is True and g["test_exit_code"] == 0 and n["resolved"] is False and isinstance(n["test_exit_code"], int) and n["test_exit_code"] != 0:
+                  category = "gold_pass_noop_fail"
+              elif g["resolved"] is False:
+                  category = "reference_fails"
+              elif n["resolved"] is True:
+                  category = "noop_already_passes"
+              else:
+                  category = "inconclusive"
+              counts[category] += 1
+              by_repo[row["repo"]][category] += 1
+          print("GEMMA_SIX_TASK_REFERENCE_NOOP_RESULT=" + json.dumps({
+              "task_pairs": len(rows), "controls": 2 * len(rows), "categories": counts, "by_repository": by_repo,
+              "decision": "inspect_valid_patch_semantics" if counts["gold_pass_noop_fail"] >= 3 else "replace_unreliable_cohort",
+              "new_model_inference": False, "official_submissions": 0,
+          }, sort_keys=True), flush=True)
+          PY
