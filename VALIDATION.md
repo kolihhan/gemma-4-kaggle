@@ -3,6 +3,7 @@ Primary quality measure: matched real independent issue grader-resolved fraction
 
 | Comparison | Matched n | Real PASS baseline → candidate | Paired rescues/regressions | Difference / 95% paired bootstrap percentile CI | Evidence |
 | --- | ---: | --- | --- | --- | --- |
+| **31B V2 → pre-edit behavioral-witness policy (NEW)** | **3** | **2/3 → 1/3** | **0 / 1** | **−33.3 pp [-100, 0]** | [Genuine scorer Action 43886580883](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43886580883); 3 distinct hashed public-dev IDs, 6 paired 31B evals; not disjoint gold/noop-certified 30-task result; not official LB |
 | 31B V2 → mandatory 31B SequentialAgent | **3** | 1/3 → 1/3 | 0 / 0 | **0 pp [0,0] sample-only; uninformative about generalization** | [Action 43808826562](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43808826562); [report](docs/research/2026-11-16-sequential31b-real-grader-decision.md) |
 | 31B V2 → 12B size-only | **3** | 1/3 → 0/3 | 0 / 1 | **-33.3 pp [-100, 0]** | [Action 43781086310](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43781086310) |
 | 31B V2 → V3-R optional Skill | **3** | 1/3 → 1/3 | 0 / 0 | **0 pp [0, 0]** sample-only; **not a precision claim** | [Action 43689217134](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43689217134) |
