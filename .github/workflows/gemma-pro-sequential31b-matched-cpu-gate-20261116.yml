@@ -1,0 +1,51 @@
+name: Gemma PRO sequential 31B matched three real issues CPU source and script gate
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-pro-sequential31b-matched-cpu-gate-20261116.yml]
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Validate preregistration and render only exact published 31B source with legal sequential stages
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m py_compile scripts/render_gemma_sequential31b_matched_native_20261116.py
+          python -m pip install -q kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/gemma-seq31b-own-source
+          kaggle kernels output kolihhan/gemma4-budgetfit-v2-reference-42008171687/1 \
+             -p /tmp/gemma-seq31b-own-source -o >/tmp/gemma-seq31b-sourcedownload.log 2>&1
+          python -m scripts.render_gemma_sequential31b_matched_native_20261116 \
+             --source-zip /tmp/gemma-seq31b-own-source/submission.zip \
+             --out /tmp/gemma-seq31b-matched \
+             --kernel-ref kolihhan/gemma4-sequential31b-native3-nov16
+          python - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          root=Path('/tmp/gemma-seq31b-matched')
+          md=json.loads((root/'kernel-metadata.json').read_text())
+          assert md['id']=='kolihhan/gemma4-sequential31b-native3-nov16'
+          assert md['model_sources']==['google/gemma-4/Other/gemma-4-31b-it-qat-w4a16-ct/2']
+          assert md['is_private'] and md['enable_gpu'] and not md['enable_internet']
+          assert md['machine_shape']=='NvidiaL4'
+          code=(root/md['code_file']).read_text()
+          compile(code,md['code_file'],'exec')
+          assert 'GEMMA_PRO_SEQUENTIAL_MATCHED_TASK_COUNT' in code
+          assert "MODEL_NAME = \"gemma-4-31b-it-qat-w4a16-ct\"" in code
+          assert "max_model_len=32768" in code
+          assert "seq31b" in code
+          assert "competition_submit" not in code
+          print('GEMMA_PRO_SEQUENTIAL31B_CPU_REAL_GRADER_RENDER_GATE=PASS',flush=True)
+          print('GEMMA_PRO_SEQUENTIAL31B_REAL_GRADER_SOURCE_SHA256='+hashlib.sha256(code.encode()).hexdigest(),flush=True)
+          print('GEMMA_PRO_SEQUENTIAL31B_NO_NEW_GPU_OR_SUBMISSION=TRUE',flush=True)
+          PY
