@@ -1,3 +1,11 @@
+## 2026-11-16 23:54 MYT — REAL Gemma 31B 6-pair text-only search ablation RUNNING; no score yet
+
+- New mechanism: remove exactly three optional graph/code-intelligence tools from source-pinned 31B V2 and replace only the now-obsolete graph fallback instruction; SAME 31B, sampling, native core tools, 5min/28calls/80 turns. New salted six-task FastAPI/Rich/Requests matched cohort excludes prior selected development issues; **12 real model-task evaluations**. Research-only, not 30-task confirmation.
+- Frozen builder [source](scripts/build_gemma_31b_textonly_search_v0_20261116.py), [precommitted contract](experiments/solver-v3/pro-textonly31b-independent6-20261116.json), candidate ZIP SHA256 `f60429bcd3e9f4f149cc1e85381dfa7b58c4e02feee46fde3bb99de08b6e53eb`. Actual CPU renderer [Action #43900123890](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43900123890) PASS, [**real private GPU paired grader #43900577392**](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43900577392) has private kernel push complete and terminal-result polling IN PROGRESS at last check. **No real resolved counts yet**. No training or official Kaggle submission.
+- Only count genuine paired rescues/regressions after terminal grader returns. Official best remains **0.18** #58183466. Do not present CI as meaningful if only n=6, no prompt-tuning on selected cases.
+
+---
+
 ## 2026-11-16 23:17 MYT — REAL 31B paired behavioral-witness experiment FAILED (not promoted)
 
 - **Genuine terminal actual grader** [Action #43886580883](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43886580883) SUCCESS, same three newly hashed public-dev issues, six 31B evaluations; both arms used same 5-minute/28-call/80-turn budget and native V2 model/tools. Control **2/3 true resolved, 3/3 patch, 84 scorer tool calls, 834.22s**. Behavioral-witness **1/3 true resolved, 1/3 patch, 55 scorer calls, 869.81s**. **0 unique rescues, 1 regression, net -1**; no errors. No source training or official submission.
