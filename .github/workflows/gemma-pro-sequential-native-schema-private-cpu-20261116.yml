@@ -15,7 +15,7 @@ jobs:
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
       NEW: /tmp/gemma-seq31b-schema-cpu
       SOURCE: /tmp/gemma-seq31b-src
-      REF: kolihhan/gemma4-sequential31b-schema-cpu-20261116
+      REF: kolihhan/gemma4-sequential31b-schema-py312-cpu-20261116
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
@@ -108,6 +108,7 @@ jobs:
              'language':'python','kernel_type':'script',
              'is_private':True,'enable_gpu':False,'enable_tpu':False,
              'enable_internet':False,
+             'docker_image':'gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461',
              'dataset_sources':['metric/gemma-4-developer-agent-wheelhouse'],
              'competition_sources':['gemma-4-developer-agent'],
              'kernel_sources':[],'model_sources':[],
