@@ -1,0 +1,154 @@
+name: Gemma PRO 31B V2 vs TEXTONLY6 genuine paired grader
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-pro-textonly31b-paired6-private-once-20261116.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-textonly31b-paired6-nov16-exact-once
+  cancel-in-progress: false
+jobs:
+  paired_31b:
+    if: "${{ github.event.head_commit.message == 'GO_GEMMA_31B_TEXTONLY_PAIRED6_PRIVATE_20261116' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-textonly31b-six-nov16
+      SOURCE_DIR: /tmp/pro-textonly-v2-source
+      PRIVATE_DIR: /tmp/pro-textonly-v2-private
+      KERNEL_DIR: /tmp/pro-textonly-v2-kernel
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Verify frozen PRO contract and exact builder
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/render_gemma_textonly31b_paired6_20261116.py scripts/build_gemma_31b_textonly_search_v0_20261116.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.render_gemma_textonly31b_paired6_20261116 import MANIFEST_PATH,validate_manifest
+          p=Path(MANIFEST_PATH)
+          m=json.loads(p.read_text())
+          validate_manifest(m)
+          assert m['version']=='gemma-textonly-toolmenu-v0-20261116'
+          assert m['shared_budget']['max_time_minutes']==5
+          assert m['shared_budget']['max_tool_calls']==28
+          assert m['shared_budget']['max_turns']==80
+          assert m['experiment']['model_task_evaluations']==12
+          assert 'fastapi_14487' in m['selection']['exclude_instance_ids']
+          print('PRO_TEXTONLY_V2_PREREGISTERED_FRESH_PROTOCOL=PASS',flush=True)
+          PY
+      - name: Check private inference resource and EXACT idempotency before Kaggle GPU
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import subprocess,json
+          r=subprocess.run(['kaggle','quota','--format','json'],check=True,text=True,
+                           stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=100)
+          [gpu]=[x for x in json.loads(r.stdout) if x['resource']=='GPU']
+          hours=float(str(gpu['remaining']).rstrip('h'))
+          print('PRO_TEXTONLY_V2_GPU_HOURS_AVAILABLE='+str(hours),flush=True)
+          if hours<6:
+              raise SystemExit('STOP_PRO_TEXTONLY_V2_GPU_QUOTA_BELOW_6H')
+          PY
+          if kaggle kernels status "$KERNEL_REF" >/tmp/pro-textonly-exists.log 2>&1; then
+            echo STOP_PRIVATE_TEXTONLY_V2_ALREADY_EXISTS; exit 1
+          fi
+      - name: Build pinned 0.18-lineage baseline and legal TEXTONLY treatment without modifying source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$SOURCE_DIR" "$PRIVATE_DIR"
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 \
+            -p "$SOURCE_DIR" -o >/tmp/pro-textonly-v2-source-download.log 2>&1
+          python -m scripts.render_gemma_textonly31b_paired6_20261116 \
+            --repo . --source-zip "$SOURCE_DIR/submission.zip" \
+            --out "$KERNEL_DIR" --kernel-ref "$KERNEL_REF"
+          python -m py_compile "$KERNEL_DIR/paired_textonly31b_runtime.py"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ['KERNEL_DIR'])
+          m=json.loads((root/'kernel-metadata.json').read_text())
+          assert m['is_private'] and m['enable_gpu'] and not m['enable_internet']
+          assert m['competition_sources']==['gemma-4-developer-agent']
+          assert m['model_sources']==['google/gemma-4/Other/gemma-4-31b-it-qat-w4a16-ct/2']
+          print('PRO_TEXTONLY_V2_ACTUAL_PRIVATE_MODEL_SOURCE_AND_HARNESS=PASS',flush=True)
+          PY
+      - name: Push single PRIVATE 31B paired Kaggle kernel, NOT a competition submission
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          kaggle kernels push -p "$KERNEL_DIR" --accelerator NvidiaL4 -t 7200 \
+            >/tmp/pro-textonly-v2-kaggle-push.log 2>&1
+          code=$?
+          set -e
+          python scripts/check_capacity_31b_push_v0.py \
+            --log /tmp/pro-textonly-v2-kaggle-push.log --client-exit-code "$code"
+          echo "PRO_TEXTONLY_V2_REAL_PRIVATE_KERNEL_PUSHED=$KERNEL_REF"
+          echo "PRO_TEXTONLY_V2_OFFICIAL_COMPETITION_SUBMISSIONS_CREATED=0"
+      - name: Poll same private job only and record first terminal result if available
+        shell: bash
+        run: |
+          set -euo pipefail
+          result=UNOBSERVED
+          for i in $(seq 1 155); do
+            raw="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            case "$raw" in
+              *KernelWorkerStatus.COMPLETE*) result=COMPLETE;break ;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*) result=ERROR;break ;;
+            esac
+            if [ "$i" -eq 1 ] || [ $((i % 15)) -eq 0 ]; then echo "PRO_TEXTONLY_V2_POLL=$i"; fi
+            sleep 45
+          done
+          echo "PRO_TEXTONLY_V2_KERNEL_STATE=$result"
+          if [ "$result" != COMPLETE ]; then
+            echo "PRO_TEXTONLY_V2_VALID_MODEL_GAIN_NOT_YET_ESTABLISHED=TRUE"
+            exit 0
+          fi
+          mkdir -p "$PRIVATE_DIR"
+          kaggle kernels output "$KERNEL_REF" -p "$PRIVATE_DIR" -o \
+            >/tmp/pro-textonly-v2-download.log 2>&1
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path(os.environ['PRIVATE_DIR'])/'paired_textonly31b_results.json'
+          if not p.exists():
+              raise SystemExit('STOP_NO_REAL_PAIRED_TASK_RESULTS')
+          obj=json.loads(p.read_text())
+          assert obj['version']=='gemma-textonly-toolmenu-v0-20261116'
+          records=obj.get('results',[])
+          assert len(records)==12
+          arms=['v2_5min','textonly_5min']
+          ids=set(x['instance_id'] for x in records)
+          assert len(ids)==6
+          assert {(i,a) for i in ids for a in arms}=={(x['instance_id'],x['arm']) for x in records}
+          info={}
+          for a in arms:
+              subset=[x for x in records if x['arm']==a]
+              info[a]={'resolved':sum(x.get('resolved') is True for x in subset),
+                       'patch_count':sum(x.get('has_patch') is True for x in subset),
+                       'total_calls':sum(x.get('tool_calls') or 0 for x in subset),
+                       'total_seconds':round(sum(x.get('duration_seconds') or 0 for x in subset),2),
+                       'errors':sum(x.get('status')!='completed' for x in subset)}
+          ctrl=next(x for x in arms if x=='v2_5min')
+          treatment=next(x for x in arms if x=='textonly_5min')
+          paired={i:{x['arm']:x.get('resolved') is True for x in records if x['instance_id']==i} for i in ids}
+          rescues=sum(y[treatment] and not y[ctrl] for y in paired.values())
+          regressions=sum(y[ctrl] and not y[treatment] for y in paired.values())
+          safe={'task_pairs':6,'evaluation_total':12,
+                'by_arm':info,'rescues':rescues,'regressions':regressions,
+                'net':rescues-regressions,'independent_private_dev':False,
+                'new_model_training':False,'official_competition_submission':False}
+          print('PRO_TEXTONLY_V2_ACTUAL_31B_PAIRED_GRADER_RESULT='+json.dumps(safe,sort_keys=True),flush=True)
+          print('PRO_TEXTONLY_V2_RAW_ISSUES_PATCHES_TRACES_NOT_PUBLISHED=TRUE')
+          PY
