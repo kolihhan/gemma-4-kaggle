@@ -10,7 +10,7 @@
   "baseline_zip_sha256": "a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3",
   "treatment_builder_path": "scripts/build_gemma_31b_contract_counterexample_v0_20261116.py",
   "treatment_builder_blob_sha": "690fac602fc9ee20e8228c8f9ee965cb56ea6fd5",
-  "candidate_zip_sha256": "computed_and_logged_before_gpu_push_from_frozen_builder_and_source",
+  "candidate_zip_sha256": "c47f5a80f72341d2c0c9a896311731ef977ba758f9cb0155b0456cccec94a5c4",
   "shared_budget": {
     "max_time_minutes": 5,
     "max_tool_calls": 28,
@@ -91,5 +91,6 @@
     "official_kaggle_submit": false,
     "require_gpu_hours_at_least": 6
   },
-  "data_safety": "Private Kaggle competition-mounted task data; GitHub records only aggregate safe grader metrics, no raw issue text, reference patches or traces."
+  "data_safety": "Private Kaggle competition-mounted task data; GitHub records only aggregate safe grader metrics, no raw issue text, reference patches or traces.",
+  "treatment_zip_sha256": "c47f5a80f72341d2c0c9a896311731ef977ba758f9cb0155b0456cccec94a5c4"
 }
