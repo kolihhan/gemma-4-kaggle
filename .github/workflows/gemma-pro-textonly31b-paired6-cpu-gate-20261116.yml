@@ -60,3 +60,5 @@ jobs:
           assert 'PAIRED_TEXTONLY_FROZEN_SELECTED_PUBLIC_DEV_COUNT' in code
           print('GEMMA_TEXTONLY_CPU_PAIR_SCORER=PASS;NO_GPU=TRUE;NO_COMPETITION_SUBMISSION=TRUE')
           PY
+
+# CPU rerun after frozen builder-path fix; same scientific candidate, no GPU.
