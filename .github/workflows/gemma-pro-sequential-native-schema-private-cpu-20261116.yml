@@ -46,12 +46,12 @@ jobs:
           import base64,hashlib,json,os
           from pathlib import Path
           raw=Path('/tmp/gemma-sequential-candidate.zip').read_bytes()
-          assert hashlib.sha256(raw).hexdigest()=='0aec67997635995ba5a82113e2e5ed54a8c8f7f780388e6fe325ac135eb16a57'
+          assert hashlib.sha256(raw).hexdigest()=='dd3b582cd6d97ef2314ffdef64738b06b302c6cc0234fb7513258858e38a2c0a'
           blob=base64.b64encode(raw).decode('ascii')
           code="""from pathlib import Path
           import base64,hashlib,io,zipfile,subprocess,sys,glob,os,importlib,json
           WHEEL=Path('/kaggle/input/datasets/metric/gemma-4-developer-agent-wheelhouse')
-          SHA='0aec67997635995ba5a82113e2e5ed54a8c8f7f780388e6fe325ac135eb16a57'
+          SHA='dd3b582cd6d97ef2314ffdef64738b06b302c6cc0234fb7513258858e38a2c0a'
           ZIP=base64.b64decode('___ZIP___')
           assert hashlib.sha256(ZIP).hexdigest()==SHA
           if not WHEEL.is_dir():raise RuntimeError('STOP_OFFICIAL_WHEELHOUSE_NOT_MOUNTED')
