@@ -1,0 +1,47 @@
+name: Gemma 31B Sequential reviewer trace read-only audit
+on:
+  push:
+    branches:
+      - research/dual-agent-recovery-v0-20261108
+    paths:
+      - .github/workflows/gemma-seq31b-uptake-readonly-20261116.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: gemma-seq31b-once-readonly-uptake
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-sequential31b-native3-nov16
+    steps:
+      - name: Checkout pinned research branch
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Static reducer check
+        run: |
+          python -m py_compile scripts/audit_sequential31b_private_uptake_20261116.py
+          python -m py_compile scripts/audit_paired_31b_feedback_v2.py
+      - name: Obtain already-finished PRIVATE Kaggle output, without GPU or submission
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${KAGGLE_API_TOKEN:-}" ]; then
+            echo 'GEMMA_SEQ31B_UPTAKE_BLOCKER=NO_AUTHENTICATED_KAGGLE_TOKEN'
+            exit 0
+          fi
+          python -m pip install -q kaggle==2.2.5
+          mkdir -p /tmp/gemma31b-private-readonly
+          if ! kaggle kernels output "$KERNEL_REF" -p /tmp/gemma31b-private-readonly -o >/tmp/seq31b-kaggle-output.log 2>&1; then
+            echo 'GEMMA_SEQ31B_UPTAKE_BLOCKER=EXISTING_KERNEL_OUTPUT_UNAVAILABLE'
+            exit 0
+          fi
+          python -m scripts.audit_sequential31b_private_uptake_20261116 --root /tmp/gemma31b-private-readonly
+          echo 'GEMMA_SEQ31B_READONLY_NO_NEW_GPU_NO_TRAINING_NO_SUBMISSION=TRUE'
