@@ -1,0 +1,58 @@
+{
+  "version": "gemma-behavioral-witness-vs-v2-independent-v0-20261116",
+  "date": "2026-11-16",
+  "model": "gemma-4-31b-it-qat-w4a16-ct",
+  "hypotheses": {
+    "H_semantics": "A single-stage pre-edit behavioral counterexample check rescues at least one previously unseen issue without regression vs V2.",
+    "H_cost": "Pre-edit verification consumes limited calls/time but does not correct the patch, producing no rescue or regressions."
+  },
+  "major_variable": "one appended, frozen behavioral-counterexample policy; SAME model, tool set, sample, time/calls/turns, evaluation environment",
+  "baseline_zip_sha256": "a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3",
+  "treatment_builder_path": "scripts/build_gemma_31b_contract_counterexample_v0_20261116.py",
+  "treatment_builder_blob_sha": "690fac602fc9ee20e8228c8f9ee965cb56ea6fd5",
+  "candidate_zip_sha256": "computed_and_logged_before_gpu_push_from_frozen_builder_and_source",
+  "shared_budget": {
+    "max_time_minutes": 5,
+    "max_tool_calls": 28,
+    "max_turns": 80,
+    "timeout_seconds": 240
+  },
+  "selection": {
+    "salt": "gemma-semantics-witness-nov16-pilot-firstpick-c29bc615",
+    "repo_prefixes": [
+      "fastapi_",
+      "rich_",
+      "requests_"
+    ],
+    "count_per_repo": 1,
+    "previous_cohort_manifest": "experiments/solver-v3/pro-v3r-vs-v2-fresh-paired-20261115.json",
+    "exclude_previous_selections": true,
+    "method": "exclude all previous manifest blocked IDs and compute its 3 old pilot picks from salted public IDs; hash-rank remaining per repository, freeze before reading task bodies or treatment results"
+  },
+  "experiment": {
+    "arms": [
+      "v2_5min",
+      "behavioral_witness_5min"
+    ],
+    "tasks": 3,
+    "model_task_evaluations": 6,
+    "order": "alternating within task",
+    "primary": "paired actual native grader resolved; unique rescues minus regressions",
+    "secondary": [
+      "scorer physical tool calls",
+      "wall seconds",
+      "test failures",
+      "patch present"
+    ],
+    "early_gate": "at least 1 unique grader rescue, zero regressions, no invalid evaluator failures",
+    "stop": "no net unique rescues or any regression -> retire exact policy; no prompt editing on same issues",
+    "promotion": "Never declare improvement from n=3; if pilot shows rescue, require >=30 truly fresh paired gold-pass/noop-fail issues and confidence interval before official submission"
+  },
+  "resources": {
+    "new_training": false,
+    "private_gpu": true,
+    "official_kaggle_submit": false,
+    "require_gpu_hours_at_least": 6
+  },
+  "data_safety": "Private Kaggle competition-mounted task data; GitHub records only aggregate safe grader metrics, no raw issue text, reference patches or traces."
+}
