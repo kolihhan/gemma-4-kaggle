@@ -73,8 +73,8 @@ def render_runtime(template: str, source_zip: bytes, plan: dict) -> str:
         raise ValueError("baseline source budget not recognized")
     control["eval_config.yaml"] = cfg.replace("max_time_minutes: 8", "max_time_minutes: 5")
     treatment = v3r_payload(source_zip)
-    if digest(v3r_build(source_zip)) == EXPECTED_ZIP_SHA256:
-        raise ValueError("treatment must differ from pinned baseline source")
+    if digest(v3r_build(source_zip)) != plan.get("treatment_zip_sha256"):
+        raise ValueError("candidate ZIP changed after experiment preregistration")
     if not set(control).issubset(treatment):
         raise ValueError("missing V2 core files in treatment")
     if (control["configs/sampling.yaml"] != treatment["configs/sampling.yaml"] or
@@ -282,7 +282,7 @@ def load_holdout_ids(public_tasks) -> list[str]:
         SUMMARY_PATH.write_text(json.dumps(output, indent=2, sort_keys=True),
                                 encoding="utf-8")
         print("PRIVATE_PAIRED_31B_SAFE_SUMMARY=" +
-              json.dumps({k: v for k, v in output.items() if k != "results"},
+              json.dumps({k: v for k, v in output.items() if k not in ("results","selected_public_dev_ids")},
                          sort_keys=True), flush=True)
 '''
     text = replace_section(text,
