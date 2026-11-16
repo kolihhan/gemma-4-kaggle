@@ -1,3 +1,12 @@
+# 2026-11-16 PRO: model-size pivot on actual private 12B, exact old 31B tasks and budget
+
+- Official Kaggle competition supports **Gemma 4 12B**, and its vLLM 12B requires `--hf-overrides` for unified architecture. [Staff clarification](https://www.kaggle.com/competitions/gemma-4-developer-agent/discussion/748287). **No mixed model variants in a single official submission.**
+- **ONE genuine Kaggle GPU 12B scorer trial launched:** [Action #43781086310](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43781086310) successfully passed the quotas, source SHA, frozen code, and exact private kernel push. Unique `kolihhan/gemma4-model12b-v2-matched-20261116`; 3 previously selected public-dev issues, 5min/28calls/80turns. Same exact prompts/tools/sampling as prior 31B V2 **1/3 resolved** baseline; **12B actual resolved-task result not yet known**. No new 31B GPU, official competition submission or training. [Research manifest and matched cost controls](docs/research/2026-11-16-gemma-model12b-matched-real-launch.md).
+- [Authentic 12B CPU source gate #43780901445](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43780901445) **PASS**, source exact V2 SHA `a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3` from previously verified private CPU reference. Earlier 12B CPU failures came from a literal backslash before templated Kaggle secret; corrected; no score/GPU effect.
+- **Promotion rule:** 12B real ≥2/3 and zero errors would justify a **NEW disjoint** paired cohort; otherwise retire this simple size tradeoff. A single previously used 3-task comparison is not independent transfer. Last scored own official remains **0.18** (#58183466); unscored #58350278 COMPLETE/blank, no new improvement.
+
+---
+
 # 2026-11-16 02:06 MYT — official Gemma complete-unscored, 0.18 remains best
 
 - [Read-only authenticated Kaggle ledger #43743767264](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43743767264): `#58350278` is COMPLETE with **empty numeric Public Score**; previous `#58183466` is COMPLETE **0.18**. Do not misreport the completed but unscored reference as new quality evidence. Real V3-R 31B paired experiment [#43689217134](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43689217134) had **1/3 vs 1/3** and never invoked optional Skill; reject V3-R and investigate legal native-action evidence policy, not another optional tool or larger prompt.
