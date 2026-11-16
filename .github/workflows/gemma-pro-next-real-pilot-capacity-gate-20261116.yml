@@ -1,0 +1,45 @@
+name: Gemma score-facing next independent pilot GPU feasibility gate
+on:
+  push:
+    branches:
+      - research/dual-agent-recovery-v0-20261108
+    paths:
+      - .github/workflows/gemma-pro-next-real-pilot-capacity-gate-20261116.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Resource-only verified gate; no model inference or kernels
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}" || { echo GEMMA_NEXT_PILOT_STOP=MISSING_AUTH; exit 1; }
+          python -m pip install -q kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import json,subprocess
+          try:
+              r=subprocess.run(['kaggle','quota','--format','json'],capture_output=True,text=True,timeout=90)
+              if r.returncode!=0: raise RuntimeError('cli_nonzero')
+              obj=json.loads(r.stdout)
+              gpu=[x for x in obj if x.get('resource')=='GPU']
+              if len(gpu)!=1: raise ValueError('gpu_count')
+              remaining=float(str(gpu[0]['remaining']).rstrip('h'))
+              print('GEMMA_NEXT_PILOT_GPU_HOURS='+str(remaining),flush=True)
+              print('GEMMA_NEXT_PILOT_GPU_GATE='+('PASS' if remaining>=6 else 'STOP_BELOW_6H'),flush=True)
+          except Exception as exc:
+              print('GEMMA_NEXT_PILOT_GPU_GATE=UNAVAILABLE',flush=True)
+              print('GEMMA_NEXT_PILOT_FAILURE_CLASS='+type(exc).__name__,flush=True)
+              raise SystemExit(1)
+          PY
