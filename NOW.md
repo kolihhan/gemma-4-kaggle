@@ -1,3 +1,11 @@
+## 2026-11-16 — score-facing PRO experiment actually in real private 31B grader
+
+- **Mechanism**: [frozen single-stage pre-edit behavioral counterexample builder](scripts/build_gemma_31b_contract_counterexample_v0_20261116.py) vs same 31B V2 baseline; same model/tools/sampling and 5min/28calls/80turns. Candidate ZIP actual SHA256 `c47f5a80f72341d2c0c9a896311731ef977ba758f9cb0155b0456cccec94a5c4`. [Preregistered matched experiment](experiments/solver-v3/pro-behavioral-witness31b-independent-20261116.json) selects 3 salted unseen-relative-to-prior-cohort issue IDs (FastAPI/Rich/Requests) after previous blocked IDs; no gold/no-op eligibility certification yet, **pilot not generalization**.
+- [Read-only GPU capacity check #43884726639](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43884726639) PASS (13.02h at check); [frozen CPU source/ZIP/runtime gate #43885906560](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43885906560) PASS. [**Actual private Kaggle scorer Action #43886580883**](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43886580883) verified source/build and private GPU PUSH **SUCCESS**; private grader job **IN PROGRESS at the last observed check**. Exactly 6 model-task evals pending (3 per arm), same base 31B. No new training or official competition submission.
+- **DO NOT CLAIM A SCORE** until genuine paired grader resolves 6 records. Predeclared next decision: 0 net unique rescues or any regression => reject exact policy; ≥1 unique rescue with no regression => exploratory only; require genuinely disjoint ≥30 gold/noop-validated paired cases and uncertainty before promotion. Official scored Public best remains **0.18** #58183466.
+
+---
+
 ## 2026-11-16 evening — score-first dual-project check: Gemma NO new improvement
 
 - Re-fetched latest authenticated GitHub Actions: [#43851712192](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43851712192) is a **read-only CLI_EXCEPTION blocker**, not a scorer run. The last genuine [31B sequential-vs-single matched grader #43808826562](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43808826562) is **1/3 vs 1/3**, 0 rescues, +7 calls; rejected exact topology. Official best still **Public 0.18** #58183466, no new official score or GPU launch.
