@@ -1,0 +1,65 @@
+{
+  "version": "pro-sequential31b-native-verifier-v0-20261116",
+  "current_best_official_public": 0.18,
+  "current_best_official_ref": "58183466",
+  "research_evidence": {
+    "v2_frozen_control": {
+      "tasks": 3,
+      "resolved": 1,
+      "scorer_tool_calls": 62,
+      "elapsed_seconds": 604.94,
+      "private_public_dev_run": 43689217134
+    },
+    "v3r_optional_skill": {
+      "tasks": 3,
+      "resolved": 1,
+      "scorer_tool_calls": 81,
+      "elapsed_seconds": 723.06,
+      "skill_tool_uptake": 0
+    },
+    "size_swap_12b": {
+      "tasks": 3,
+      "resolved": 0,
+      "scorer_tool_calls": 84,
+      "elapsed_seconds": 820.42,
+      "run": 43781086310
+    },
+    "mechanism_trace": "6/6 31B traces include edits and tool exits, 0/6 recognized explicit tests but all have opaque commands; cannot claim no tests."
+  },
+  "hypotheses": {
+    "H_sequence": "A second mandatory 31B LlmAgent review stage can observe current diff and run a narrow model-visible native test before patch submission, overcoming optional Skill non-uptake",
+    "H_budget": "Sequential stages incur extra model tokens and may reduce coder exploration enough to hurt actual resolved issues",
+    "H_generalization": "If resolver improves, it may reflect task/sampling effects instead of targeted verification; an entirely disjoint task cohort is required before score claims"
+  },
+  "one_major_variable": "root topology: previously single LlmAgent to mandatory SequentialAgent coder then native verifier; same 31B and initial public Budget Fit reference prompts/sampling and tools within each stage",
+  "only_reviewer_can_submit": true,
+  "reviewer_uses_only_official_tools": [
+    "run_command",
+    "read_file",
+    "edit_file",
+    "get_status",
+    "submit_patch"
+  ],
+  "source_zip_sha256": "a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3",
+  "candidate_zip_sha256": "dd3b582cd6d97ef2314ffdef64738b06b302c6cc0234fb7513258858e38a2c0a",
+  "budget": {
+    "max_time_minutes_per_task": 5,
+    "max_tool_calls_per_task": 28,
+    "max_turns": 80
+  },
+  "guard1": "Exact source builder and GitHub CPU static tool/YAML gate PASS 43807441633",
+  "guard2": "Official Kaggle wheelhouse CPU validate_directory and same-model discovery MUST PASS before any 31B GPU; first CPU run failed due cp312 wheel default mismatch, Py312 pinned retry ref gemma4-sequential31b-schema-py312-cpu-20261116 in progress",
+  "guard3": "Freeze same exact hashed three public dev FastAPI/Rich/Requests task IDs from existing paired benchmark; do not see gold reference patches",
+  "pilot_protocol": "ONE 31B candidate arm on existing 3 matched tasks, real official development grader, identical 5min/28calls/80 turns. Compare to recorded frozen V2 1/3 to avoid duplicate 31B model base run.",
+  "primary": "paired official public-development grader resolved; rescues, regressions and runtime vs 31B V2",
+  "uptake": "Count actual verifier-stage events / targeted post-edit run_command test execution, distinguish recognized test from opaque commands, forbid counting prompt text as tool uptake; raw trace events may double-count calls",
+  "promotion": "Only if at least two of three tasks resolved, no infrastructure errors, reviewer genuinely reached in >=2/3 tasks, and new disjoint matched cohort also shows improvement; no official submit on 3 spent cases",
+  "stop": "Do not launch GPU if official CPU compiler rejects, 31B weights unavailable, GPU quota <4h, or generated pinned zip/model contract mismatch. If 0/3 or 1/3 and extra time/calls or no actual verifier uptake, retire this topology, do not micro-tune same tasks.",
+  "cost": {
+    "new_training": false,
+    "planned_new_31b_evaluations_after_cpu_gate": 3,
+    "new_official_submissions": 0
+  },
+  "privacy": "All raw task prompts/tests/patches are exclusively within private Kaggle runtime; only derived per-task resolving metrics to public GitHub.",
+  "status": "official CPU schema gate pending; no 31B inference yet"
+}
