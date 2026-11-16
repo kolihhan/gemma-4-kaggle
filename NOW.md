@@ -1,3 +1,11 @@
+## 2026-11-16 23:17 MYT — REAL 31B paired behavioral-witness experiment FAILED (not promoted)
+
+- **Genuine terminal actual grader** [Action #43886580883](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43886580883) SUCCESS, same three newly hashed public-dev issues, six 31B evaluations; both arms used same 5-minute/28-call/80-turn budget and native V2 model/tools. Control **2/3 true resolved, 3/3 patch, 84 scorer tool calls, 834.22s**. Behavioral-witness **1/3 true resolved, 1/3 patch, 55 scorer calls, 869.81s**. **0 unique rescues, 1 regression, net -1**; no errors. No source training or official submission.
+- **Decision:** exact pre-edit behavioral-check policy **RETIRE** per predeclared stop condition; it used 29 fewer calls but was slower by ~35.59s and produced fewer patches, not greater correctness. These three tasks are now spent; *do not rerun/tune on them*. This is a first matched development pilot, **NOT 30 independent gold/noop-certified tasks**, and insufficient to reject semantic-verification methods generally. No trace evidence that the check itself executed or caused regression.
+- Official Kaggle numeric best **0.18** #58183466 unchanged. Key lesson: injecting expensive verification obligations into a constrained prompt can suppress patch completion; next mechanism must target *evidence quality per action* and include direct test signal without requiring ritual steps.
+
+---
+
 ## 2026-11-16 — score-facing PRO experiment actually in real private 31B grader
 
 - **Mechanism**: [frozen single-stage pre-edit behavioral counterexample builder](scripts/build_gemma_31b_contract_counterexample_v0_20261116.py) vs same 31B V2 baseline; same model/tools/sampling and 5min/28calls/80turns. Candidate ZIP actual SHA256 `c47f5a80f72341d2c0c9a896311731ef977ba758f9cb0155b0456cccec94a5c4`. [Preregistered matched experiment](experiments/solver-v3/pro-behavioral-witness31b-independent-20261116.json) selects 3 salted unseen-relative-to-prior-cohort issue IDs (FastAPI/Rich/Requests) after previous blocked IDs; no gold/no-op eligibility certification yet, **pilot not generalization**.
