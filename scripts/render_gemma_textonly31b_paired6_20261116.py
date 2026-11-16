@@ -1,7 +1,6 @@
 """Render private, disjoint paired REAL Gemma 4 31B prompt-only vs V2 pilot.
 
-NO third-party notebook execution. Both single-agent arms have identical model,
-tools, sampling, task budget and task text; only prompts/system.md differs.
+NO third-party notebook execution. Both single-agent arms have identical model, sampling, task budget and task text; only optional graph tools and the dependent graph-rescue instruction differ.
 One private Kaggle Notebook starts one vLLM server, evaluates six ID-selected
 tasks with each arm (twelve task evaluations), then exports safe aggregate metrics.
 This pilot is public-development evidence, NOT an official leaderboard score.
@@ -35,7 +34,7 @@ def validate_manifest(plan: dict) -> None:
         raise ValueError("pinned model or public prompt mismatch")
     if plan.get("baseline_zip_sha256") != EXPECTED_ZIP_SHA256 or plan.get("candidate_builder_blob_sha") != BUILDER_BLOB_SHA:
         raise ValueError("pinned candidate provenance mismatch")
-    builder_bytes = Path("scripts/build_gemma_31b_contract_counterexample_v0_20261116.py").read_bytes()
+    builder_bytes = Path("scripts/build_gemma_31b_textonly_search_v0_20261116.py").read_bytes()
     observed_blob = hashlib.sha1(b"blob " + str(len(builder_bytes)).encode() + b"\0" + builder_bytes).hexdigest()
     if observed_blob != BUILDER_BLOB_SHA:
         raise ValueError("candidate builder blob changed after preregistration")
