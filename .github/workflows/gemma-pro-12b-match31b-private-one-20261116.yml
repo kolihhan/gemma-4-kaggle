@@ -1,0 +1,161 @@
+name: Gemma PRO private real 12B vs frozen exact 31B matched 3 tasks
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-pro-12b-match31b-private-one-20261116.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-pro-model12b-frozen31b-exact-once-20261116
+  cancel-in-progress: false
+jobs:
+  matched_12b:
+    if: ${{ github.event.head_commit.message == 'GO_GEMMA_PRO12B_MATCHED_PRIVATE_20261116' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 97
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      REF: kolihhan/gemma4-model12b-v2-matched-20261116
+      OLD: kolihhan/gemma4-v3r-v2-pro-nov15-v1
+      RAW: /tmp/gemma-pro-modelsize12b-frozen-source
+      OUT: /tmp/gemma-pro-modelsize12b-kernel
+      RESULTS: /tmp/gemma-pro-modelsize12b-results
+      OLD_RESULTS: /tmp/gemma-pro-original31b-results
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Verify immutable source, preregistered tasks, idempotency and GPU quota
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m py_compile scripts/render_gemma_model12b_against_frozen31b_20261116.py
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import json,subprocess
+          from pathlib import Path
+          from scripts.render_gemma_model12b_against_frozen31b_20261116 import validate_plans
+          a=json.loads(Path('experiments/solver-v3/pro-12b-vs-frozen31b-20261116.json').read_text())
+          b=json.loads(Path('experiments/solver-v3/pro-v3r-vs-v2-fresh-paired-20261115.json').read_text())
+          validate_plans(a,b)
+          proc=subprocess.run(['kaggle','quota','--format','json'],
+                   text=True,capture_output=True,check=True,timeout=90)
+          [gpu]=[i for i in json.loads(proc.stdout) if i.get('resource')=='GPU']
+          remaining=float(str(gpu['remaining']).rstrip('h'))
+          print('GEMMA_PRO_12B_EXACT_QUOTA_HOURS_AVAILABLE='+str(remaining),flush=True)
+          if remaining<4:raise SystemExit('STOP_GPU_REMAINING_LT_4_HOURS')
+          PY
+          if kaggle kernels status "$REF" >/tmp/gemma-pro-12b-exists.log 2>&1; then
+              echo "STOP_GEMMA_PRO_12B_PRIVATE_KERNEL_ALREADY_EXISTS"
+              exit 1
+          fi
+          mkdir -p "$RAW"
+          kaggle kernels output kolihhan/gemma4-budgetfit-v2-reference-42008171687/1 \
+            -p "$RAW" -o >/tmp/gemma-pro-modelsize12b-exactsource.log 2>&1
+          python - <<'PY'
+          import hashlib,os
+          from pathlib import Path
+          from scripts.prepare_public_budgetfit_v2 import EXPECTED_ZIP_SHA256,validate_source_zip
+          p=Path(os.environ['RAW'])/'submission.zip'
+          data=p.read_bytes()
+          assert hashlib.sha256(data).hexdigest()==EXPECTED_ZIP_SHA256
+          validate_source_zip(data)
+          print('GEMMA_PRO_12B_PINNED_PUBLIC_REFERENCE_SOURCE_VERIFIED=TRUE',flush=True)
+          PY
+      - name: Build EXACT 12B-only changed model with same policy/native tools and matched budget
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.render_gemma_model12b_against_frozen31b_20261116 \
+             --repo . --source-zip "$RAW/submission.zip" \
+             --out "$OUT" --kernel-ref "$REF"
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          from scripts.render_gemma_model12b_against_frozen31b_20261116 import (
+             MODEL,MODEL_SOURCE,HF_OVERRIDE
+          )
+          root=Path(os.environ['OUT'])
+          meta=json.loads((root/'kernel-metadata.json').read_text())
+          assert meta['id']==os.environ['REF']
+          assert meta['model_sources']==[MODEL_SOURCE]
+          assert meta['is_private'] and meta['enable_gpu'] and not meta['enable_internet']
+          source=(root/meta['code_file']).read_text()
+          compile(source,meta['code_file'],'exec')
+          assert 'MODEL_NAME = "'+MODEL+'"' in source and HF_OVERRIDE in source
+          assert hashlib.sha256(source.encode()).hexdigest()=='d66590030f045a67a32e335f572ffc5e9423a573edbf23e68619469d288ea43f'
+          print('GEMMA_PRO_12B_MATCHED_CODE_BYTE_IDENTICAL_TO_PASSING_CPU_PREFLIGHT=TRUE',flush=True)
+          PY
+      - name: Launch ONE genuine private 12B 3-task scorer run with no official competition submission
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          kaggle kernels push -p "$OUT" --accelerator NvidiaL4 -t 3600 \
+             >/tmp/gemma-pro-12b-push-receipt.log 2>&1
+          code=$?
+          set -e
+          python scripts/check_capacity_31b_push_v0.py \
+             --log /tmp/gemma-pro-12b-push-receipt.log --client-exit-code "$code"
+          echo "GEMMA_PRO_12B_REAL_PRIVATE_KERNEL_PUSHED=$REF"
+          echo "GEMMA_PRO_12B_NEW_COMPETITION_SUBMISSION_COUNT=0"
+          echo "GEMMA_PRO_12B_NEW_MODEL_TRAINING=FALSE"
+      - name: Observe SAME unique private 12B kernel and compare exact previous 31B matched results if complete
+        shell: bash
+        run: |
+          set -euo pipefail
+          state=UNOBSERVED
+          for i in $(seq 1 85); do
+            response="$(kaggle kernels status "$REF" 2>&1 || true)"
+            case "$response" in
+              *KernelWorkerStatus.COMPLETE*) state=COMPLETE;break ;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*) state=ERROR;break ;;
+            esac
+            if [ "$i" -eq 1 ] || [ $((i % 15)) -eq 0 ]; then echo "GEMMA_PRO_12B_EXISTING_KERNEL_POLL=$i"; fi
+            sleep 45
+          done
+          echo "GEMMA_PRO_12B_PRIVATE_KERNEL_TERMINAL_STATE=$state"
+          if [ "$state" != COMPLETE ]; then
+              echo "GEMMA_PRO_12B_MODEL_CORRECTNESS_UNVERIFIED=TRUE"
+              exit 0
+          fi
+          mkdir -p "$RESULTS" "$OLD_RESULTS"
+          kaggle kernels output "$REF" -p "$RESULTS" -o \
+            >/tmp/gemma-pro-12b-result-download.log 2>&1
+          kaggle kernels output "$OLD" -p "$OLD_RESULTS" -o \
+            >/tmp/gemma-pro-prior31b-download.log 2>&1
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          new=json.loads((Path(os.environ['RESULTS'])/'model_size_12b_matched_results.json').read_text())
+          old=json.loads((Path(os.environ['OLD_RESULTS'])/'paired_prompt_v2_31b_results.json').read_text())
+          assert new['version']=='gemma-12b-vs-existing31b-20261116-v1'
+          assert new['model']=='gemma-4-12b-it-qat-w4a16-ct'
+          assert old['version']=='v3r-vs-v2-fresh-paired-20261115-v1'
+          new_rows=new['results']
+          old_rows=[r for r in old['results'] if r['arm']=='v2_5min']
+          assert len(new_rows)==len(old_rows)==3
+          before={r['instance_id']:r for r in old_rows}
+          after={r['instance_id']:r for r in new_rows}
+          assert len(before)==len(after)==3 and set(before)==set(after)
+          assert all(type(r.get('resolved')) is bool for r in before.values())
+          assert all(type(r.get('resolved')) is bool for r in after.values())
+          rescues=sum(not before[i]['resolved'] and after[i]['resolved'] for i in before)
+          regressions=sum(before[i]['resolved'] and not after[i]['resolved'] for i in before)
+          def agg(rows):
+              return {'n_tasks':len(rows),
+                  'resolved':sum(r['resolved'] for r in rows),
+                  'patches':sum(r.get('has_patch') is True for r in rows),
+                  'errors':sum(r.get('status')!='completed' for r in rows),
+                  'total_scorer_tool_calls':sum(r.get('tool_calls') or 0 for r in rows),
+                  'total_duration_seconds':round(sum(r.get('duration_seconds') or 0 for r in rows),2)}
+          print('GEMMA_PRO_REAL_12B_VS_31B_MATCHED_GRADER='+json.dumps({
+            'old_31b':agg(old_rows),'new_12b':agg(new_rows),
+            'rescues':rescues,'regressions':regressions,'net':rescues-regressions,
+            'matched_public_dev_tasks':3,'new_12b_evaluations':3,
+            'result_is_hidden_public_leaderboard':False,
+            'result_is_independent_validation':False,
+            'new_training':False,'official_submission':False,
+          },sort_keys=True),flush=True)
+          PY
