@@ -1,0 +1,146 @@
+name: Gemma PRO ONE real 31B SequentialAgent coder-then-native-verifier matched 3 grader tasks
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-pro-sequential31b-native3-private-once-20261116.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-pro-sequential31b-real3-frozen-v2-20261116
+  cancel-in-progress: false
+jobs:
+  real31b:
+    if: ${{ github.event.head_commit.message == 'GO_GEMMA_PRO_SEQ31B_NATIVE3_ONCE_20261116' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 104
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      REF: kolihhan/gemma4-sequential31b-native3-nov16
+      OLD: kolihhan/gemma4-v3r-v2-pro-nov15-v1
+      SRC: /tmp/gemma-pro-seq31b-once-source
+      NEW: /tmp/gemma-pro-seq31b-once-kernel
+      RES: /tmp/gemma-pro-seq31b-one-results
+      OLD_RES: /tmp/gemma-pro-old31b-matched
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Guard idempotency, authentic GPU quota, immutable source and official parser proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m py_compile scripts/render_gemma_sequential31b_matched_native_20261116.py
+          python -m pip install -q kaggle==2.2.5 six==1.17.0
+          current="$(kaggle kernels status "$REF" 2>&1 || true)"
+          if [[ "$current" == *KernelWorkerStatus.* ]]; then
+             echo "STOP_SEQUENTIAL31B_REAL_ALREADY_LAUNCHED"
+             exit 1
+          fi
+          cpu_state="$(kaggle kernels status kolihhan/gemma4-sequential31b-schema-py312-cpu-20261116 2>&1 || true)"
+          if [[ "$cpu_state" != *KernelWorkerStatus.COMPLETE* ]]; then
+             echo "STOP_OFFICIAL_PY312_SCHEMA_NOT_COMPLETE"
+             exit 1
+          fi
+          python - <<'PY'
+          import json,subprocess
+          p=subprocess.run(['kaggle','quota','--format','json'],
+                           capture_output=True,text=True,timeout=90,check=True)
+          pools=[q for q in json.loads(p.stdout) if q.get('resource')=='GPU']
+          if len(pools)!=1:raise SystemExit('STOP_GPU_QUOTA_UNVERIFIABLE')
+          hours=float(str(pools[0]['remaining']).rstrip('h'))
+          print('GEMMA_PRO_SEQ31B_REAL_QUOTA_HOURS='+str(hours),flush=True)
+          if hours<4:raise SystemExit('STOP_GPU_QUOTA_BELOW_FOUR_HOURS')
+          PY
+          mkdir -p "$SRC"
+          kaggle kernels output kolihhan/gemma4-budgetfit-v2-reference-42008171687/1 \
+             -p "$SRC" -o >/tmp/gemma-pro-seq-source-download.log 2>&1
+          python -m scripts.render_gemma_sequential31b_matched_native_20261116 \
+             --repo . --source-zip "$SRC/submission.zip" --out "$NEW" \
+             --kernel-ref "$REF"
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path(os.environ['NEW'])
+          meta=json.loads((root/'kernel-metadata.json').read_text())
+          assert meta['id']==os.environ['REF']
+          assert meta['model_sources']==['google/gemma-4/Other/gemma-4-31b-it-qat-w4a16-ct/2']
+          assert meta['is_private'] and meta['enable_gpu'] and not meta['enable_internet']
+          script=(root/meta['code_file']).read_text()
+          compile(script,meta['code_file'],'exec')
+          assert hashlib.sha256(script.encode()).hexdigest()=='ed8daa82ea505586c130cf325416f520b9a4ef9b7b7d8661e5525fc6e133a356'
+          assert 'GEMMA_PRO_SEQUENTIAL_MATCHED_TASK_COUNT' in script
+          assert 'native-sequential31b' in script
+          print('GEMMA_PRO_SEQ31B_REAL_PINNED_GPU_READY=TRUE',flush=True)
+          PY
+      - name: Push ONE legal 31B genuine grader scorer, no competition submission
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          kaggle kernels push -p "$NEW" --accelerator NvidiaL4 -t 3600 \
+             >/tmp/gemma-pro-seq31b-push.log 2>&1
+          rc=$?
+          set -e
+          python scripts/check_capacity_31b_push_v0.py \
+             --log /tmp/gemma-pro-seq31b-push.log --client-exit-code "$rc"
+          echo "GEMMA_PRO_SEQ31B_ACTUAL_ONE_PRIVATE_GPU_KERNEL_PUSHED=$REF"
+          echo "GEMMA_PRO_SEQ31B_NO_ADAPTER_NO_TRAINING_NO_OFFICIAL_SUBMISSION=TRUE"
+      - name: Observe existing exact 31B result, compare authentic grader to frozen original V2
+        shell: bash
+        run: |
+          set -euo pipefail
+          state=UNOBSERVED
+          for attempt in $(seq 1 85); do
+            status="$(kaggle kernels status "$REF" 2>&1 || true)"
+            case "$status" in
+              *KernelWorkerStatus.COMPLETE*)state=COMPLETE;break;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*)state=ERROR;break;;
+            esac
+            if [ "$attempt" -eq 1 ] || [ $((attempt % 15)) -eq 0 ]; then
+                echo "GEMMA_PRO_SEQ31B_REAL_POLL=$attempt"
+            fi
+            sleep 45
+          done
+          echo "GEMMA_PRO_SEQ31B_REAL_PRIVATE_KERNEL_TERMINAL_STATE=$state"
+          if [ "$state" != COMPLETE ]; then
+              echo "GEMMA_PRO_SEQ31B_REAL_GRADER_QUALITY=UNVERIFIED"
+              exit 0
+          fi
+          mkdir -p "$RES" "$OLD_RES"
+          kaggle kernels output "$REF" -p "$RES" -o >/tmp/gemma-pro-seq31b-result-download.log 2>&1
+          kaggle kernels output "$OLD" -p "$OLD_RES" -o >/tmp/gemma-pro-old31b-result-download.log 2>&1
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          new=json.loads((Path(os.environ['RES'])/'native_sequential31b_matched_results.json').read_text())
+          old=json.loads((Path(os.environ['OLD_RES'])/'paired_prompt_v2_31b_results.json').read_text())
+          assert new['version']=='gemma-sequential-native-verify-20261116-v0'
+          assert new['model']=='gemma-4-31b-it-qat-w4a16-ct'
+          assert old['version']=='v3r-vs-v2-fresh-paired-20261115-v1'
+          now=new['results']
+          control=[r for r in old['results'] if r['arm']=='v2_5min']
+          assert len(now)==len(control)==3
+          a={r['instance_id']:r for r in control}
+          b={r['instance_id']:r for r in now}
+          assert len(a)==len(b)==3 and set(a)==set(b)
+          assert all(type(r['resolved']) is bool for r in list(a.values())+list(b.values()))
+          rescues=sum(not a[k]['resolved'] and b[k]['resolved'] for k in a)
+          regressions=sum(a[k]['resolved'] and not b[k]['resolved'] for k in a)
+          def summary(xs):
+              return {'tasks':len(xs),'resolved':sum(r['resolved'] for r in xs),
+                      'errors':sum(r['status']!='completed' for r in xs),
+                      'patches':sum(r.get('has_patch') is True for r in xs),
+                      'actual_scorer_tool_calls':sum(r.get('tool_calls') or 0 for r in xs),
+                      'actual_scorer_seconds':round(sum(r.get('duration_seconds') or 0 for r in xs),2)}
+          print('GEMMA_PRO_SEQ31B_REAL_VS_FROZEN_V2_GRADED_RESULT='+json.dumps({
+            'prior_frozen_v2_31b':summary(control),
+            'new_mandatory_sequential31b':summary(now),
+            'same_three_tasks':True,
+            'rescues':rescues,'regressions':regressions,'net':rescues-regressions,
+            'reviewer_actual_tool_uptake_not_yet_attributed':True,
+            'not_independent_new_cohort':True,
+            'not_official_kaggle_public_leaderboard':True,
+            'new_official_submission':False,'new_training':False
+          },sort_keys=True),flush=True)
+          PY
