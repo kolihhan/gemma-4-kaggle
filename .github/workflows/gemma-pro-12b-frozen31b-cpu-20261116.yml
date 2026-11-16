@@ -1,0 +1,89 @@
+name: Gemma PRO 12B-vs-frozen31B same-task CPU legal source gate
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-pro-12b-frozen31b-cpu-20261116.yml]
+permissions: {contents: read}
+jobs:
+  exact_cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KAGGLE_API_TOKEN: \${{ secrets.KAGGLE_API_TOKEN }}
+      OUT: /tmp/gemma-pro-modelsize12b-cpu
+      RAW: /tmp/gemma-pro-modelsize12b-source
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Read preregistered frozen task and new model-size hypothesis
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/render_gemma_model12b_against_frozen31b_20261116.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.render_gemma_model12b_against_frozen31b_20261116 import validate_plans
+          a=json.loads(Path('experiments/solver-v3/pro-12b-vs-frozen31b-20261116.json').read_text())
+          b=json.loads(Path('experiments/solver-v3/pro-v3r-vs-v2-fresh-paired-20261115.json').read_text())
+          validate_plans(a,b)
+          assert a['primary'].startswith('Paired')
+          print('GEMMA_12B_EXACT_PRIOR_31B_PAIRED_PROTOCOL=PASS',flush=True)
+          PY
+      - name: Download exact publicly licensed baseline ZIP, source-only, no model
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          mkdir -p "$RAW"
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 \
+            -p "$RAW" -o >/tmp/gemma-pro-modelsize12b-source.log 2>&1
+          python - <<'PY'
+          import hashlib,os
+          from pathlib import Path
+          from scripts.prepare_public_budgetfit_v2 import EXPECTED_ZIP_SHA256,validate_source_zip
+          p=Path(os.environ['RAW'])/'submission.zip'
+          assert p.is_file()
+          data=p.read_bytes()
+          assert hashlib.sha256(data).hexdigest()==EXPECTED_ZIP_SHA256
+          files=validate_source_zip(data)
+          print('GEMMA_12B_EXACT_31B_SOURCE_LICENSE_ARCHIVE=PASS',flush=True)
+          print('GEMMA_12B_SAMPLING_SOURCE_SHA='+hashlib.sha256(files['configs/sampling.yaml'].encode()).hexdigest(),flush=True)
+          PY
+      - name: Render 12B root under exact 5min 28 calls and validate printed model-only contrast
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.render_gemma_model12b_against_frozen31b_20261116 \
+            --repo . --source-zip "$RAW/submission.zip" --out "$OUT" \
+            --kernel-ref kolihhan/gemma4-model12b-v2-matched-20261116
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from scripts.render_gemma_model12b_against_frozen31b_20261116 import (
+              MODEL,MODEL_SOURCE,OLD_MODEL,HF_OVERRIDE,frozen_agent,VERSION
+          )
+          root=Path(os.environ['OUT'])
+          metadata=json.loads((root/'kernel-metadata.json').read_text())
+          assert metadata['model_sources']==[MODEL_SOURCE]
+          assert metadata['is_private'] and metadata['enable_gpu'] and not metadata['enable_internet']
+          assert metadata['competition_sources']==['gemma-4-developer-agent']
+          runtime=(root/metadata['code_file']).read_text()
+          compile(runtime,metadata['code_file'],'exec')
+          assert 'MODEL_NAME = "'+MODEL+'"' in runtime
+          assert HF_OVERRIDE in runtime
+          assert "max_model_len=32768" in runtime
+          files=frozen_agent(Path(os.environ['RAW'],'submission.zip').read_bytes())
+          assert "model: "+MODEL in files['agent.yaml']
+          assert "model: "+OLD_MODEL not in files['agent.yaml']
+          assert files['eval_config.yaml'].count('max_time_minutes: 5')==1
+          assert files['eval_config.yaml'].count('max_tool_calls: 28')==1
+          assert files['eval_config.yaml'].count('max_turns: 80')==1
+          assert VERSION in runtime
+          assert "competition_submit" not in runtime
+          print('GEMMA_PRO_MODEL_SIZE_12B_CPU_SOURCE_AND_BUDGET=PASS',flush=True)
+          print('GEMMA_PRO_MODEL_SIZE_12B_GPU=NOT_LAUNCHED;SCORED_GAIN=NOT_TESTED',flush=True)
+          PY
