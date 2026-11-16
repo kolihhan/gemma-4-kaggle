@@ -3,11 +3,12 @@ Primary quality measure: matched real independent issue grader-resolved fraction
 
 | Comparison | Matched n | Real PASS baseline → candidate | Paired rescues/regressions | Difference / 95% paired bootstrap percentile CI | Evidence |
 | --- | ---: | --- | --- | --- | --- |
+| 31B V2 → mandatory 31B SequentialAgent | **3** | 1/3 → 1/3 | 0 / 0 | **0 pp [0,0] sample-only; uninformative about generalization** | [Action 43808826562](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43808826562); [report](docs/research/2026-11-16-sequential31b-real-grader-decision.md) |
 | 31B V2 → 12B size-only | **3** | 1/3 → 0/3 | 0 / 1 | **-33.3 pp [-100, 0]** | [Action 43781086310](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43781086310) |
 | 31B V2 → V3-R optional Skill | **3** | 1/3 → 1/3 | 0 / 0 | **0 pp [0, 0]** sample-only; **not a precision claim** | [Action 43689217134](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43689217134) |
 | 31B V2 → Early-Edit | **4** | 3/4 → 3/4 | 1 / 1 | **0 pp [-75, +75]** | [Action 43178431152](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43178431152) |
 
-Bootstrap CI calculations above: exact enumeration of all n^n matched task resamples, equal probability, paired differences of task PASS indicators; for n=3/4 intervals are illustrative and underpowered. Especially [0,0] on all concordant outcomes cannot certify equivalence or rule out unobserved treatment effects.
+Bootstrap CI calculations above: exact enumeration of all n^n matched task resamples, equal probability, paired differences of task PASS indicators; for n=3/4 intervals are illustrative and underpowered. Especially [0,0] on all concordant outcomes cannot certify equivalence or rule out unobserved treatment effects. For SequentialAgent specifically, no discordant outcomes in 3 cases gives exact two-sided 95% Clopper–Pearson upper bound ~0.708 for discordant-case probability, not zero.
 
 ## Official Kaggle ledger (NOT local CV)
 - Scored champion **0.18** #58183466 [authenticated read-only ref in NOW](NOW.md).
