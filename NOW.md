@@ -1,3 +1,10 @@
+## PRO 2026-11-16 — 31B real native trace causality gate: extra retries do not rescue bugs
+
+- [Authenticated 6/6 real 31B traces #43805384362](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43805384362) completed READ-ONLY, **no training/GPU/official submit**. On same three true public-development tasks: V2 **1/3** grader-resolved, 62 actual scorer calls; V3R **1/3**, 81 calls. All six traces had edit events and some model-visible structured command exit metadata, but **0/6 classifier-recognized explicit tests**; **all six have opaque shell commands**, so this does **NOT** imply no tests ran. A nonzero command followed by later edit appears in 1/3 V2 vs 3/3 V3R; no rescues. Raw trace events may duplicate `submit_patch`; do not count them as physical calls.
+- **SCIENTIFIC DECISION**: old optional Skill had 0 uptake. More failures/re-edits and 12B size substitution are NOT validated improvements; the 12B real grader was **0/3** vs 31B **1/3**. Next scientific path is official supported *native* targeted validation/root-cause feedback, with actual semantics and new tasks; first prove the official harness can expose it before another expensive 31B real run. [Full trace evidence and limits](docs/research/2026-11-16-gemma-31b-real-native-feedback-evidence.md). Own Kaggle scored best still **0.18**.
+
+---
+
 ## PRO 2026-11-16 — 12B genuine model-size experiment NEGATIVE; official best 0.18
 
 - **ACTUAL GRADED Kaggle private 12B 3-task trial COMPLETE**, [Action #43781086310](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43781086310), verified actual grader: *same* three public-development FastAPI/Rich/Requests tasks and identical 5min/28 scorer calls limit/native tools/prompt/sampling. Frozen V2 **31B resolved 1/3**, 62 scorer calls, 604.94s. New **12B 0/3**, 84 calls, 820.42s; 3 patches in each arm, zero errors, 0 rescues, 1 regression, net -1. **Retire size-only model change**. It is weak spent-three-task evidence, not proof all 12B agents are bad. [Final negative report](docs/research/2026-11-16-gemma-12b-real-negative-final.md).
