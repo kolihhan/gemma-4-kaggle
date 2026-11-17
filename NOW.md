@@ -1,3 +1,12 @@
+## 2026-11-17 21:02 MYT — OFFICIAL Gemma submission #58469374 PENDING; candidate 31B existing-test retrieval
+
+- **Authenticated official Kaggle submission #58469374**, description `existing-tests-31b-one-variable-20261117`, `SubmissionStatus.PENDING`, Public score not returned as of 2026-11-17 21:01 MYT. True official code submission via [successful existing GitHub Actions #44088167497](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44088167497); the Kaggle API returned the same ref and the separately fetched submissions ledger confirmed it. **Do not invent a score or treat PENDING as improvement.**
+- **One decision mechanism:** retain the same 31B 0.18 Toolcap60 5-minute scored control; add exactly one existing-test-retrieval skill plus its invocation instruction before editing, to reduce semantically invalid patches. The CPU official ADK compiler accepted 9 native callables + one `SkillToolset`. Candidate archive SHA256 `763d6b5751852cff80154cbd2139fb69b483326bfe4232357f52548d10ff7f7e`, verified byte-identical after private **CPU-only** Kaggle builder execution. No new development GPU, training, or paid APIs.
+- Authenticated quota immediately before submit: `num_today=0`, `num_allowed_now=1`, no active submissions; used at most today's available official slot, never duplicate. Existing champion kernel unchanged. Original best **0.18/#58183466** retained until a valid new score arrives.
+- **Prospective expected delta hypothesis:** +0.02 Public (0.18→0.20), not an empirical claim. **Kill:** scored Public ≤0.18, blank score, timeout or other official invalid result. No Public-LB parameter tuning; after a final score, decide keep/retire and update the exact receipt. Official Kaggle scoring may invoke GPU under owner's explicit exception; otherwise research remains CPU-only.
+
+---
+
 ## 2026-11-17 — Official-score research bet: existing-test retrieval, sanity-only, no dev GPU
 
 - One hypothesis frozen **before** any new score: in the scored 31B 0.18 Toolcap60 5-minute control, run `existing-test-retrieval` once before editing when an issue contains a concrete symbol; existing assertions may prevent semantically wrong patches. Reuse SHA-pinned control `ff08c10240a38e151a2ea1d0478e999ee5d2f437d2dad5571d912cf12859922b` and **only add this one test-retrieval mechanism** (skill + instruction needed to call it). The prior 31-case private paired solver hit GPU startup errors; it is **not** quality evidence. No training, dev GPU, extra paid API or independent 31-pair model run.
