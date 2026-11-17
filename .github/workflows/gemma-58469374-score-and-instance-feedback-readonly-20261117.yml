@@ -1,0 +1,63 @@
+name: Gemma 58469374 Official Score and Instance Feedback Availability Readonly
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-58469374-score-and-instance-feedback-readonly-20261117.yml]
+permissions: {contents: read}
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read exact official score and inspect whether public API yields task-level feedback
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import subprocess,csv,io,json
+          def cmd(args):
+              return subprocess.run(['kaggle',*args],capture_output=True,text=True,timeout=75)
+          z=cmd(['competitions','submissions','gemma-4-developer-agent','-v','-q'])
+          if z.returncode: raise SystemExit('GEMMA_AUTHENTICATED_LEDGER_UNAVAILABLE')
+          rows=list(csv.DictReader(io.StringIO(z.stdout.lstrip('\ufeff'))))
+          out={}
+          for ref in ('58469374','58183466','58350278'):
+              matches=[r for r in rows if str(r.get('ref'))==ref]
+              if len(matches)!=1: raise SystemExit('MISSING_OFFICIAL_REF_'+ref)
+              r=matches[0]
+              out[ref]={'status':str(r.get('status') or ''),
+                        'publicScore':str(r.get('publicScore') or ''),
+                        'description':str(r.get('description') or '')[:110]}
+          print('GEMMA_AUTHENTICATED_EXACT_SCORE_RECEIPTS='+json.dumps(out,sort_keys=True),flush=True)
+          new=out['58469374']
+          if new['publicScore'] and new['status'].upper().endswith('COMPLETE'):
+              d=round(float(new['publicScore'])-float(out['58183466']['publicScore']),6)
+              print('GEMMA_58469374_PUBLIC_DELTA_DESCRIPTIVE_ONLY='+str(d),flush=True)
+              print('GEMMA_58469374_NOT_A_CAUSAL_MECHANISM_CLAIM=TRUE',flush=True)
+          else:
+              print('GEMMA_58469374_NUMERIC_SCORE_AVAILABLE=FALSE',flush=True)
+          # Two read-only Kaggle CLI endpoints; never export task text, hidden
+          # labels, patches, grader logs, or any returned episode content.
+          for label,params in (
+              ('submission_detail',['competitions','submission','58469374']),
+              ('episodes',['competitions','episodes','58469374','-v','-q']),
+          ):
+              p=cmd(params)
+              if p.returncode:
+                  print('GEMMA_OFFICIAL_'+label.upper()+'_PUBLIC_API_RESULT=NOT_AVAILABLE',flush=True)
+                  continue
+              data=p.stdout.strip()
+              header=next((line for line in data.splitlines() if ',' in line and not line.lower().startswith('next page token')),None)
+              print('GEMMA_OFFICIAL_'+label.upper()+'_PUBLIC_API_RESULT='+json.dumps({
+                  'success':True,'nonempty':bool(data),'csv_header_fields':(
+                    [f.strip() for f in header.split(',')][:12] if header else []),
+                  'per_instance_resolution_confirmed':False,
+              },sort_keys=True),flush=True)
+          print('GEMMA_READ_ONLY_NO_GPU_NO_SUBMISSION=TRUE',flush=True)
+          PY
