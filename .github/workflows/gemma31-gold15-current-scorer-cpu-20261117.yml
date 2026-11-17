@@ -1,0 +1,112 @@
+name: Gemma 31 Audit Gold15 with Current Official CPU Scorer
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma31-gold15-current-scorer-cpu-20261117.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma31-gold15-current-cpu-nov17
+  cancel-in-progress: false
+jobs:
+  current_gold:
+    runs-on: ubuntu-latest
+    timeout-minutes: 115
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma31-official-gold15-cpu-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Freeze 15/31 official gold controls and guard denominator drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m py_compile scripts/render_gemma31_official_gold15_20261117.py kaggle/gold_control_sweep.py
+          python -m scripts.render_gemma31_official_gold15_20261117 --repo . \
+            --out /tmp/gemma31-gold15-current --kernel-ref "$KERNEL_REF"
+          python - <<'PY'
+          import json, pathlib
+          m=json.loads(pathlib.Path('/tmp/gemma31-gold15-current/kernel-metadata.json').read_text())
+          assert m['is_private'] and not m['enable_gpu'] and not m['enable_internet']
+          assert m['model_sources']==[]
+          print('GEMMA31_CURRENT_GOLD15_PRIVATE_CPU_NO_MODEL=PASS',flush=True)
+          PY
+      - name: Install Kaggle client; push private CPU gold verifier only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          kaggle kernels push -p /tmp/gemma31-gold15-current -t 5400
+          echo 'GEMMA31_GOLD15_PRIVATE_CPU_PUSHED=TRUE; NEW_GPU=FALSE; OFFICIAL_SUBMISSION=FALSE'
+      - name: Check exact terminal state; never mistake access error for running
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 280); do
+            state="$(kaggle kernels status "$KERNEL_REF" 2>&1)" || {
+              echo 'GEMMA31_GOLD15_STATUS_CLI_ERROR_NOT_ASSUMED_RUNNING'
+              exit 1
+            }
+            case "$state" in
+              *KernelWorkerStatus.COMPLETE*)
+                echo 'GEMMA31_GOLD15_PRIVATE_CPU_COMPLETE=TRUE'
+                exit 0;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*|*KernelWorkerStatus.CANCELLED*)
+                echo 'GEMMA31_GOLD15_PRIVATE_CPU_ERROR=TRUE'
+                exit 1;;
+            esac
+            if [ $((i%20)) -eq 0 ]; then echo "GEMMA31_GOLD15_RUNNING_POLL=$i"; fi
+            sleep 19
+          done
+          echo 'GEMMA31_GOLD15_STATUS_TIMEOUT_UNVERIFIED'
+          exit 1
+      - name: Export metadata only, never raw task content or gold patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gemma31-gold15-private
+          kaggle kernels output "$KERNEL_REF" -p /tmp/gemma31-gold15-private -o >/dev/null
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          obj=json.loads(Path('/tmp/gemma31-gold15-private/verifier_gold_sweep.json').read_text())
+          assert obj['version']=='verifier-lora-v0'
+          assert obj['status']=='completed' and obj['requested']==15
+          assert len(obj['results'])==15
+          spec=json.loads(Path('docs/evaluation/gemma-31-matched-validation-membership-2026-11-17.json').read_text())
+          official={r['instance_id']:r['repo'] for r in spec['cases'] if r['source']=='official_development'}
+          assert len(official)==15
+          rows=[]
+          for item in obj['results']:
+            iid=item.get('instance_id')
+            assert iid in official and official[iid]==item.get('repo')
+            ok=item.get('status')=='completed' and item.get('resolved') is True and item.get('test_exit_code')==0
+            rows.append({
+              'id':iid,'repo':item['repo'],'status':str(item.get('status'))[:40],
+              'gold_pass':ok,'test_exit_code':item.get('test_exit_code'),
+              'error_type':str(item.get('error_type') or '')[:64],
+              'duration_seconds':item.get('duration_seconds'),
+              'test_patch_present':item.get('test_patch_present'),
+            })
+          assert len({r['id'] for r in rows})==15
+          result={'scope':'gemma31-current-gold15-public-dev-only',
+             'frozen_cases':31,'official_dev_gold_checked':15,
+             'external_click_unchecked':16,
+             'gold_pass':sum(r['gold_pass'] for r in rows),
+             'gold_confounded':sum(not r['gold_pass'] for r in rows),
+             'rows':rows,'raw_grader_or_reference_patch_exported':False,
+             'model_inference':False,'official_submission':False}
+          Path('gemma31-current-gold15-safe-summary.json').write_text(json.dumps(result,sort_keys=True,indent=2)+"\n")
+          print('GEMMA31_CURRENT_GOLD15_SAFE_SUMMARY='+json.dumps(
+             {k:v for k,v in result.items() if k!='rows'},sort_keys=True),flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gemma31-current-gold15-safe-${{ github.run_id }}
+          path: gemma31-current-gold15-safe-summary.json
+          if-no-files-found: warn
+          retention-days: 14
