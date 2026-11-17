@@ -1,0 +1,117 @@
+name: Gemma 31 isolated solver inputs
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma31-solver-inputs-offline-20261117.yml]
+permissions:
+  contents: read
+jobs:
+  solver_input:
+    if: "${{ github.event.head_commit.message == 'Prepare isolated solver inputs for frozen Gemma 31-case pairing' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      GH_SOURCE_TOKEN: ${{ github.token }}
+      PREP_REF: kolihhan/gemma4-pair31-solver-source-nov17-v1
+      LOCK_SHA: 7aae59d2148f3d429d9640899f5befa4f56dead1fc37800ea27c5cd8f8637e69
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Seal issue statements and prepare model-only inputs in a private CPU notebook
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+          export PREP_DIR="$work"
+          mkdir "$work/kernel" "$work/result"
+          python - <<'PY'
+          from concurrent.futures import ThreadPoolExecutor
+          from hashlib import sha256
+          import json
+          import os
+          from pathlib import Path
+          import re
+          from urllib.request import Request, urlopen
+
+          locked = Path("docs/evaluation/gemma-31-matched-validation-membership-2026-11-17.json").read_bytes()
+          digest = sha256(locked).hexdigest()
+          assert digest == os.environ["LOCK_SHA"]
+          lock = json.loads(locked)
+          assert len({row["instance_id"] for row in lock["cases"]}) == 31
+          rows = [x for x in lock["cases"] if x["source"] == "original_upstream_issue"]
+          assert len(rows) == 16
+
+          def original(row):
+              match = re.fullmatch(r"https://github.com/pallets/click/issues/(\d+)", row["issue_url"])
+              assert match, "Unrecognized frozen issue URL"
+              request = Request(f"https://api.github.com/repos/pallets/click/issues/{match[1]}",
+                                headers={"Authorization": "Bearer " + os.environ["GH_SOURCE_TOKEN"],
+                                         "User-Agent": "gemma-frozen-source-check",
+                                         "Accept": "application/vnd.github+json"})
+              with urlopen(request, timeout=20) as response:
+                  data = json.load(response)
+              assert "pull_request" not in data
+              statement = (data["title"] + "\n\n" + (data["body"] or "").strip()).strip()
+              assert sha256(statement.encode()).hexdigest() == row["problem_statement_sha256"], "Issue text drift"
+              return row["instance_id"], statement
+
+          with ThreadPoolExecutor(max_workers=4) as pool:
+              statements = dict(pool.map(original, rows))
+          base = Path("kaggle/paired_three_task_integrity_cpu.py").read_text().split("async def evaluate_controls()", 1)[0]
+          runtime = Path("kaggle/build_gemma31_solver_inputs.py").read_text()
+          payload = base + f"\nLOCK = {lock!r}\nLOCK_SHA = {digest!r}\nCLICK_STATEMENTS = {statements!r}\n" + runtime
+          compile(payload, "solver_inputs.py", "exec")
+          folder = Path(os.environ["PREP_DIR"], "kernel")
+          (folder / "solver_inputs.py").write_text(payload)
+          ref = os.environ["PREP_REF"]
+          (folder / "kernel-metadata.json").write_text(json.dumps({
+              "id": ref, "title": ref.rsplit("/", 1)[1], "code_file": "solver_inputs.py",
+              "language": "python", "kernel_type": "script", "is_private": True,
+              "enable_gpu": False, "enable_tpu": False, "enable_internet": False,
+              "docker_image": "gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461",
+              "competition_sources": ["gemma-4-developer-agent"],
+              "dataset_sources": ["metric/gemma-4-developer-agent-wheelhouse"],
+              "kernel_sources": ["kolihhan/gemma4-click16-assets-nov17-v2"],
+              "model_sources": [],
+          }))
+          print("GEMMA31_ORIGINAL_CLICK_ISSUES_SHA_VERIFIED=16", flush=True)
+          PY
+          if kaggle kernels status "$PREP_REF" >"$work/existing.log" 2>&1; then
+            echo SOLVER_PREPARATION_ALREADY_EXISTS
+            exit 1
+          fi
+          kaggle kernels push -p "$work/kernel" -t 2200 >"$work/push.log" 2>&1
+          python scripts/check_capacity_31b_push_v0.py --log "$work/push.log" --client-exit-code 0
+          echo "GEMMA31_SOLVER_PREP_PUSHED=$PREP_REF"
+          state=UNKNOWN
+          for i in $(seq 1 105); do
+            raw="$(kaggle kernels status "$PREP_REF" 2>&1 || true)"
+            case "$raw" in
+              *KernelWorkerStatus.COMPLETE*) state=COMPLETE; break ;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*|*KernelWorkerStatus.CANCELLED*) state=ERROR; break ;;
+            esac
+            sleep 18
+          done
+          echo "GEMMA31_SOLVER_PREP_STATE=$state"
+          test "$state" = COMPLETE
+          kaggle kernels output "$PREP_REF" -p "$work/result" -o \
+            --file-pattern 'gemma31-solver-report\.json$' >"$work/download.log" 2>&1
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import re
+          files = list(Path(os.environ["PREP_DIR"], "result").rglob("gemma31-solver-report.json"))
+          assert len(files) == 1
+          report = json.loads(files[0].read_text())
+          assert report["case_count"] == report["source_snapshots"] == 31
+          assert re.fullmatch(r"[a-f0-9]{64}", report["solver_manifest_sha256"])
+          print("GEMMA31_SOLVER_INPUTS=" + json.dumps(report, sort_keys=True))
+          PY
