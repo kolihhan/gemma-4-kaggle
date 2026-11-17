@@ -162,7 +162,13 @@ jobs:
                       raw = log.read_text(errors="replace") if log.exists() else ""
               print("PRIVATE_SOLVER_LOG", suffix, "present", bool(raw),
                     "model_ready", "GEMMA31_MODEL_READY=" in raw, "model_rows", raw.count("GEMMA31_SOLVER_ROW="))
+              ready = "GEMMA31_MODEL_READY=" in raw
               for line in raw.splitlines():
+                  if suffix == "b" and not ready and re.search(r"ServerStartupError|ValueError|RuntimeError|CUDA|vLLM|GPU|model type|AssertionError|torch", line, re.I):
+                      clean = re.sub(r"\x1b\[[0-9;]*m", "", line).strip()
+                      clean = re.sub(r"(?i)(bearer|api[_ -]?key|token|password|secret)\s*[:= ]+\S+", "[redacted]", clean)
+                      print("PRIVATE_31B_STARTUP_DETAIL", clean[:340])
+
                   if frame := re.search(r'File "[^"\r\n]*/experiment\.py", line \d+, in [\w<>]+', line):
                       print("PRIVATE_SOLVER_FRAME", suffix, frame.group())
                   if error := re.search(r'\b([A-Za-z]+(?:Error|Exception)): ([^\n]*)', line):
