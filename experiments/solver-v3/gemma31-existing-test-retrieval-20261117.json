@@ -1,0 +1,12 @@
+{
+  "membership_sha256": "7aae59d2148f3d429d9640899f5befa4f56dead1fc37800ea27c5cd8f8637e69",
+  "solver_manifest_sha256": "c17965e1da7c7a981bd38f4384cb7f470c061f024866a7f82a1fa402cb7019c8",
+  "control_archive_sha256": "ff08c10240a38e151a2ea1d0478e999ee5d2f437d2dad5571d912cf12859922b",
+  "hypotheses": {
+    "intervention": "Before-fix tests contain behavioral constraints missed during browsing. Retrieving a matching assertion before editing improves real issue resolution.",
+    "competing": "The local tests do not reveal the required behavior, or the agent cannot translate it into a correct edit. Retrieval adds calls with no net rescue."
+  },
+  "pairing": "All 31 locked cases, identical model, sampling, budgets and inputs. Alternate the leading arm by locked case index.",
+  "exposure": "The GPU worker sees only frozen before-fix source, issue text and dependencies. Official optional graph caches and hints are absent for both arms. An independent CPU worker grades both patches with the frozen tests.",
+  "advance": "All 31 complete native pairs, positive lower bound of paired 95% bootstrap CI, real positive retrieval in at least one rescued case, and legal run-time and submission artifacts. Record regressions, tool calls, errors and elapsed time before an official entry."
+}

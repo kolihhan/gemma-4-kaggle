@@ -1,0 +1,127 @@
+name: Gemma 31 real paired test retrieval
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma31-existing-test-retrieval-20261117.yml]
+permissions:
+  contents: read
+concurrency:
+  group: gemma31-frozen-test-retrieval-nov17
+  cancel-in-progress: false
+jobs:
+  solve:
+    if: "${{ github.event.head_commit.message == 'Run frozen Gemma 31-case test retrieval comparison' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: 0
+            kernel: kolihhan/gemma4-test-retrieval31a-nov17
+          - shard: 1
+            kernel: kolihhan/gemma4-test-retrieval31b-nov17
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL: ${{ matrix.kernel }}
+      SHARD: ${{ matrix.shard }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build exact comparison and start private 31B inference
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+          mkdir "$work/source"
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 \
+            -p "$work/source" -o --file-pattern 'submission\.zip$' >"$work/source.log" 2>&1
+          python -m scripts.render_gemma31_pair solve --shard "$SHARD" \
+            --source "$work/source/submission.zip" --out "$work/kernel"
+          python -m py_compile "$work/kernel/experiment.py"
+          if kaggle kernels status "$KERNEL" >"$work/existing.log" 2>&1; then
+            echo "EXISTING_PRIVATE_SOLVER=$KERNEL"
+            exit 0
+          fi
+          rc=0
+          kaggle kernels push -p "$work/kernel" --accelerator NvidiaL4 -t 14000 >"$work/push.log" 2>&1 || rc=$?
+          python scripts/check_capacity_31b_push_v0.py --log "$work/push.log" --client-exit-code "$rc"
+          echo "GEMMA31_PRIVATE_31B_SOLVER_PUSHED=$KERNEL"
+      - name: Wait for both-arm private patch generation
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 420); do
+            state="$(kaggle kernels status "$KERNEL" 2>&1 || true)"
+            case "$state" in
+              *KernelWorkerStatus.COMPLETE*) echo "GEMMA31_SOLVER_COMPLETE=$KERNEL"; exit 0 ;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*|*KernelWorkerStatus.CANCELLED*)
+                echo "GEMMA31_SOLVER_TERMINAL_ERROR=$KERNEL"; exit 1 ;;
+            esac
+            if (( attempt % 20 == 1 )); then echo "GEMMA31_SOLVER_WAIT=$attempt $state"; fi
+            sleep 42
+          done
+          echo "GEMMA31_SOLVER_NOT_TERMINAL=$KERNEL"
+          exit 1
+  grade:
+    needs: solve
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL: kolihhan/gemma4-test-retrieval31-grades-nov17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Grade the 62 frozen-arm patches against native tests
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+          python -m scripts.render_gemma31_pair grade --out "$work/kernel"
+          if ! kaggle kernels status "$KERNEL" >"$work/existing.log" 2>&1; then
+            rc=0
+            kaggle kernels push -p "$work/kernel" -t 3500 >"$work/push.log" 2>&1 || rc=$?
+            python scripts/check_capacity_31b_push_v0.py --log "$work/push.log" --client-exit-code "$rc"
+          fi
+          echo "GEMMA31_PRIVATE_NATIVE_GRADER=$KERNEL"
+          complete=0
+          for attempt in $(seq 1 105); do
+            state="$(kaggle kernels status "$KERNEL" 2>&1 || true)"
+            case "$state" in
+              *KernelWorkerStatus.COMPLETE*) complete=1; break ;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*|*KernelWorkerStatus.CANCELLED*)
+                echo "GEMMA31_GRADER_TERMINAL_ERROR=$KERNEL"; exit 1 ;;
+            esac
+            sleep 30
+          done
+          test "$complete" = 1
+          mkdir -p "$work/output" evidence
+          kaggle kernels output "$KERNEL" -p "$work/output" -o \
+            --file-pattern 'gemma31-paired-results\.json$' >"$work/output.log" 2>&1
+          python - "$work/output" <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+          [output] = Path(sys.argv[1]).rglob("gemma31-paired-results.json")
+          result = json.loads(output.read_text())
+          assert result["report"]["n"] == len(result["pairs"]) == 31
+          report = json.dumps(result["report"], sort_keys=True)
+          print("GEMMA31_PAIRED_NATIVE_RESULTS=" + report)
+          Path("evidence/gemma31-paired-summary.json").write_text(report + "\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gemma31-paired-summary
+          path: evidence/gemma31-paired-summary.json
+          retention-days: 30
+          if-no-files-found: error
