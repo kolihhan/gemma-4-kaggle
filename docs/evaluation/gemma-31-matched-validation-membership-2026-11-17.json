@@ -1,0 +1,265 @@
+{
+  "case_count_by_repo": {
+    "Textualize/rich": 11,
+    "fastapi/fastapi": 4,
+    "pallets/click": 16
+  },
+  "case_order_rule": "Ascending SHA256 of gemma-nov17-31-v1|instance_id. Keep all cases after paired results open.",
+  "cases": [
+    {
+      "base_commit": "333c28d79cd982990ee98eef61ec20ab1a4f38ba",
+      "instance_id": "external_click_3704",
+      "issue_url": "https://github.com/pallets/click/issues/3700",
+      "problem_statement_sha256": "d13ddfd593523bf2a439c1b49dba2e074a947e2c4c6b79f769217dd764845255",
+      "repo": "pallets/click",
+      "solver_snapshot_sha256": "0707c1f49d5fddb6fb442ef4f92ca524cd6a374277198af9ae356ad23f209f3e",
+      "source": "original_upstream_issue"
+    },
+    {
+      "base_commit": "8d3449517a97b6fd457a025bd9c3d2acfd301fa4",
+      "instance_id": "external_click_3208",
+      "issue_url": "https://github.com/pallets/click/issues/2790",
+      "problem_statement_sha256": "c3db7874dd706b44e45e45141ac7982ccbd80d3465f9c8f4a081599259c4d4f1",
+      "repo": "pallets/click",
+      "solver_snapshot_sha256": "8ae22fcb0a8cb004d8acd8f3b7e2a94a641eea912e80cccc1dad18873ece7872",
+      "source": "original_upstream_issue"
+    },
+    {
+      "instance_id": "rich_3938",
+      "repo": "Textualize/rich",
+      "source": "official_development"
+    },
+    {
+      "instance_id": "rich_3675",
+      "repo": "Textualize/rich",
+      "source": "official_development"
+    },
+    {
+      "base_commit": "1a994adbb114d402275a614942e2f838a654e648",
+      "instance_id": "external_click_3473",
+      "issue_url": "https://github.com/pallets/click/issues/2983",
+      "problem_statement_sha256": "956da3f1b4f129043a2e29fe7e5a61d25dfc821823dbd00662cebcddb98b0e3a",
+      "repo": "pallets/click",
+      "solver_snapshot_sha256": "7cd0a6a57b2318649d31503a434f19a84d6010ff2c26d090c42782629f527f6f",
+      "source": "original_upstream_issue"
+    },
+    {
+      "base_commit": "8c1a0a7abbc1c36f70d1f65f3604acc46c5ce6ab",
+      "instance_id": "external_click_3678",
+      "issue_url": "https://github.com/pallets/click/issues/2819",
+      "problem_statement_sha256": "58b5ee3b359771bd40bb5511d2bac01753acaefafb639ed058ecb842f157ecf2",
+      "repo": "pallets/click",
+      "solver_snapshot_sha256": "c12db4142c0dbdd81336087d39eb0d45d053df9ee7b99f43a09fba03ae8d029e",
+      "source": "original_upstream_issue"
+    },
+    {
+      "base_commit": "8b44edfff7d9a6c895fa804148c16b3a0bc9efb5",
+      "instance_id": "external_click_3769",
+      "issue_url": "https://github.com/pallets/click/issues/3571",
+      "problem_statement_sha256": "452c9f2bdd027eec0cd8e0ea7ebbb87c62334db881cedd4bb30b1d8f8b73b0f2",
+      "repo": "pallets/click",
+      "solver_snapshot_sha256": "5819eab92cb2192c4fa713521cae0981b78291587c9480f569e49c13dde516de",
+      "source": "original_upstream_issue"
+    },
+    {
+      "base_commit": "2103e157683c5e4cadc8ee1838df526a54bde9a4",
+      "instance_id": "external_click_3781",
+      "issue_url": "https://github.com/pallets/click/issues/2869",
+      "problem_statement_sha256": "f3c490eb519d46b55410e8a77eb3cb9203d0393699852f3f737829171db810cf",
+      "repo": "pallets/click",
+      "solver_snapshot_sha256": "a4118427734dd1caca757f164fd5f3dfa6f390626887b155f8bf71246cd22eb9",
+      "source": "original_upstream_issue"
+    },
+    {
+      "instance_id": "rich_3521",
+      "repo": "Textualize/rich",
+      "source": "official_development"
+    },
+    {
+      "instance_id": "rich_3006",
+      "repo": "Textualize/rich",
+      "source": "official_development"
+    },
+    {
+      "base_commit": "5b9630f50fde938b72ad8c99542efe3a6f5717e2",
+      "instance_id": "external_click_3211",
+      "issue_url": "https://github.com/pallets/click/issues/3105",
+      "problem_statement_sha256": "49222fa1c9c91edaac61c1ca916e0736910a003d8c6c6089681ad3a0fc1c205d",
+      "repo": "pallets/click",
+      "solver_snapshot_sha256": "312ff318bcac1c37e886397a5c789c40070a03cea7af885a54ec874be40f0891",
+      "source": "original_upstream_issue"
+    },
+    {
+      "instance_id": "rich_3506",
+      "repo": "Textualize/rich",
+      "source": "official_development"
+    },
+    {
+      "instance_id": "fastapi_15588",
+      "repo": "fastapi/fastapi",
+      "source": "official_development"
+    },
+    {
+      "instance_id": "fastapi_5624",
+      "repo": "fastapi/fastapi",
+      "source": "official_development"
+    },
+    {
+      "base_commit": "8c95c73bd5ef89eac638f85f1904a104ba4b1a32",
+      "instance_id": "external_click_3328",
+      "issue_url": "https://github.com/pallets/click/issues/2836",
+      "problem_statement_sha256": "42009d1de9a80b0014f5fa3223c30d691ba66bd57ec9dd4392ed221f28e0e77f",
+      "repo": "pallets/click",
+      "solver_snapshot_sha256": "a288c5831e8963e2a868e05def85c11da28f05a72563d740f65839c36e76af21",
+      "source": "original_upstream_issue"
+    },
+    {
+      "instance_id": "rich_4077",
+      "repo": "Textualize/rich",
+      "source": "official_development"
+    },
+    {
+      "base_commit": "ddede2147c9370ab8275f81db4826b6895d2e7dc",
+      "instance_id": "external_click_2969",
+      "issue_url": "https://github.com/pallets/click/issues/2968",
+      "problem_statement_sha256": "e6393da07722d0c542c25bedd0fcad8a64f9e1c14da1207ef7a0c52052701ed2",
+      "repo": "pallets/click",
+      "solver_snapshot_sha256": "42d554fab7358d6aa22b1e8b98dd1e705e6234caaab8efa374dbeb28398fd4d1",
+      "source": "original_upstream_issue"
+    },
+    {
+      "base_commit": "19fd4d6e18bc9fce451f92f422696b11169faa57",
+      "instance_id": "external_click_3228",
+      "issue_url": "https://github.com/pallets/click/issues/3107",
+      "problem_statement_sha256": "2a6f1640339d218478a96e4f58f9e223579b8043ed65b6989209d514d827efca",
+      "repo": "pallets/click",
+      "solver_snapshot_sha256": "effceaca8c17004a16a800fa3ea723f6a217da3a9d3c0b799e3e36cf3f283d1c",
+      "source": "original_upstream_issue"
+    },
+    {
+      "base_commit": "8abb77a8432e03ed14a95f972b44f905279415a7",
+      "instance_id": "external_click_3902",
+      "issue_url": "https://github.com/pallets/click/issues/3362",
+      "problem_statement_sha256": "db114ec6ce8fbc3469bf3fecc523c8e3f5e55f9345bf32fbb3fe36ee53c681b4",
+      "repo": "pallets/click",
+      "solver_snapshot_sha256": "b4dc9ef324a65fde1104bc1133d5f157224d0026d389ce0f13b0e41fa9c962a8",
+      "source": "original_upstream_issue"
+    },
+    {
+      "instance_id": "rich_3468",
+      "repo": "Textualize/rich",
+      "source": "official_development"
+    },
+    {
+      "base_commit": "c69643b60cf971cd5d8e5d3902632807ceab9b8f",
+      "instance_id": "external_click_3126",
+      "issue_url": "https://github.com/pallets/click/issues/3043",
+      "problem_statement_sha256": "733d5d3a8379dbc5c46bc65a8293bcc3b5e6ed07c58a70636a0f0d1d1fc328dc",
+      "repo": "pallets/click",
+      "solver_snapshot_sha256": "eadc4b318e5f482198999e4b6f23ef491b4abe28f1d4540b690bcbbd1f79ccc7",
+      "source": "original_upstream_issue"
+    },
+    {
+      "instance_id": "rich_3944",
+      "repo": "Textualize/rich",
+      "source": "official_development"
+    },
+    {
+      "instance_id": "fastapi_14372",
+      "repo": "fastapi/fastapi",
+      "source": "official_development"
+    },
+    {
+      "base_commit": "6ec99f89261b32f8a50848786eca055e1967659f",
+      "instance_id": "external_click_3653",
+      "issue_url": "https://github.com/pallets/click/issues/3572",
+      "problem_statement_sha256": "b4c440f8575ad528e8715664df818f13d2b893daa7cf4ece89a5ad6d3f523918",
+      "repo": "pallets/click",
+      "solver_snapshot_sha256": "e75161d906d320c73d1ca13bc88943595b29cd5d1d3bd259ed14243dc9f50e78",
+      "source": "original_upstream_issue"
+    },
+    {
+      "base_commit": "63274a79d08fdc5c19220696144489f7144a8547",
+      "instance_id": "external_click_3434",
+      "issue_url": "https://github.com/pallets/click/issues/1550",
+      "problem_statement_sha256": "fd40dc1726c06a90973796a48a2ef9673bc0a5d5bc9b2b900abaa1dfc234cfd5",
+      "repo": "pallets/click",
+      "solver_snapshot_sha256": "9187407e7c56270e0e61a2aa72e6ed8d32839095b3bd63df75e8d0d46c0cbe23",
+      "source": "original_upstream_issue"
+    },
+    {
+      "instance_id": "fastapi_14786",
+      "repo": "fastapi/fastapi",
+      "source": "official_development"
+    },
+    {
+      "instance_id": "rich_3535",
+      "repo": "Textualize/rich",
+      "source": "official_development"
+    },
+    {
+      "base_commit": "fc6c7c47edd6110b6bd5a1a5297b2035214b0cd1",
+      "instance_id": "external_click_3256",
+      "issue_url": "https://github.com/pallets/click/issues/2809",
+      "problem_statement_sha256": "6a91dbad5f5f4f4c10afc939d1da1e03061ee65c6910ceb98430d1fba034c563",
+      "repo": "pallets/click",
+      "solver_snapshot_sha256": "f05414afaa282afab80588ff1b60a9b886a7e63e2acbdd1d2272a10ee43bad15",
+      "source": "original_upstream_issue"
+    },
+    {
+      "instance_id": "rich_2943",
+      "repo": "Textualize/rich",
+      "source": "official_development"
+    },
+    {
+      "instance_id": "rich_3043",
+      "repo": "Textualize/rich",
+      "source": "official_development"
+    },
+    {
+      "base_commit": "c8da1fcc2cb4523c1fb5bef7f0ca82394dde1efd",
+      "instance_id": "external_click_3363",
+      "issue_url": "https://github.com/pallets/click/issues/2012",
+      "problem_statement_sha256": "198e8f91b3e63fd65bb051333c8c8d8212505adfee2859ee5564492d5bf4c812",
+      "repo": "pallets/click",
+      "solver_snapshot_sha256": "d94fde9363a4337e5a3bd7237e5e1df116c175e6093ab04882122a7cdf40abe4",
+      "source": "original_upstream_issue"
+    }
+  ],
+  "click_control_cohort_sha256": "5e947e4c1b027557646a31c7433ee81cd605564f3c40a5602094bdc5ccd662c5",
+  "click_solver_only_tasks_sha256": "c6292116e90279137bc3630ecac41ecf2b21bdd9ae161cd4386ecd601d7d8d90",
+  "click_source_control_run": 44032610977,
+  "container_sha256": "37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461",
+  "count": 31,
+  "documented_previous_exposures": {
+    "fastapi_13537": {
+      "evidence": 43586412434,
+      "experiment": "Semantic Surface"
+    },
+    "fastapi_15800": {
+      "evidence": "research/31b-patch-checkpoint-20261114",
+      "experiment": "Reproduce before edit"
+    },
+    "rich_3470": {
+      "evidence": 43471068879,
+      "experiment": "31B patch checkpoints"
+    },
+    "rich_3471": {
+      "evidence": 43586412434,
+      "experiment": "Semantic Surface"
+    },
+    "rich_3676": {
+      "evidence": 43178431152,
+      "experiment": "Early-Edit"
+    }
+  },
+  "exact_31b_baseline": {
+    "kaggle_submission": 58183466,
+    "public_score": 0.18,
+    "zip_sha256": "ff08c10240a38e151a2ea1d0478e999ee5d2f437d2dad5571d912cf12859922b"
+  },
+  "official_source_control_run": 44028204095,
+  "scorer": "swegemma-0.2.11",
+  "status": "verifier_controls_passed_paired_model_outcomes_pending",
+  "version": "gemma-nov17-31-v1"
+}
