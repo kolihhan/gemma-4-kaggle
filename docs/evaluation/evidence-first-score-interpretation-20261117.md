@@ -1,3 +1,11 @@
+## Verified terminal update — 2026-11-18 00:01 MYT
+
+- [Private current-scorer CPU gold Action #44119528823](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44119528823) **COMPLETED/SUCCESS**, exact 15 official public-dev cases, **15 gold PASS, 0 invalid**, in the private official `swegemma` grader environment. An aggregate-only, per-case metadata artifact exists; no raw gold patch, test logs or task text exported. **The separate 16 outside Click cases remain ungraded and excluded.**
+- Caveat: these exact 15 cases had previously been selected because earlier gold passed. They are **not independent blind controls**, and no 31-pair model resolution score exists. This verifies current **harness validity for 15**, not any solver competence.
+- [Authenticated official receipt and per-instance interface probe #44120906685](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44120906685) at 2026-11-18 00:01 MYT: **#58469374 PENDING, no numeric Public BA**; #58183466 COMPLETE **0.18**; #58350278 COMPLETE/blank. The Kaggle `submission` and `episodes` endpoints returned content but **no verified per-instance hidden resolution records were extracted**. Do not imply an accessible hidden task-by-task accuracy report or use undocumented output as ground truth.
+
+---
+
 # Gemma 4 — validation-first correction to prior 0.18 interpretation
 
 **Date:** 2026-11-17 (prospective re-interpretation while official #58469374 has no verified numeric score). **No fresh solver GPU, model training or official submission in this change.**
