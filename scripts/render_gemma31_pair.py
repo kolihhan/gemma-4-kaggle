@@ -47,7 +47,7 @@ def main():
                       })
         prefix = Path("kaggle/verifier_baseline_runtime.py").read_text().split("\ndef materialize_submission", 1)[0]
         body = Path("kaggle/gemma31_pair_solver.py").read_text()
-        meta.update(id=SOLVERS[args.shard], competition_sources=[],
+        meta.update(id=SOLVERS[args.shard], machine_shape="NvidiaL4", competition_sources=[],
                     kernel_sources=[SOLVER_INPUTS], model_sources=[f"google/gemma-4/Other/{MODEL}/2"])
         print("CANDIDATE_ARCHIVE_SHA256=" + sha256(treatment).hexdigest())
     else:

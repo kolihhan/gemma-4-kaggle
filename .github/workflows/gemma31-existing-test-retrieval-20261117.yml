@@ -6,13 +6,13 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: "${{ github.event.head_commit.message == 'Retrieve private Gemma 31B solver errors' && 'gemma31-solver-logs-nov17' || 'gemma31-frozen-test-retrieval-nov17' }}"
+  group: gemma31-frozen-test-retrieval-nov17-worker-recovery
   cancel-in-progress: false
 jobs:
   solve:
-    if: "${{ github.event.head_commit.message == 'Run frozen Gemma 31-case test retrieval comparison' }}"
+    if: "${{ github.event.head_commit.message == 'Recover Gemma 31B GPU startup and finish the frozen pairs' }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 330
+    timeout-minutes: 350
     strategy:
       fail-fast: false
       matrix:
@@ -32,7 +32,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Build exact comparison and start private 31B inference
+      - name: Resume the exact private inference and retry only the T4 startup failure
         run: |
           set -euo pipefail
           python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
@@ -44,25 +44,29 @@ jobs:
           python -m scripts.render_gemma31_pair solve --shard "$SHARD" \
             --source "$work/source/submission.zip" --out "$work/kernel"
           python -m py_compile "$work/kernel/experiment.py"
-          if kaggle kernels status "$KERNEL" >"$work/existing.log" 2>&1; then
-            echo "EXISTING_PRIVATE_SOLVER=$KERNEL"
-            exit 0
-          fi
-          rc=0
-          kaggle kernels push -p "$work/kernel" --accelerator NvidiaL4 -t 14000 >"$work/push.log" 2>&1 || rc=$?
-          python scripts/check_capacity_31b_push_v0.py --log "$work/push.log" --client-exit-code "$rc"
-          echo "GEMMA31_PRIVATE_31B_SOLVER_PUSHED=$KERNEL"
-      - name: Wait for both-arm private patch generation
-        run: |
-          set -euo pipefail
-          for attempt in $(seq 1 420); do
+          restarted=0
+          for attempt in $(seq 1 460); do
             state="$(kaggle kernels status "$KERNEL" 2>&1 || true)"
             case "$state" in
-              *KernelWorkerStatus.COMPLETE*) echo "GEMMA31_SOLVER_COMPLETE=$KERNEL"; exit 0 ;;
+              *KernelWorkerStatus.COMPLETE*)
+                echo "GEMMA31_SOLVER_COMPLETE=$KERNEL"; exit 0 ;;
               *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*|*KernelWorkerStatus.CANCELLED*)
-                echo "GEMMA31_SOLVER_TERMINAL_ERROR=$KERNEL"; exit 1 ;;
+                if (( restarted )); then echo "GEMMA31_RETRY_TERMINAL_ERROR=$KERNEL"; exit 1; fi
+                if ! kaggle kernels logs "$KERNEL" >"$work/worker.log" 2>/dev/null; then
+                  kaggle kernels output "$KERNEL" -p "$work/errors" -o --file-pattern '^$' > /dev/null
+                  cp "$work/errors/${KERNEL##*/}.log" "$work/worker.log"
+                fi
+                if grep -q 'GEMMA31_MODEL_READY=' "$work/worker.log" ||
+                   ! grep -q 'Bfloat16 is only supported on GPUs with compute capability' "$work/worker.log"; then
+                  echo "GEMMA31_DIFFERENT_PRIVATE_WORKER_ERROR=$KERNEL"; exit 1
+                fi
+                rc=0
+                kaggle kernels push -p "$work/kernel" --accelerator NvidiaL4 -t 14000 >"$work/push.log" 2>&1 || rc=$?
+                python scripts/check_capacity_31b_push_v0.py --log "$work/push.log" --client-exit-code "$rc"
+                echo "GEMMA31_RETRIED_FAILED_BF16_BOOT=$KERNEL"
+                restarted=1 ;;
             esac
-            if (( attempt % 20 == 1 )); then echo "GEMMA31_SOLVER_WAIT=$attempt $state"; fi
+            if (( attempt % 12 == 1 )); then echo "GEMMA31_SOLVER_WAIT=$attempt $state"; fi
             sleep 42
           done
           echo "GEMMA31_SOLVER_NOT_TERMINAL=$KERNEL"
@@ -125,64 +129,3 @@ jobs:
           path: evidence/gemma31-paired-summary.json
           retention-days: 30
           if-no-files-found: error
-  diagnose:
-    if: "${{ github.event.head_commit.message == 'Retrieve private Gemma 31B solver errors' }}"
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
-    steps:
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Extract safe native startup and exception evidence from existing kernels
-        run: |
-          set -euo pipefail
-          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
-          python - <<'PY'
-          from pathlib import Path
-          import re
-          import subprocess
-          import tempfile
-
-          for suffix in "ab":
-              slug = f"gemma4-test-retrieval31{suffix}-nov17"
-              ref = "kolihhan/" + slug
-              state = subprocess.run(["kaggle", "kernels", "status", ref], capture_output=True, text=True, timeout=30)
-              match = re.search(r"KernelWorkerStatus\.[A-Z_]+", state.stdout)
-              print("PRIVATE_SOLVER_STATE", suffix, match.group() if match else state.returncode)
-              attempt = subprocess.run(["kaggle", "kernels", "logs", ref],
-                                       capture_output=True, text=True, timeout=60)
-              raw = attempt.stdout if attempt.returncode == 0 else ""
-              if not raw:
-                  with tempfile.TemporaryDirectory() as temporary:
-                      subprocess.run(["kaggle", "kernels", "output", ref, "-p", temporary,
-                                      "--file-pattern", "^$", "-o"], capture_output=True, timeout=75)
-                      log = Path(temporary) / (slug + ".log")
-                      raw = log.read_text(errors="replace") if log.exists() else ""
-              print("PRIVATE_SOLVER_LOG", suffix, "present", bool(raw),
-                    "model_ready", "GEMMA31_MODEL_READY=" in raw, "model_rows", raw.count("GEMMA31_SOLVER_ROW="))
-              ready = "GEMMA31_MODEL_READY=" in raw
-              for line in raw.splitlines():
-                  if suffix == "b" and not ready and re.search(r"ServerStartupError|ValueError|RuntimeError|CUDA|vLLM|GPU|model type|AssertionError|torch", line, re.I):
-                      clean = re.sub(r"\x1b\[[0-9;]*m", "", line).strip()
-                      clean = re.sub(r"(?i)(bearer|api[_ -]?key|token|password|secret)\s*[:= ]+\S+", "[redacted]", clean)
-                      print("PRIVATE_31B_STARTUP_DETAIL", clean[:340])
-
-                  if frame := re.search(r'File "[^"\r\n]*/experiment\.py", line \d+, in [\w<>]+', line):
-                      print("PRIVATE_SOLVER_FRAME", suffix, frame.group())
-                  if error := re.search(r'\b([A-Za-z]+(?:Error|Exception)): ([^\n]*)', line):
-                      message = error.group(2).strip()[:210]
-                      safe = re.fullmatch(r"[\w ./()'\[\]=,;:+-]{1,210}", message)
-                      recognizable = any(term in message.lower() for term in (
-                          "kaggle/input", "unexpected keyword", "expected a unique", "trace",
-                          "tool", "skill", "subprocess", "evalconfig", "module", "model",
-                          "cuda", "snapshot", "mount", "adapter", "out of memory", "not found",
-                          "permission denied", "time", "validation", "wheel",
-                      ))
-                      print("PRIVATE_SOLVER_EXCEPTION", suffix, error.group(1),
-                            message if safe and recognizable and not message.startswith("{") else "")
-              for term in ("CUDA out of memory", "No space left on device", "Killed", "Task budget exceeded"):
-                  if term in raw:
-                      print("PRIVATE_SOLVER_SIGNAL", suffix, term)
-          PY

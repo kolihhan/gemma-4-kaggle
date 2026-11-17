@@ -136,10 +136,13 @@ def run(work):
     if not count or not model_path.is_dir() or adapters.adapters:
         raise ValueError("Pinned unadapted 31B weights and CUDA required")
     tp = 4 if count >= 4 else 2 if count >= 2 else 1
+    devices = [torch.cuda.get_device_capability(index) for index in range(count)]
+    dtype = "bfloat16" if all(major >= 8 for major, _ in devices) else "float16"
+    print(f"GEMMA31_GPU_CONFIGURATION={{'gpu_count': {count}, 'capabilities': {devices}, 'dtype': {dtype!r}}}", flush=True)
     server = VllmServer(VllmConfig(
         model=str(model_path), port=8000, host="127.0.0.1",
         tool_call_parser="gemma4", reasoning_parser="gemma4", max_model_len=32768,
-        dtype="bfloat16" if torch.cuda.is_bf16_supported() else "auto",
+        dtype=dtype,
         gpu_memory_utilization=0.90, enable_auto_tool_choice=True,
         enable_lora=False, max_loras=1, max_lora_rank=128, scheduler_reserve_full_isl=False,
         tensor_parallel_size=tp, startup_timeout=1200, extra_args=(),
@@ -174,6 +177,7 @@ def run(work):
             "membership_sha256": PLAN["membership_sha256"], "offset": OFFSET, "stop": STOP,
             "control_archive_sha256": control_sha, "retrieval_archive_sha256": treatment_sha,
             "startup_seconds": startup_seconds, "model": MODEL_NAME, "rows": results,
+            "hardware": {"gpu_count": count, "capabilities": devices, "dtype": dtype},
         }, sort_keys=True))
     finally:
         server.stop()
