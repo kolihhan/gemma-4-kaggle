@@ -189,3 +189,4 @@ jobs:
           print('GEMMA_READ_ONLY_NO_NEW_SUBMISSION=TRUE',flush=True)
           PY
 # Gemma official receipt read-back; no model/submission invocation.
+# One authenticated score read; no second Kaggle submission or GPU development.
