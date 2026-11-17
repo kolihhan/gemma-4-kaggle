@@ -19,7 +19,7 @@ import zipfile
 
 from scripts.build_gemma31_existing_tests import build
 from scripts.submit_v2_toolcap60_official_once import (
-    COMPETITION, SOURCE, authenticated_submissions, compile_without_inference,
+    COMPETITION, SOURCE, authenticated_submissions,
 )
 from scripts.prepare_public_budgetfit_v2 import validate_source_zip
 
@@ -72,6 +72,45 @@ def quota():
     return True
 
 
+
+def compile_with_skill(candidate):
+    """Validate official one-skill ADK candidate without any model/tool execution."""
+    from tempfile import TemporaryDirectory
+    from adk_submission import validate_directory, compile_submission, ModelRegistry, ToolRegistry
+    from google.adk.models.base_llm import BaseLlm
+    from swegemma.config import build_submission_limits
+    natives=("run_command","read_file","edit_file","write_file","get_status",
+             "submit_patch","get_code_neighbors","search_similar_code","get_code_subgraph")
+    class NoInference(BaseLlm):
+        async def generate_content_async(self, *args, **kwargs):
+            raise AssertionError("CPU_ONLY_NEVER_INFER")
+            yield
+    with TemporaryDirectory(prefix="gemma-skill-cpu-") as d:
+        root=Path(d)
+        with zipfile.ZipFile(io.BytesIO(candidate)) as z:
+            if z.testzip() is not None:raise ValueError("BAD_ARCHIVE")
+            z.extractall(root)
+        limits,_=build_submission_limits()
+        validate_directory(root,limits=limits)
+        mr=ModelRegistry()
+        mr.register(MODEL,NoInference(model=MODEL))
+        tr=ToolRegistry()
+        for name in natives:
+            def blocked(*args,**kwargs):
+                raise AssertionError("CPU_ONLY_NEVER_CALL_TOOL")
+            tr.register(name,blocked)
+        agent=compile_submission(submission_dir=root,model_registry=mr,tool_registry=tr)
+        if agent.model.model!=MODEL:raise ValueError("MODEL_DRIFT")
+        names=[getattr(t,"name",None) for t in agent.tools]
+        classes=[type(t).__name__ for t in agent.tools]
+        print("GEMMA_ADK_COMPILED_TOOLS="+json.dumps(dict(names=names,classes=classes),default=str),flush=True)
+        if len(agent.tools)!=len(natives)+1:raise ValueError("NOT_EXACTLY_ONE_ADDED_SKILL_TOOL")
+        if not set(natives).issubset(set(names)):raise ValueError("NATIVE_TOOLS_MISSING")
+        extra=[t for t in agent.tools if getattr(t,"name",None) not in natives]
+        if len(extra)!=1 or "skill" not in type(extra[0]).__name__.lower():
+            raise ValueError("ADDITIONAL_TOOL_NOT_SKILL")
+        print("GEMMA_OFFICIAL_SKILL_CPU_COMPILE=PASS",flush=True)
+
 def prepare():
     if ROOT.exists() and any(ROOT.iterdir()):
         raise RuntimeError("REFUSE_NONEMPTY_DIR")
@@ -101,7 +140,7 @@ def prepare():
         raise RuntimeError("MODEL_CHANGED")
     if files["eval_config.yaml"] != original["eval_config.yaml"]:
         raise RuntimeError("BUDGET_CHANGED")
-    compile_without_inference(candidate)
+    compile_with_skill(candidate)
     digest = hashlib.sha256(candidate).hexdigest()
     (ROOT / "candidate.zip").write_bytes(candidate)
     (ROOT / "candidate.sha256").write_text(digest)
