@@ -146,3 +146,4 @@ jobs:
           python -m scripts.submit_existing_test_retrieval_official_once_20261117 submit
           echo "GEMMA_EXISTING_TESTS_OFFICIAL_WORKFLOW_TERMINAL=TRUE"
 # CPU compiler supports exactly one official SkillToolset alongside pinned native tools.
+# CPU sanity verifies observed 9 callables plus one official SkillToolset; no model inference.
