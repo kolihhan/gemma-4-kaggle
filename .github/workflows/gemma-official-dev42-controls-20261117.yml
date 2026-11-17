@@ -1,0 +1,104 @@
+name: Gemma 42 unreserved official development verifier controls
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-official-dev42-controls-20261117.yml]
+permissions:
+  contents: read
+jobs:
+  native_controls:
+    if: "${{ github.event.head_commit.message == 'Verify frozen Gemma 42 official development cases in Kaggle' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 95
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      CONTROL_REF: kolihhan/gemma4-official-dev42-controls-nov17-v1
+      COHORT_SHA: 457002e9c7ae42abbf36f3de8aca875862ab309c118b40ac0d341b6a6a8d3801
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run gold and no-op controls privately using the official Kaggle image
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+          export CONTROL_WORK="$work"
+          mkdir "$work/code" "$work/results"
+          python - <<'PY'
+          from hashlib import sha256
+          import json
+          import os
+          from pathlib import Path
+
+          work = Path(os.environ["CONTROL_WORK"], "code")
+          frozen = Path("docs/evaluation/gemma-official-frozen42-2026-11-17.json").read_bytes()
+          fingerprint = sha256(frozen).hexdigest()
+          assert fingerprint == os.environ["COHORT_SHA"]
+          cohort = json.loads(frozen)
+          assert len(cohort["cases"]) == 42
+          before = Path("kaggle/paired_three_task_integrity_cpu.py").read_bytes()
+          assert sha256(before).hexdigest() == "9f1cd4ea2c0967520f13613037ebc4d6c3a9fe7be32e92e5077cf4861cf4ff6a"
+          base = before.decode().split("async def evaluate_controls()", 1)[0]
+          source = Path("kaggle/verify_official_dev_cohort_cpu.py").read_text()
+          code = base + f"\nCOHORT = {cohort!r}\nCOHORT_SHA = {fingerprint!r}\n" + source
+          compile(code, "official_dev_controls.py", "exec")
+          (work / "official_dev_controls.py").write_text(code)
+          ref = os.environ["CONTROL_REF"]
+          (work / "kernel-metadata.json").write_text(json.dumps({
+              "id": ref, "title": ref.rsplit("/", 1)[1], "code_file": "official_dev_controls.py",
+              "language": "python", "kernel_type": "script", "is_private": True,
+              "enable_gpu": False, "enable_tpu": False, "enable_internet": False,
+              "docker_image": "gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461",
+              "competition_sources": ["gemma-4-developer-agent"],
+              "dataset_sources": ["metric/gemma-4-developer-agent-wheelhouse"],
+              "model_sources": [], "kernel_sources": [],
+          }))
+          PY
+          if kaggle kernels status "$CONTROL_REF" >"$work/existing.log" 2>&1; then
+            echo PRIVATE_KERNEL_ALREADY_EXISTS
+            exit 1
+          fi
+          kaggle kernels push -p "$work/code" -t 4900 >"$work/push.log" 2>&1
+          python scripts/check_capacity_31b_push_v0.py --log "$work/push.log" --client-exit-code 0
+          echo "OFFICIAL_DEV42_CONTROL_KERNEL_PUSHED=$CONTROL_REF"
+          state=UNOBSERVED
+          for i in $(seq 1 200); do
+            raw="$(kaggle kernels status "$CONTROL_REF" 2>&1 || true)"
+            case "$raw" in
+              *KernelWorkerStatus.COMPLETE*) state=COMPLETE; break ;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*|*KernelWorkerStatus.CANCELLED*) state=ERROR; break ;;
+            esac
+            sleep 25
+          done
+          echo "OFFICIAL_DEV42_CONTROL_STATE=$state"
+          test "$state" = COMPLETE
+          kaggle kernels output "$CONTROL_REF" -p "$work/results" -o >"$work/download.log" 2>&1
+          python - <<'PY'
+          from collections import Counter
+          import json
+          import os
+          from pathlib import Path
+
+          files = list(Path(os.environ["CONTROL_WORK"], "results").rglob("gemma-official-dev42-controls.json"))
+          assert len(files) == 1
+          output = json.loads(files[0].read_text())
+          expected = json.loads(Path("docs/evaluation/gemma-official-frozen42-2026-11-17.json").read_text())["cases"]
+          rows, report = output["rows"], output["report"]
+          assert len(expected) == len(rows) == report["case_count"] == 42
+          assert report["cohort_sha256"] == os.environ["COHORT_SHA"]
+          assert report["no_model_inference"] and report["no_official_submission"]
+          for row, origin in zip(rows, expected, strict=True):
+              assert all(row.get(key) == value for key, value in origin.items())
+              assert row["status"] in {"eligible", "reference_failed", "noop_inconclusive", "error"}
+              if row["status"] == "eligible":
+                  assert row["gold"] == {"pass": True, "exit": 0} and row["noop"] == {"pass": False, "exit": 1}
+          assert report["strict_eligible"] == Counter(row["status"] for row in rows)["eligible"]
+          print("OFFICIAL_DEV42_NATIVE_CONTROLS=" + json.dumps(report, sort_keys=True))
+          PY

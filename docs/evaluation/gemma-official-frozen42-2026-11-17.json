@@ -1,0 +1,217 @@
+{
+  "cases": [
+    {
+      "instance_id": "fastapi_11355",
+      "prior_control": "reference_failed",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_12942",
+      "prior_control": "reference_failed",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_13207",
+      "prior_control": "reference_failed",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_13537",
+      "prior_control": "eligible",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_13786",
+      "prior_control": "reference_failed",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14099",
+      "prior_control": "reference_failed",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14186",
+      "prior_control": "reference_failed",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14262",
+      "prior_control": "reference_failed",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14349",
+      "prior_control": "reference_failed",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14356",
+      "prior_control": "reference_failed",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14360",
+      "prior_control": "reference_failed",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14372",
+      "prior_control": "eligible",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14430",
+      "prior_control": "reference_failed",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14455",
+      "prior_control": "reference_failed",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14459",
+      "prior_control": "reference_failed",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14512",
+      "prior_control": "reference_failed",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14786",
+      "prior_control": "eligible",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14791",
+      "prior_control": "reference_failed",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14953",
+      "prior_control": "reference_failed",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14964",
+      "prior_control": "reference_failed",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_14978",
+      "prior_control": "reference_failed",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_15588",
+      "prior_control": "eligible",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_15745",
+      "prior_control": "reference_failed",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_15785",
+      "prior_control": "reference_failed",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_15800",
+      "prior_control": "eligible",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "fastapi_5624",
+      "prior_control": "eligible",
+      "repo": "fastapi/fastapi"
+    },
+    {
+      "instance_id": "rich_2943",
+      "prior_control": "eligible",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3006",
+      "prior_control": "eligible",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3043",
+      "prior_control": "eligible",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3296",
+      "prior_control": "reference_failed",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3468",
+      "prior_control": "eligible",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3469",
+      "prior_control": "reference_failed",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3470",
+      "prior_control": "eligible",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3471",
+      "prior_control": "eligible",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3506",
+      "prior_control": "eligible",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3521",
+      "prior_control": "eligible",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3535",
+      "prior_control": "eligible",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3675",
+      "prior_control": "eligible",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3676",
+      "prior_control": "eligible",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3938",
+      "prior_control": "eligible",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_3944",
+      "prior_control": "eligible",
+      "repo": "Textualize/rich"
+    },
+    {
+      "instance_id": "rich_4077",
+      "prior_control": "eligible",
+      "repo": "Textualize/rich"
+    }
+  ],
+  "selection": "Known research and reserved IDs excluded. Prior private and human exposure remains to be confirmed before admission to model inference.",
+  "source_tree": "d8cfc563e425a5c9d691c4232e1326e8787dec1f",
+  "version": "gemma-official-frozen42-v1"
+}
