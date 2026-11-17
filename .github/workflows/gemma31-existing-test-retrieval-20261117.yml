@@ -125,3 +125,58 @@ jobs:
           path: evidence/gemma31-paired-summary.json
           retention-days: 30
           if-no-files-found: error
+  diagnose:
+    if: "${{ github.event.head_commit.message == 'Retrieve private Gemma 31B solver errors' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Extract safe native startup and exception evidence from existing kernels
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          import subprocess
+          import tempfile
+
+          for suffix in "ab":
+              slug = f"gemma4-test-retrieval31{suffix}-nov17"
+              ref = "kolihhan/" + slug
+              state = subprocess.run(["kaggle", "kernels", "status", ref], capture_output=True, text=True, timeout=30)
+              match = re.search(r"KernelWorkerStatus\.[A-Z_]+", state.stdout)
+              print("PRIVATE_SOLVER_STATE", suffix, match.group() if match else state.returncode)
+              attempt = subprocess.run(["kaggle", "kernels", "logs", ref],
+                                       capture_output=True, text=True, timeout=60)
+              raw = attempt.stdout if attempt.returncode == 0 else ""
+              if not raw:
+                  with tempfile.TemporaryDirectory() as temporary:
+                      subprocess.run(["kaggle", "kernels", "output", ref, "-p", temporary,
+                                      "--file-pattern", "^$", "-o"], capture_output=True, timeout=75)
+                      log = Path(temporary) / (slug + ".log")
+                      raw = log.read_text(errors="replace") if log.exists() else ""
+              print("PRIVATE_SOLVER_LOG", suffix, "present", bool(raw),
+                    "model_ready", "GEMMA31_MODEL_READY=" in raw, "model_rows", raw.count("GEMMA31_SOLVER_ROW="))
+              for line in raw.splitlines():
+                  if frame := re.search(r'File "[^"\r\n]*/experiment\.py", line \d+, in [\w<>]+', line):
+                      print("PRIVATE_SOLVER_FRAME", suffix, frame.group())
+                  if error := re.search(r'\b([A-Za-z]+(?:Error|Exception)): ([^\n]*)', line):
+                      message = error.group(2).strip()[:210]
+                      safe = re.fullmatch(r"[\w ./()'\[\]=,;:+-]{1,210}", message)
+                      recognizable = any(term in message.lower() for term in (
+                          "kaggle/input", "unexpected keyword", "expected a unique", "trace",
+                          "tool", "skill", "subprocess", "evalconfig", "module", "model",
+                          "cuda", "snapshot", "mount", "adapter", "out of memory", "not found",
+                          "permission denied", "time", "validation", "wheel",
+                      ))
+                      print("PRIVATE_SOLVER_EXCEPTION", suffix, error.group(1),
+                            message if safe and recognizable and not message.startswith("{") else "")
+              for term in ("CUDA out of memory", "No space left on device", "Killed", "Task budget exceeded"):
+                  if term in raw:
+                      print("PRIVATE_SOLVER_SIGNAL", suffix, term)
+          PY
