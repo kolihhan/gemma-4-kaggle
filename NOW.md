@@ -1,3 +1,14 @@
+## 2026-11-18 00:03 MYT — validation-first correction: current-scoring gold 15/15, official remains PENDING
+
+- **Fresh real CPU current-scorer gold control:** [#44119528823](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44119528823) COMPLETE/SUCCESS: **15/15** official public-dev issues in the frozen 31-case membership passed gold patch, current official scorer; **0 invalid among those 15**. **16/31** external original Click issues remain without a verified equivalent gold oracle; they are **UNKNOWN, not PASS**. All 15 official had already passed a prior gold screen and are **not blind**. This does not establish a 31-pair model result. Safe per-issue metadata are in the Action artifact; no GPU/model or official Kaggle submission.
+- **Existing 6-case model panel still untrustworthy as 6 independent scored cases:** both arms submitted 6/6 nonempty patches, 0/6 correct; only 2/6 gold/no-op clean under that run's grader, 4/6 confounded. Separate local gold validity must be checked by case/harness, not assumed from this newly screened 15.
+- **Authenticated Kaggle ledger [#44120906685](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44120906685):** #58469374 `PENDING` with empty Public BA; best remains **0.18/#58183466**. The Kaggle read-only submission and episodes endpoints responded but **no authenticated hidden per-instance resolution flags were verified**.
+- Official documentation says ~120 test issues with roughly half Public/Private; a community score-quantization analysis infers **58 Public issues, unconfirmed by organizers**. If true, one task equals **0.01724** score, so the old agent-chosen “+0.02 keep / otherwise reject” is **withdrawn as a scientific mechanism judgment**. A numerical LB result is only descriptive for the exact submit bundle; causal promotion needs gold-valid independent paired cases and a **user-owned** minimum meaningful effect/uncertainty rule. No new solver change or submission before this is settled.
+- Detailed evidence: [validation-first note](docs/evaluation/evidence-first-score-interpretation-20261117.md). **NEXT:** classify any retained agent traces on the 15 gold-valid cases, preserving UNKNOWN for missing traces; separately audit 16 Click cases. Do not simply add 15+16 or classify ungraded external tasks as agent failures.
+
+
+---
+
 ## 2026-11-17 21:02 MYT — OFFICIAL Gemma submission #58469374 PENDING; candidate 31B existing-test retrieval
 
 - **Authenticated official Kaggle submission #58469374**, description `existing-tests-31b-one-variable-20261117`, `SubmissionStatus.PENDING`, Public score not returned as of 2026-11-17 21:01 MYT. True official code submission via [successful existing GitHub Actions #44088167497](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44088167497); the Kaggle API returned the same ref and the separately fetched submissions ledger confirmed it. **Do not invent a score or treat PENDING as improvement.**
