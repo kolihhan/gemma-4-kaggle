@@ -147,3 +147,44 @@ jobs:
           echo "GEMMA_EXISTING_TESTS_OFFICIAL_WORKFLOW_TERMINAL=TRUE"
 # CPU compiler supports exactly one official SkillToolset alongside pinned native tools.
 # CPU sanity verifies observed 9 callables plus one official SkillToolset; no model inference.
+
+  read_gemma_58469374_once:
+    if: "${{ github.event.head_commit.message == 'READ_GEMMA_58469374_OFFICIAL_ONCE_20261117' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Authenticate and print exact #58469374 score status only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import csv,io,json,subprocess
+          comp='gemma-4-developer-agent'
+          p=subprocess.run(['kaggle','competitions','submissions',comp,'-v','-q'],
+             check=True,capture_output=True,text=True,timeout=90)
+          rows=list(csv.DictReader(io.StringIO(p.stdout.lstrip('\ufeff'))))
+          refs=['58469374','58183466','58350278']
+          out=[]
+          for ref in refs:
+              matched=[r for r in rows if str(r.get('ref'))==ref]
+              if len(matched)!=1:raise SystemExit('MISSING_OR_DUPLICATE_OFFICIAL_RECEIPT_'+ref)
+              x=matched[0]
+              out.append({'ref':ref,'status':str(x.get('status') or ''),
+                'publicScore':str(x.get('publicScore') or ''),
+                'description':str(x.get('description') or '')[:110]})
+          print('GEMMA_EXACT_AUTHENTICATED_OFFICIAL_RECEIPTS='+json.dumps(out,sort_keys=True),flush=True)
+          new=out[0]
+          if new['status'].upper().endswith('COMPLETE') and new['publicScore']:
+              diff=round(float(new['publicScore'])-.18,7)
+              print('GEMMA_58469374_DELTA_VS_CHAMPION='+str(diff),flush=True)
+              print('GEMMA_58469374_PREREG_DECISION='+('KEEP' if diff>0 else 'RETIRE'),flush=True)
+          else:
+              print('GEMMA_58469374_NEW_SCORE_NOT_AVAILABLE=TRUE',flush=True)
+          print('GEMMA_READ_ONLY_NO_NEW_SUBMISSION=TRUE',flush=True)
+          PY
