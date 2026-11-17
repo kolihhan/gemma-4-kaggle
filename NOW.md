@@ -1,3 +1,12 @@
+## 2026-11-17 17:16 MYT — Native 31B paired comparison queued after GPU boot recovery
+
+- [Solver-only source build #44034880254](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44034880254) completed. It contains **31** frozen before-fix snapshots, their original issue text, and **124** offline dependency wheels. Manifest SHA-256 `c17965e1da7c7a981bd38f4384cb7f470c061f024866a7f82a1fa402cb7019c8`. Reference and test patches are mounted solely in the separate native grader.
+- The comparison uses the exact scored Toolcap60 archive (SHA-256 `ff08c10240a38e151a2ea1d0478e999ee5d2f437d2dad5571d912cf12859922b`) and one existing-test retrieval skill variant (SHA-256 `763d6b5751852cff80154cbd2139fb69b483326bfe4232357f52548d10ff7f7e`). Each case sees both arms under the same hardware, 5-minute time limit, 60 tool calls, and 80 turns. Both arms use source plus issue text without optional official hints or precomputed graphs; generalization to hidden repositories remains open. [Frozen protocol](experiments/solver-v3/gemma31-existing-test-retrieval-20261117.json).
+- [First worker run #44050792885](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44050792885) reported a Tesla T4 (SM 7.5) BF16 startup error for shard B despite the L4 request. [Authenticated Kaggle log #44053127234](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44053127234) confirms that failure occurred before model output. [Recovery #44053613212](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44053613212) left A in its original queue and repushed B with native-capability precision selection for both arms. Both private shards were **QUEUED** at 17:16 MYT. The workflow triggers separate native grading when both finish.
+- No 31-pair quality result or new official submission exists. Judge all 31 pairs and apply the preregistered rescue, regression, uncertainty, uptake and runtime gate. [Authenticated Public best **0.18**, #58183466](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43743767264/attempts/2).
+
+---
+
 ## 2026-11-17 MYT — 31 cases passed verifier controls and cleared recorded exposure checks
 
 - [Official Kaggle controls on the frozen 42](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44028204095) finished under SWE-Gemma 0.2.11 in the pinned image. The same **20/42** passed reference and failed empty-patch controls. All 22 historical reference failures repeated. Control eligibility remains separate from prior research exposure.
