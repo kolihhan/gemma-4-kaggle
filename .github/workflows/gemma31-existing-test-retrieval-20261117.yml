@@ -6,7 +6,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: gemma31-frozen-test-retrieval-nov17
+  group: "${{ github.event.head_commit.message == 'Retrieve private Gemma 31B solver errors' && 'gemma31-solver-logs-nov17' || 'gemma31-frozen-test-retrieval-nov17' }}"
   cancel-in-progress: false
 jobs:
   solve:
