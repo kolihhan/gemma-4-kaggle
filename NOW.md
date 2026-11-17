@@ -1,3 +1,12 @@
+## 2026-11-17 — Official-score research bet: existing-test retrieval, sanity-only, no dev GPU
+
+- One hypothesis frozen **before** any new score: in the scored 31B 0.18 Toolcap60 5-minute control, run `existing-test-retrieval` once before editing when an issue contains a concrete symbol; existing assertions may prevent semantically wrong patches. Reuse SHA-pinned control `ff08c10240a38e151a2ea1d0478e999ee5d2f437d2dad5571d912cf12859922b` and **only add this one test-retrieval mechanism** (skill + instruction needed to call it). The prior 31-case private paired solver hit GPU startup errors; it is **not** quality evidence. No training, dev GPU, extra paid API or independent 31-pair model run.
+- **Expected official Public Δ hypothesis: +0.02 (0.18→0.20), speculative, not a predicted fact. Kill:** official score ≤0.18 or blank/timeout/errors, or CPU compiler rejects this exact tool/skill/budget contract. Do not tune after observing Public. At most one official entry with unique kernel and description, and no overwriting champion.
+- Authenticated Kaggle 1/day quota and active submissions must be checked within existing Actions path before push and again before submission. Only official scoring GPU rerun permitted. Log actual submission ID and Public score when available; do not count private CPU builder as submission.
+- Source: `scripts/build_gemma31_existing_tests.py` and `scripts/submit_existing_test_retrieval_official_once_20261117.py`; execute with the existing GitHub Actions Kaggle-authenticated submission workflow, not a new workflow. Current best remains **0.18/#58183466**, pending an authenticated later score.
+
+---
+
 ## 2026-11-17 20:35 MYT — 31-task GPU pilot ended ERROR; patch adequacy dominates available valid six-task panel
 
 - **No 31-pair correctness result.** [Recovery Actions #44053613212](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44053613212) finished **FAILURE** in both solver jobs, independent native grading was skipped. The existing private Kaggle shards `gemma4-test-retrieval31a-nov17` and `gemma4-test-retrieval31b-nov17` reached `KernelWorkerStatus.ERROR` (17:43 and 17:55 MYT respectively, per authenticated job logs). The earlier 17:16 MYT note saying QUEUED is stale. This is **infrastructure failure**, not 31 scored solver failures. Neither GPU job should be restarted under the current no-development-GPU owner budget.
