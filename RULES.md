@@ -15,6 +15,15 @@ Source precedence: current Kaggle [overview](https://www.kaggle.com/competitions
 - Exact eligibility/allowed *custom tool action paths*, and any changes to official harness, must be validated before executing a new test-feedback intervention.
 - Submission count/active jobs/remaining GPU quota require authenticated read-only ledger and run-state check **immediately before** any official action; this document is not a quota receipt.
 
+## Prospective owner-sanctioned execution gate — 2026-11-17
+
+- **For new experiments, the required local gate before ONE official hypothesis-driven Kaggle submission is sanity-only:** candidate bundle compiles with official native validation, supported 31B model and legal tools are retained, the archive and receipt are reproducible, estimated full scoring budget is plausible, and no previous submission or active duplicate exists. A statistically significant paired local improvement on 30 independent issues is **not required to submit**. Thirty-task paired evidence remains the stronger standard for a *general scientific claim*, not a veto on official experimental scoring. Historical preregistered gates remain part of the record, not retroactively changed.
+- **Allowed GPU:** an official Kaggle competition scoring rerun of the submitted Code Competition candidate. **Forbidden development:** new local/Kaggle/GitHub-Actions GPU pilots, training, batch model evaluation and paid APIs without further explicit owner authorization. Do not restart the Nov-17 failed 31-case private solvers.
+- Every score experiment must predeclare one decision-level mechanism, a numerical expected Public improvement as a hypothesis (never a guarantee), and a kill condition; change only one main variable. Existing Kaggle submission code/CLI path must be used, not a new workflow, and a fresh kernel slug must not overwrite any champion.
+- Check authenticated competition daily allowance and active submissions before attempting official submission. **Kaggle's 1/day limit cannot simultaneously permit submission and 'reserve 1 unused slot/day'.** Treat this as a scheduling constraint to resolve when a viable candidate exists; do not falsely claim that a remaining slot was preserved after its only use.
+- Publish only aggregate diagnostics, not hidden issues, patches, trace text, private grader data or secrets. Distinguish developer cohorts with invalid reference/no-op controls from genuine solver failures.
+- Current authentic best **0.18/#58183466**; a COMPLETE submission with empty score is not improvement.
+
 ## Scientific research gates (user contract)
 - Actual grader result over matched independent issues is primary; `COMPLETE`, green CI, patch creation, tool-count savings and test-smoke are not correct resolutions.
 - Minimum **30 genuinely independent paired issues proposed**, subject to user confirmation and observed variance. Never promote/reject general capability on the spent 3/4-issue cohorts. Report paired task n, bootstrap CI, rescues and regressions.
