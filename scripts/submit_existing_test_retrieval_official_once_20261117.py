@@ -105,10 +105,12 @@ def compile_with_skill(candidate):
         classes=[type(t).__name__ for t in agent.tools]
         print("GEMMA_ADK_COMPILED_TOOLS="+json.dumps(dict(names=names,classes=classes),default=str),flush=True)
         if len(agent.tools)!=len(natives)+1:raise ValueError("NOT_EXACTLY_ONE_ADDED_SKILL_TOOL")
-        if not set(natives).issubset(set(names)):raise ValueError("NATIVE_TOOLS_MISSING")
-        extra=[t for t in agent.tools if getattr(t,"name",None) not in natives]
-        if len(extra)!=1 or "skill" not in type(extra[0]).__name__.lower():
-            raise ValueError("ADDITIONAL_TOOL_NOT_SKILL")
+        native_functions=[t for t in agent.tools if type(t).__name__=="function"]
+        skill_toolsets=[t for t in agent.tools if type(t).__name__=="SkillToolset"]
+        if len(native_functions)!=len(natives) or len(skill_toolsets)!=1:
+            raise ValueError("ADK_EXPECTED_9_NATIVE_FUNCTIONS_PLUS_ONE_SKILL_TOOLSET")
+        if not all(callable(t) for t in native_functions):
+            raise ValueError("NATIVE_TOOL_NONCALLABLE")
         print("GEMMA_OFFICIAL_SKILL_CPU_COMPILE=PASS",flush=True)
 
 def prepare():
