@@ -10,6 +10,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   code_submission:
+    if: "${{ github.event.head_commit.message == 'GO_GEMMA_OLD_SAFETIME5_20261110' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:
@@ -84,3 +85,63 @@ jobs:
           set -euo pipefail
           python -m scripts.submit_toolcap60_timeout_recovery_once submit
           echo "SUBMISSION_OPERATOR_TERMINAL=TRUE"
+
+  existing_tests_official_once:
+    if: "${{ github.event.head_commit.message == 'GO_GEMMA_31B_EXISTING_TESTS_SCORE_20261117' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 58
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Single hypothesis and authenticated Kaggle quota
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m py_compile scripts/build_gemma31_existing_tests.py scripts/submit_existing_test_retrieval_official_once_20261117.py
+          echo 'GEMMA_HYPOTHESIS=existing-tests-before-edit; EXPECTED_DELTA=+0.02_SPECULATIVE; KILL_PUBLIC_LE_0.18_OR_UNSCORED'
+          echo 'GEMMA_NO_DEV_GPU_NO_TRAINING=TRUE'
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0 nbformat==5.10.4
+          python -m scripts.submit_existing_test_retrieval_official_once_20261117 quota
+      - name: Install official native CPU compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gemma-existing-test-official-wheels
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel" -p /tmp/gemma-existing-test-official-wheels --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check /tmp/gemma-existing-test-official-wheels/*.whl
+      - name: CPU sanity official compile and hashed one-mechanism 31B archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_existing_test_retrieval_official_once_20261117 prepare
+          python - <<'PY'
+          import zipfile,hashlib
+          from pathlib import Path
+          root=Path('/tmp/gemma4-existing-tests-official-once')
+          with zipfile.ZipFile(root/'candidate.zip') as z:
+            names=set(z.namelist())
+            assert {'agent.yaml','eval_config.yaml','prompts/system.md','configs/sampling.yaml'}<=names
+            assert {'skills/existing-test-retrieval/SKILL.md',
+                    'skills/existing-test-retrieval/scripts/retrieve.py'}<=names
+            assert b'gemma-4-31b-it-qat-w4a16-ct' in z.read('agent.yaml')
+            import yaml
+            cfg=yaml.safe_load(z.read('eval_config.yaml'))['evaluation']
+            assert cfg['max_time_minutes']==5
+            assert cfg['max_tool_calls']==60
+            assert cfg['max_turns']==80
+          assert hashlib.sha256((root/'candidate.zip').read_bytes()).hexdigest()==(root/'candidate.sha256').read_text()
+          print('GEMMA_RETRIEVAL_SINGLE_CPU_ARCHIVE=PASS',flush=True)
+          PY
+      - name: Verify new CPU builder remotely and official Kaggle submit once
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_existing_test_retrieval_official_once_20261117 submit
+          echo "GEMMA_EXISTING_TESTS_OFFICIAL_WORKFLOW_TERMINAL=TRUE"
