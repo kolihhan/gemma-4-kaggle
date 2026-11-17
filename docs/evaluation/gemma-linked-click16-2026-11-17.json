@@ -1,0 +1,279 @@
+{
+  "cases": [
+    {
+      "base": "ddede2147c9370ab8275f81db4826b6895d2e7dc",
+      "fix": "2468b70997a6ec27ced4b4867954c90da3f92075",
+      "issue_created_at": "2025-06-07T09:17:59Z",
+      "issue_url": "https://github.com/pallets/click/issues/2968",
+      "pr": 2969,
+      "pr_created_at": "2025-06-07T09:19:41Z",
+      "production": [
+        "src/click/termui.py"
+      ],
+      "statement_sha256": "e6393da07722d0c542c25bedd0fcad8a64f9e1c14da1207ef7a0c52052701ed2",
+      "tests": [
+        "tests/test_utils.py"
+      ],
+      "upstream": "pallets/click"
+    },
+    {
+      "base": "c69643b60cf971cd5d8e5d3902632807ceab9b8f",
+      "fix": "19fd4d6e18bc9fce451f92f422696b11169faa57",
+      "issue_created_at": "2025-08-19T05:35:06Z",
+      "issue_url": "https://github.com/pallets/click/issues/3043",
+      "pr": 3126,
+      "pr_created_at": "2025-10-26T16:10:03Z",
+      "production": [
+        "src/click/shell_completion.py"
+      ],
+      "statement_sha256": "733d5d3a8379dbc5c46bc65a8293bcc3b5e6ed07c58a70636a0f0d1d1fc328dc",
+      "tests": [
+        "tests/test_shell_completion.py"
+      ],
+      "upstream": "pallets/click"
+    },
+    {
+      "base": "8d3449517a97b6fd457a025bd9c3d2acfd301fa4",
+      "fix": "0cd28d6548f92e46396e0ffdd19ec5ea75b4b5e4",
+      "issue_created_at": "2024-10-21T16:46:04Z",
+      "issue_url": "https://github.com/pallets/click/issues/2790",
+      "pr": 3208,
+      "pr_created_at": "2026-02-14T03:27:26Z",
+      "production": [
+        "src/click/exceptions.py"
+      ],
+      "statement_sha256": "c3db7874dd706b44e45e45141ac7982ccbd80d3465f9c8f4a081599259c4d4f1",
+      "tests": [
+        "tests/test_formatting.py"
+      ],
+      "upstream": "pallets/click"
+    },
+    {
+      "base": "5b9630f50fde938b72ad8c99542efe3a6f5717e2",
+      "fix": "fc6c7c47edd6110b6bd5a1a5297b2035214b0cd1",
+      "issue_created_at": "2025-10-11T22:14:26Z",
+      "issue_url": "https://github.com/pallets/click/issues/3105",
+      "pr": 3211,
+      "pr_created_at": "2026-02-17T09:06:26Z",
+      "production": [
+        "src/click/types.py"
+      ],
+      "statement_sha256": "49222fa1c9c91edaac61c1ca916e0736910a003d8c6c6089681ad3a0fc1c205d",
+      "tests": [
+        "tests/test_types.py"
+      ],
+      "upstream": "pallets/click"
+    },
+    {
+      "base": "19fd4d6e18bc9fce451f92f422696b11169faa57",
+      "fix": "831c8f0948af519e45b90801d7430ff25451f972",
+      "issue_created_at": "2025-10-13T12:17:36Z",
+      "issue_url": "https://github.com/pallets/click/issues/3107",
+      "pr": 3228,
+      "pr_created_at": "2026-02-23T16:10:36Z",
+      "production": [
+        "src/click/__init__.py",
+        "src/click/core.py",
+        "src/click/exceptions.py",
+        "src/click/parser.py"
+      ],
+      "statement_sha256": "2a6f1640339d218478a96e4f58f9e223579b8043ed65b6989209d514d827efca",
+      "tests": [
+        "tests/test_commands.py",
+        "tests/test_options.py"
+      ],
+      "upstream": "pallets/click"
+    },
+    {
+      "base": "fc6c7c47edd6110b6bd5a1a5297b2035214b0cd1",
+      "fix": "c943271a269e6941fcc51e3506ead074b9dda6be",
+      "issue_created_at": "2024-11-20T10:36:32Z",
+      "issue_url": "https://github.com/pallets/click/issues/2809",
+      "pr": 3256,
+      "pr_created_at": "2026-03-10T17:11:51Z",
+      "production": [
+        "src/click/termui.py"
+      ],
+      "statement_sha256": "6a91dbad5f5f4f4c10afc939d1da1e03061ee65c6910ceb98430d1fba034c563",
+      "tests": [
+        "tests/test_termui.py"
+      ],
+      "upstream": "pallets/click"
+    },
+    {
+      "base": "8c95c73bd5ef89eac638f85f1904a104ba4b1a32",
+      "fix": "76552ff1e8c85837f911fc34037e702ae4327eda",
+      "issue_created_at": "2025-01-06T22:07:25Z",
+      "issue_url": "https://github.com/pallets/click/issues/2836",
+      "pr": 3328,
+      "pr_created_at": "2026-04-09T09:45:56Z",
+      "production": [
+        "src/click/core.py",
+        "src/click/termui.py"
+      ],
+      "statement_sha256": "42009d1de9a80b0014f5fa3223c30d691ba66bd57ec9dd4392ed221f28e0e77f",
+      "tests": [
+        "tests/test_options.py",
+        "tests/test_termui.py"
+      ],
+      "upstream": "pallets/click"
+    },
+    {
+      "base": "c8da1fcc2cb4523c1fb5bef7f0ca82394dde1efd",
+      "fix": "b03f211e602d915f413068eba87ff08469b38477",
+      "issue_created_at": "2021-07-16T17:22:25Z",
+      "issue_url": "https://github.com/pallets/click/issues/2012",
+      "pr": 3363,
+      "pr_created_at": "2026-04-21T11:02:48Z",
+      "production": [
+        "src/click/core.py"
+      ],
+      "statement_sha256": "198e8f91b3e63fd65bb051333c8c8d8212505adfee2859ee5564492d5bf4c812",
+      "tests": [
+        "tests/test_options.py"
+      ],
+      "upstream": "pallets/click"
+    },
+    {
+      "base": "63274a79d08fdc5c19220696144489f7144a8547",
+      "fix": "3bb230dcd5d751f8605b46e9df5a541639d5fd4e",
+      "issue_created_at": "2020-05-09T23:30:18Z",
+      "issue_url": "https://github.com/pallets/click/issues/1550",
+      "pr": 3434,
+      "pr_created_at": "2026-05-16T06:20:23Z",
+      "production": [
+        "src/click/formatting.py"
+      ],
+      "statement_sha256": "fd40dc1726c06a90973796a48a2ef9673bc0a5d5bc9b2b900abaa1dfc234cfd5",
+      "tests": [
+        "tests/test_formatting.py"
+      ],
+      "upstream": "pallets/click"
+    },
+    {
+      "base": "1a994adbb114d402275a614942e2f838a654e648",
+      "fix": "c48021040a50c659b74e24ac2b11c9c9c6620a21",
+      "issue_created_at": "2025-06-21T05:05:54Z",
+      "issue_url": "https://github.com/pallets/click/issues/2983",
+      "pr": 3473,
+      "pr_created_at": "2026-05-19T00:21:24Z",
+      "production": [
+        "src/click/core.py"
+      ],
+      "statement_sha256": "956da3f1b4f129043a2e29fe7e5a61d25dfc821823dbd00662cebcddb98b0e3a",
+      "tests": [
+        "tests/test_arguments.py",
+        "tests/test_info_dict.py"
+      ],
+      "upstream": "pallets/click"
+    },
+    {
+      "base": "6ec99f89261b32f8a50848786eca055e1967659f",
+      "fix": "fe3ad76e5807e7a401ed7520f051071c6ae1fa6e",
+      "issue_created_at": "2026-06-08T14:41:37Z",
+      "issue_url": "https://github.com/pallets/click/issues/3572",
+      "pr": 3653,
+      "pr_created_at": "2026-06-30T16:28:05Z",
+      "production": [
+        "src/click/termui.py"
+      ],
+      "statement_sha256": "b4c440f8575ad528e8715664df818f13d2b893daa7cf4ece89a5ad6d3f523918",
+      "tests": [
+        "tests/test_termui.py"
+      ],
+      "upstream": "pallets/click"
+    },
+    {
+      "base": "8c1a0a7abbc1c36f70d1f65f3604acc46c5ce6ab",
+      "fix": "b67832c2167e5b0ff6764a8c04a0a9087e697b5a",
+      "issue_created_at": "2024-12-15T02:14:28Z",
+      "issue_url": "https://github.com/pallets/click/issues/2819",
+      "pr": 3678,
+      "pr_created_at": "2026-07-08T12:19:10Z",
+      "production": [
+        "src/click/core.py"
+      ],
+      "statement_sha256": "58b5ee3b359771bd40bb5511d2bac01753acaefafb639ed058ecb842f157ecf2",
+      "tests": [
+        "tests/test_basic.py",
+        "tests/test_info_dict.py",
+        "tests/test_options.py"
+      ],
+      "upstream": "pallets/click"
+    },
+    {
+      "base": "333c28d79cd982990ee98eef61ec20ab1a4f38ba",
+      "fix": "cfa01eeb7894a408af70b29d28c0b24f8680f9fb",
+      "issue_created_at": "2026-07-17T13:19:33Z",
+      "issue_url": "https://github.com/pallets/click/issues/3700",
+      "pr": 3704,
+      "pr_created_at": "2026-07-17T21:38:36Z",
+      "production": [
+        "src/click/testing.py"
+      ],
+      "statement_sha256": "d13ddfd593523bf2a439c1b49dba2e074a947e2c4c6b79f769217dd764845255",
+      "tests": [
+        "tests/test_arguments.py",
+        "tests/test_basic.py",
+        "tests/test_deprecations.py",
+        "tests/test_shell_completion.py",
+        "tests/test_testing.py",
+        "tests/test_utils/test_open_file.py"
+      ],
+      "upstream": "pallets/click"
+    },
+    {
+      "base": "8b44edfff7d9a6c895fa804148c16b3a0bc9efb5",
+      "fix": "150d1071d69c5cdad7de78590013ffe56cf9e3bb",
+      "issue_created_at": "2026-06-08T12:10:23Z",
+      "issue_url": "https://github.com/pallets/click/issues/3571",
+      "pr": 3769,
+      "pr_created_at": "2026-08-15T07:12:12Z",
+      "production": [
+        "src/click/_termui_impl.py"
+      ],
+      "statement_sha256": "452c9f2bdd027eec0cd8e0ea7ebbb87c62334db881cedd4bb30b1d8f8b73b0f2",
+      "tests": [
+        "tests/test_termui.py"
+      ],
+      "upstream": "pallets/click"
+    },
+    {
+      "base": "2103e157683c5e4cadc8ee1838df526a54bde9a4",
+      "fix": "e1fd5946ab26aaf372009eaff1acf947140b40fb",
+      "issue_created_at": "2025-03-10T20:15:54Z",
+      "issue_url": "https://github.com/pallets/click/issues/2869",
+      "pr": 3781,
+      "pr_created_at": "2026-08-19T06:10:23Z",
+      "production": [
+        "src/click/_termui_impl.py",
+        "src/click/termui.py"
+      ],
+      "statement_sha256": "f3c490eb519d46b55410e8a77eb3cb9203d0393699852f3f737829171db810cf",
+      "tests": [
+        "tests/test_termui.py"
+      ],
+      "upstream": "pallets/click"
+    },
+    {
+      "base": "8abb77a8432e03ed14a95f972b44f905279415a7",
+      "fix": "a46a95c733d0ed72f63cd2915f2bc4a09a7179f9",
+      "issue_created_at": "2026-04-21T10:23:55Z",
+      "issue_url": "https://github.com/pallets/click/issues/3362",
+      "pr": 3902,
+      "pr_created_at": "2026-11-02T07:12:01Z",
+      "production": [
+        "src/click/_textwrap.py",
+        "src/click/formatting.py"
+      ],
+      "statement_sha256": "db114ec6ce8fbc3469bf3fecc523c8e3f5e55f9345bf32fbb3fe36ee53c681b4",
+      "tests": [
+        "tests/test_compat.py",
+        "tests/test_formatting.py"
+      ],
+      "upstream": "pallets/click"
+    }
+  ],
+  "license": "BSD-3-Clause",
+  "source_head": "08b803cf32ceb2ae6a772c62d5da42757a897d44"
+}

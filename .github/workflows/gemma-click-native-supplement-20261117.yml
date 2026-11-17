@@ -1,0 +1,111 @@
+name: Gemma 16 original-issue Click native controls
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-click-native-supplement-20261117.yml]
+permissions:
+  contents: read
+jobs:
+  controls:
+    if: "${{ github.event.head_commit.message == 'Verify 16 separately sourced Click issues on the offline SWE-Gemma image' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      BUILDER: kolihhan/gemma4-click16-assets-nov17-v1
+      SCORER: kolihhan/gemma4-click16-offline-controls-nov17-v1
+      COHORT_SHA: 5e947e4c1b027557646a31c7433ee81cd605564f3c40a5602094bdc5ccd662c5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build pinned snapshots privately and run offline controls
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+          export LINKED_WORK="$work"
+          python - <<'PY'
+          from hashlib import sha256
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["LINKED_WORK"])
+          locked = Path("docs/evaluation/gemma-linked-click16-2026-11-17.json").read_bytes()
+          lock = sha256(locked).hexdigest()
+          assert lock == os.environ["COHORT_SHA"]
+          cohort = json.loads(locked)
+          assert len({row["issue_url"] for row in cohort["cases"]}) == len(cohort["cases"]) == 16
+          assert all(row["upstream"] == "pallets/click" and row["issue_created_at"] < row["pr_created_at"] for row in cohort["cases"])
+          base = Path("kaggle/paired_three_task_integrity_cpu.py").read_text().split("async def evaluate_controls()", 1)[0]
+          source = Path("kaggle/linked_click_controls_cpu.py").read_text()
+          for stage, variable in [("build", "BUILDER"), ("verify", "SCORER")]:
+              folder = root / stage
+              folder.mkdir()
+              is_build = stage == "build"
+              ref = os.environ[variable]
+              payload = base + f"\nCOHORT = {cohort!r}\nLOCK = {lock!r}\nSTAGE = {stage!r}\n" + source
+              compile(payload, f"click_{stage}.py", "exec")
+              (folder / "linked_click_controls.py").write_text(payload)
+              (folder / "kernel-metadata.json").write_text(json.dumps({
+                  "id": ref, "title": ref.rsplit("/", 1)[1], "code_file": "linked_click_controls.py",
+                  "language": "python", "kernel_type": "script", "is_private": True, "enable_internet": is_build,
+                  "enable_gpu": False, "enable_tpu": False, "model_sources": [],
+                  "docker_image": "gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461",
+                  "competition_sources": [] if is_build else ["gemma-4-developer-agent"],
+                  "dataset_sources": [] if is_build else ["metric/gemma-4-developer-agent-wheelhouse"],
+                  "kernel_sources": [] if is_build else [os.environ["BUILDER"]],
+              }))
+          PY
+          run_stage() {
+            local folder="$1" ref="$2" state=UNKNOWN
+            if kaggle kernels status "$ref" >"$work/existing.log" 2>&1; then
+              echo "PRIVATE_STAGE_ALREADY_EXISTS=$folder"
+              return 1
+            fi
+            kaggle kernels push -p "$work/$folder" -t 1700 >"$work/$folder-push.log" 2>&1
+            python scripts/check_capacity_31b_push_v0.py --log "$work/$folder-push.log" --client-exit-code 0
+            echo "LINKED_CLICK_STAGE_PUSHED=$folder"
+            for i in $(seq 1 105); do
+              raw="$(kaggle kernels status "$ref" 2>&1 || true)"
+              case "$raw" in
+                *KernelWorkerStatus.COMPLETE*) state=COMPLETE; break ;;
+                *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*|*KernelWorkerStatus.CANCELLED*) state=ERROR; break ;;
+              esac
+              sleep 16
+            done
+            echo "LINKED_CLICK_STAGE_STATE=$folder,$state"
+            test "$state" = COMPLETE
+          }
+          run_stage build "$BUILDER"
+          run_stage verify "$SCORER"
+          mkdir "$work/result"
+          kaggle kernels output "$SCORER" -p "$work/result" -o >"$work/download.log" 2>&1
+          python - <<'PY'
+          from collections import Counter
+          import json
+          import os
+          from pathlib import Path
+
+          paths = list(Path(os.environ["LINKED_WORK"], "result").rglob("gemma-click-native-controls.json"))
+          assert len(paths) == 1
+          result = json.loads(paths[0].read_text())
+          assert result["cohort_sha256"] == os.environ["COHORT_SHA"]
+          rows = result.pop("rows")
+          frozen = json.loads(Path("docs/evaluation/gemma-linked-click16-2026-11-17.json").read_text())["cases"]
+          assert len(rows) == len(frozen) == result["count"] == 16
+          for row, locked in zip(rows, frozen, strict=True):
+              assert all(row[k] == locked[k] for k in ["pr", "base", "fix"])
+              if row["status"] == "eligible":
+                  assert row["gold"] == {"pass": True, "exit": 0} and row["noop"] == {"pass": False, "exit": 1}
+          assert dict(Counter(row["status"] for row in rows)) == result["counts"]
+          result["paired_models_executed"] = 0
+          result["official_submissions"] = 0
+          print("GEMMA_LINKED_CLICK16_OFFLINE_CONTROLS=" + json.dumps(result, sort_keys=True))
+          PY

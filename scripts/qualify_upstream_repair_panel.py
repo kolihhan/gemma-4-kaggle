@@ -8,6 +8,7 @@ from datetime import datetime
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -72,8 +73,9 @@ def apply(source: Path, row: dict, paths: list[str], directory: Path) -> None:
 
 def pytest_control(directory: Path, paths: list[str]) -> dict:
     report = directory / "control.xml"
+    source_paths = os.pathsep.join((str(directory / "src"), str(directory)))
     environment = {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "HOME": str(directory),
-                   "TMPDIR": str(directory), "PYTHONPATH": str(directory),
+                   "TMPDIR": str(directory), "PYTHONPATH": source_paths,
                    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"}
     command = [sys.executable, "-m", "pytest", "-q", "-o", "addopts=", "--maxfail=1",
                "-p", "anyio.pytest_plugin", "-p", "pytest_mock", "-p", "pytest_timeout",
