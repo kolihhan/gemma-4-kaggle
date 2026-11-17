@@ -3,12 +3,14 @@
 from collections import Counter
 import gzip
 from hashlib import sha256
+from io import BytesIO
 import logging
+import tarfile
 import tempfile
 
 
 BUNDLE_NAME = "linked-click-control-bundle.json"
-SOURCE_WHEELS = ("hatchling==1.33.0", "colorama==0.4.6")
+SOURCE_WHEELS = ("flit-core==3.12.0", "colorama==0.4.6")
 
 
 def digest(path: Path) -> str:
@@ -17,6 +19,22 @@ def digest(path: Path) -> str:
 
 def git(source: Path, *args: str) -> bytes:
     return subprocess.check_output(["git", "-C", str(source), *args], timeout=45)
+
+
+def source_snapshot(source: Path, base: str) -> bytes:
+    archive = BytesIO(git(source, "archive", base))
+    with tarfile.open(fileobj=archive, mode="a") as tar:
+        paths = set(tar.getnames())
+        if "src/click/__init__.py" not in paths or "click" in paths:
+            raise RuntimeError("Unexpected Click source layout")
+        # The scorer places /workspace first. Expose the original src package
+        # there so an installed Click cannot shadow the checkout.
+        link = tarfile.TarInfo("click")
+        link.type = tarfile.SYMTYPE
+        link.linkname = "src/click"
+        link.mode = 0o777
+        tar.addfile(link)
+    return gzip.compress(archive.getvalue(), mtime=0)
 
 
 def build_snapshots() -> None:
@@ -43,7 +61,7 @@ def build_snapshots() -> None:
             files = {part: bundle / f"{key}.{suffix}" for part, suffix in (
                 ("snapshot", "tar.gz"), ("gold", "gold.patch"), ("tests", "test.patch"),
             )}
-            files["snapshot"].write_bytes(gzip.compress(git(source, "archive", row["base"]), mtime=0))
+            files["snapshot"].write_bytes(source_snapshot(source, row["base"]))
             for part, paths in (("gold", row["production"]), ("tests", row["tests"])):
                 patch = git(source, "diff", "--binary", "--no-renames", row["base"], row["fix"], "--", *paths)
                 if not patch.startswith(b"diff --git"):
