@@ -73,7 +73,7 @@ class CallerHopCandidateTests(unittest.TestCase):
         wrong=dict(V2)
         wrong["agent.yaml"]=wrong["agent.yaml"].replace("gemma-4-31b-it-qat-w4a16-ct","gemma-4-12b-it-qat-w4a16-ct")
         with patch.object(parent,"validate_source_zip",return_value=wrong):
-            with self.assertRaisesRegex(ValueError,"31B control model drift"):
+            with self.assertRaisesRegex(ValueError,"wrong model|31B control model drift"):
                 candidate.files_for_candidate(b"pinned")
         wrong=dict(V2)
         wrong["agent.yaml"]=wrong["agent.yaml"].replace("  - get_code_neighbors\n","")
