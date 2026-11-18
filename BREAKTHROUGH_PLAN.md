@@ -17,11 +17,11 @@
 
 ## Submission queue
 - **Completed CPU gate**: [Actions 44285143644](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44285143644) success; exactly one prompt mutation, same 31B, 5 minutes, 60 calls, 80 turns, native tools and sampling. Not real-model correctness.
-- **Official Kaggle attempt launched**: [Actions 44285838454](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44285838454), commit c27e2de. Existing authenticated code-competition submission path; no new development GPU. Fail closed if today's slot unavailable, any other scorer active, or duplicate marker. Attempt is NOT an authenticated competition receipt. Prior to action, preregistered:
+- **Official Kaggle submission ACCEPTED**: [Actions 44285838454](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44285838454), commit c27e2de. Kaggle API and authenticated read-back confirmed **#58505571** with description `caller-hop-31b-one-variable-20261118`, status PENDING and blank score at 2026-11-18 10:32 UTC. CPU archive SHA256 `83945f61352f48f15ca183481cf3c15bab60f64a23a84e855e8fc69e299b71f0`. Authenticated quota was allowed_now=1, active=[], num_today=0 before submitting. No new dev GPU. Do not poll until next user turn. Prior to action, preregistered:
   1. CHANGE = one conditional caller/callee hop for ambiguous wrapper or duplicate function symbols; unchanged model, tools and budget.
   2. EXPECTATION = exploratory ~+1 net resolved Public issue (~+0.017 assuming N=58), with low P of net +4; NOT guaranteed.
   3. DECISION = report numerical score and, if available, per-instance final extracted patch/PASS/FAIL/duration/steps. Do not call one-issue improvement a breakthrough; user sets acceptance threshold; recommend >=2 single-model SE evidence to say breakthrough.
 - Before official action check **authenticated** 1/day quota, active submissions and duplicate receipt *once*, fail-closed on unknown or unavailable; never restart pending/scoring or overwrite the best ZIP; use existing Kaggle submission API path and capture authoritative submission ID. Score run is allowed; new development GPU pilot is NOT allowed.
 - At no point treat CPU tests, tool-call counts, patch existence, COMPLETE with blank score, or mere model trace as issue-resolution improvement.
 
-[事实] New caller-hop submission ID: **not yet verified** at the time of this plan update; no new public result confirmed. Best verified result remains 0.18.
+[事实] New caller-hop submission ID: **#58505571**, authenticated in Actions log; last observed status PENDING and score blank. New competitive improvement **not yet established**. Best verified result remains 0.18.
