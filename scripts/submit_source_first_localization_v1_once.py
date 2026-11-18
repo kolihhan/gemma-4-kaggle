@@ -141,5 +141,5 @@ def submit():
 if __name__ == "__main__":
     modes = {"quota": quota, "prepare": prepare, "submit": submit}
     if len(sys.argv) != 2 or sys.argv[1] not in modes:
-        raise SystemExit("usage: python -m scripts.submit_source_first_v1_once quota|prepare|submit")
+        raise SystemExit("usage: python -m scripts.submit_source_first_localization_v1_once quota|prepare|submit")
     modes[sys.argv[1]]()
