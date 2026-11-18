@@ -1,0 +1,41 @@
+name: Gemma 58505571 one-shot official score read 20261118
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-58505571-one-shot-score-read-20261118.yml]
+permissions: {contents: read}
+jobs:
+  read_once:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: One authenticated read-only official ledger snapshot, zero GPU or submit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import csv,io,json,subprocess
+          p=subprocess.run(['kaggle','competitions','submissions','gemma-4-developer-agent','-v','-q'],capture_output=True,text=True,timeout=90)
+          if p.returncode:raise SystemExit('GEMMA_ONCE_AUTHENTICATED_LEDGER_READ_FAILED')
+          entries=list(csv.DictReader(io.StringIO(p.stdout.lstrip('\ufeff'))))
+          out={}
+          for ref in ('58505571','58183466'):
+              rows=[r for r in entries if str(r.get('ref',''))==ref]
+              if len(rows)!=1:raise SystemExit('GEMMA_ONCE_REF_NOT_UNIQUE_OR_MISSING_'+ref)
+              row=rows[0]
+              out[ref]=dict(ref=ref,status=str(row.get('status','')),
+                publicScore=str(row.get('publicScore','')),
+                description=str(row.get('description',''))[:120])
+          print('GEMMA_ONCE_VERIFIED_OFFICIAL_SNAPSHOT='+json.dumps(out,sort_keys=True),flush=True)
+          if out['58505571']['publicScore'] and out['58183466']['publicScore']:
+              print('GEMMA_ONCE_DELTA='+str(round(float(out['58505571']['publicScore'])-float(out['58183466']['publicScore']),6)),flush=True)
+          else:
+              print('GEMMA_ONCE_NOT_YET_SCORED_NO_REPOLL=TRUE',flush=True)
+          print('GEMMA_NO_GPU_NO_SUBMIT_NO_POLL=TRUE',flush=True)
+          PY
