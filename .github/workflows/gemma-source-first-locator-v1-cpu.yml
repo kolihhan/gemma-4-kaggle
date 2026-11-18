@@ -21,6 +21,9 @@ jobs:
           sparse-checkout-cone-mode: false
           sparse-checkout: |
             /scripts/build_source_first_localization_v1.py
+            /scripts/submit_source_first_localization_v1_once.py
+            /scripts/submit_existing_test_retrieval_official_once_20261117.py
+            /scripts/submit_v2_toolcap60_official_once.py
             /scripts/build_toolcap60_timeout_recovery.py
             /scripts/build_v2_toolcap_submission.py
             /scripts/prepare_public_budgetfit_v2.py
@@ -31,7 +34,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m py_compile scripts/build_source_first_localization_v1.py
+          python -m py_compile scripts/build_source_first_localization_v1.py scripts/submit_source_first_localization_v1_once.py
           python -m unittest discover -s tests -p test_build_source_first_localization_v1.py -v
       - name: Pin original scored 31B source, enforce 0.18 budget and test one-variable real archive
         shell: bash
