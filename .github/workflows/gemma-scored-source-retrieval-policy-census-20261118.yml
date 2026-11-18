@@ -1,0 +1,51 @@
+name: Gemma 31B scored-source retrieval policy census CPU
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-scored-source-retrieval-policy-census-20261118.yml]
+permissions: {contents: read}
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false,sparse-checkout-cone-mode: false,sparse-checkout: |
+          /scripts/prepare_public_budgetfit_v2.py
+          /scripts/build_v2_toolcap_submission.py
+          /scripts/build_toolcap60_timeout_recovery.py
+          }
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install -q kaggle==2.2.5 six==1.17.0
+      - name: Exact scored control original prompt has these source-first rules?
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          mkdir -p /tmp/gemma-policy-source
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p /tmp/gemma-policy-source -o >/dev/null
+          python - <<'PY'
+          import hashlib,re,json
+          from pathlib import Path
+          from scripts.prepare_public_budgetfit_v2 import validate_source_zip
+          from scripts.build_toolcap60_timeout_recovery import files_for_candidate
+          s=(Path('/tmp/gemma-policy-source')/'submission.zip').read_bytes()
+          original=validate_source_zip(s)
+          p=files_for_candidate(s)['prompts/system.md']
+          checks={
+            'source_exclusion_in_rg':bool(re.search(r'rg[^\\n]{0,250}(?:!\*\*/tests|!tests/|!test_)',p,re.I)),
+            'test_first_as_candidate':bool(re.search(r'(?:first search|start with)[^\\n]{0,100}(?:test|tests)',p,re.I)),
+            'graph_suggested':bool(re.search(r'get_code_neighbors|get_code_subgraph|search_similar_code',p)),
+            'rg_present':'rg ' in p or 'ripgrep' in p.lower(),
+            'symbol_lookup_before_graph':bool(re.search(r'(?:graph|code_neighbors)[^\\n]{0,100}(?:only after|only if|known)',p,re.I)),
+            'source_text_sha256':hashlib.sha256(p.encode()).hexdigest(),
+            'num_lines':len(p.splitlines()),
+            'model':'gemma-4-31b-it-qat-w4a16-ct',
+            'budget':'5min 60 calls 80 turns'
+          }
+          print('GEMMA_SCORED_SOURCE_RETRIEVAL_POLICY_CENSUS='+json.dumps(checks,sort_keys=True),flush=True)
+          PY
+          rm -rf /tmp/gemma-policy-source
