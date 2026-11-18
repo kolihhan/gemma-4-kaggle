@@ -1,0 +1,71 @@
+name: Gemma 31B Source-first Official Once (Dormant Gated)
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths:
+      - .github/workflows/gemma-source-first-official-once.yml
+permissions: {contents: read}
+concurrency: {group: gemma-source-first-official-once, cancel-in-progress: false}
+jobs:
+  one_official_scoring_attempt:
+    if: "${{ github.event.head_commit.message == 'GO_GEMMA_SOURCE_FIRST_OFFICIAL_20261119' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 58
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Pre-registered 31B single-variable hypothesis and CPU gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          echo 'GEMMA_CHANGE=source_file_first_lexical_search_exclude_tests_graph_only_when_grounded'
+          echo 'GEMMA_FIXED_MODEL=gemma-4-31b-it-qat-w4a16-ct; 5min_60calls_80turns'
+          echo 'GEMMA_EXPECTED_DELTA=+0.017_IF_1_NET_EXTRA_PASS; NOT_GUARANTEED'
+          echo 'GEMMA_KILL=Public_LE_0.18_OR_BLANK_OR_NO_STRATEGY_UPTAKE'
+          python -m py_compile scripts/build_source_first_localization_v1.py scripts/submit_source_first_localization_v1_once.py
+          python -m unittest -v tests.test_build_source_first_localization_v1
+      - name: Authenticate and verify no active grader or consumed daily submission slot
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0 nbformat==5.10.4
+          python - <<'PY'
+          from scripts.submit_source_first_localization_v1_once import quota
+          if quota() is not True:
+              raise RuntimeError('REFUSE_SOURCE_FIRST_DUPLICATE_QUOTA_ACTIVE_GRADER')
+          PY
+      - name: Install official original CPU native compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gemma-source-first-official-wheels
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel" -p /tmp/gemma-source-first-official-wheels --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check /tmp/gemma-source-first-official-wheels/*.whl
+      - name: Build pinned byte-exact 31B ZIP and compile in CPU only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_source_first_localization_v1_once prepare
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          p=Path('/tmp/gemma4-source-first-official-once/candidate.zip')
+          expected='dda1409a63870c1a5eb81f5b59302d66d0bb3260db74984819607732eacabd5c'
+          assert hashlib.sha256(p.read_bytes()).hexdigest()==expected
+          print('GEMMA_SOURCE_FIRST_ARCHIVE_PINNED=TRUE')
+          PY
+      - name: Recheck quota active and send at most ONE authenticated official scorer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_source_first_localization_v1_once submit
+          echo GEMMA_SOURCE_FIRST_NEW_KAGGLE_ID_REQUIRES_LEDGER_RECEIPT=TRUE
+# Deliberately dormant. On creation this workflow skips all scoring jobs.
+# A future explicit owner go + genuinely available Kaggle day is required.
