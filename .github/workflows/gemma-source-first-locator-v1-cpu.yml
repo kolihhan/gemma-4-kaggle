@@ -1,0 +1,64 @@
+name: Gemma 31B Source-first Locator CPU Gate One Shot
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths:
+      - .github/workflows/gemma-source-first-locator-v1-cpu.yml
+permissions: {contents: read}
+concurrency:
+  group: gemma-source-first-locator-cpu-20261118
+  cancel-in-progress: false
+jobs:
+  policy_gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/build_source_first_localization_v1.py
+            /scripts/build_toolcap60_timeout_recovery.py
+            /scripts/build_v2_toolcap_submission.py
+            /scripts/prepare_public_budgetfit_v2.py
+            /tests/test_build_source_first_localization_v1.py
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Five local fixed-model contract tests and syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/build_source_first_localization_v1.py
+          python -m unittest discover -s tests -p test_build_source_first_localization_v1.py -v
+      - name: Pin original scored 31B source, enforce 0.18 budget and test one-variable real archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/gemma-source-first-original
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p /tmp/gemma-source-first-original -o >/dev/null
+          python - <<'PY'
+          import hashlib,io,json,zipfile
+          from pathlib import Path
+          from scripts.prepare_public_budgetfit_v2 import validate_source_zip
+          from scripts.build_toolcap60_timeout_recovery import build as control_build
+          from scripts.build_source_first_localization_v1 import build as treatment_build,summary
+          raw=(Path('/tmp/gemma-source-first-original')/'submission.zip').read_bytes()
+          validate_source_zip(raw)
+          baseline=control_build(raw)
+          ctrl_sha=hashlib.sha256(baseline).hexdigest()
+          assert ctrl_sha=='ff08c10240a38e151a2ea1d0478e999ee5d2f437d2dad5571d912cf12859922b',ctrl_sha
+          treatment=treatment_build(raw)
+          with zipfile.ZipFile(io.BytesIO(baseline)) as a,zipfile.ZipFile(io.BytesIO(treatment)) as b:
+              assert a.namelist()==b.namelist()
+              assert [k for k in a.namelist() if a.read(k)!=b.read(k)]==['prompts/system.md']
+          print('GEMMA_SOURCE_FIRST_PINNED_018_CONTROL_SHA='+ctrl_sha,flush=True)
+          print('GEMMA_SOURCE_FIRST_REAL_ARCHIVE_CONTRACT='+json.dumps(summary(raw),sort_keys=True),flush=True)
+          print('GEMMA_SOURCE_FIRST_OFFICIAL_SUBMISSION=FALSE',flush=True)
+          print('GEMMA_SOURCE_FIRST_GPU_INFERENCE=FALSE',flush=True)
+          PY
+          rm -rf /tmp/gemma-source-first-original
