@@ -12,11 +12,13 @@ jobs:
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-        with: {persist-credentials: false,sparse-checkout-cone-mode: false,sparse-checkout: |
-          /scripts/prepare_public_budgetfit_v2.py
-          /scripts/build_v2_toolcap_submission.py
-          /scripts/build_toolcap60_timeout_recovery.py
-          }
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/prepare_public_budgetfit_v2.py
+            /scripts/build_v2_toolcap_submission.py
+            /scripts/build_toolcap60_timeout_recovery.py
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
       - run: python -m pip install -q kaggle==2.2.5 six==1.17.0
