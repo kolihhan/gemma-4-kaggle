@@ -193,3 +193,59 @@ jobs:
 # Authenticated status check for existing official receipt 58469374 only; no rerun, no new submission.
 # Latest authenticated receipt-only check; no new Kaggle submission, CPU only.
 # Read-only receipt verification 2026-11-17 22:39 MYT; no resubmission.
+
+  caller_hop_31b_once:
+    if: "${{ github.event.head_commit.message == 'GO_GEMMA_CALLER_HOP_OFFICIAL_20261118' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 58
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Preregister single hypothetical caller-hop gain, compile and CPU tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          echo 'GEMMA_CHANGE=one_conditional_graph_hop_for_ambiguous_wrappers'
+          echo 'GEMMA_FIXED_MODEL=gemma-4-31b-it-qat-w4a16-ct; FIXED_BUDGET=5min_60calls_80turns'
+          echo 'GEMMA_EXPECTED_DELTA=+0.017_ONE_NET_PASS_HYPOTHESIS_NOT_GUARANTEE'
+          echo 'GEMMA_KILL=Public_LE_0.18_OR_BLANK_OR_GRAPH_NO_UPTAKE'
+          python -m py_compile scripts/build_caller_hop_v1.py scripts/submit_caller_hop_v1_once.py
+          python -m unittest -v tests.test_build_caller_hop_v1
+      - name: Single authenticated Kaggle quota and active-scoring guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0 nbformat==5.10.4
+          python - <<'PY'
+          from scripts.submit_caller_hop_v1_once import quota
+          if quota() is not True:
+              raise RuntimeError('DUPLICATE_CALLER_HOP_SUBMISSION_STOP')
+          PY
+      - name: Install pinned official native CPU validator
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gemma-caller-hop-official-wheels
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel" -p /tmp/gemma-caller-hop-official-wheels --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check /tmp/gemma-caller-hop-official-wheels/*.whl
+      - name: Build and validate exactly one 31B prompt-only ZIP on CPU
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_caller_hop_v1_once prepare
+          echo 'GEMMA_CALLER_HOP_OFFICIAL_ARCHIVE_READY=TRUE'
+      - name: Recheck active grader and submit one candidate through existing Kaggle route
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_caller_hop_v1_once submit
+          echo 'GEMMA_CALLER_HOP_OFFICIAL_SUBMISSION_ATTEMPT_TERMINAL=TRUE'
+# Caller-hop action is one gated official scoring attempt, not a development GPU test.
+# No Kaggle PENDING score polling; only one receipt lookup to identify submission ID.
