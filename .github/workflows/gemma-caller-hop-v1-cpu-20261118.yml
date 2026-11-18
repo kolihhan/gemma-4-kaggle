@@ -1,0 +1,34 @@
+name: Gemma 31B one-hop caller localization CPU gate
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths:
+      - .github/workflows/gemma-caller-hop-v1-cpu-20261118.yml
+      - scripts/build_caller_hop_v1.py
+      - tests/test_build_caller_hop_v1.py
+permissions: {contents: read}
+jobs:
+  cpu_gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/build_caller_hop_v1.py
+            /scripts/build_toolcap60_timeout_recovery.py
+            /scripts/build_v2_toolcap_submission.py
+            /scripts/prepare_public_budgetfit_v2.py
+            /tests/test_build_caller_hop_v1.py
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Run 31B prompt-only frozen-control checks
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_build_caller_hop_v1.py' -v
+          python -m py_compile scripts/build_caller_hop_v1.py
+          echo GEMMA_CALLER_HOP_CPU_CONTRACT_PASS
+          echo GEMMA_REAL_31B_UPTAKE=UNTESTED
+          echo GEMMA_OFFICIAL_PASS_GAIN=UNTESTED
