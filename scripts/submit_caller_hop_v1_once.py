@@ -90,13 +90,14 @@ def prepare():
     import nbformat
     encoded = base64.b64encode(candidate).decode("ascii")
     code = (
-        "import base64,hashlib\\nfrom pathlib import Path\\n"
-        + f"data=base64.b64decode({encoded!r},validate=True)\\n"
-        + f"want={digest!r}\\n"
-        + "assert hashlib.sha256(data).hexdigest()==want\\n"
-        + "Path('/kaggle/working/submission.zip').write_bytes(data)\\n"
-        + "print('GEMMA_CALLER_HOP_BUILDER_HASH='+want)\\n"
+        "import base64,hashlib\nfrom pathlib import Path\n"
+        + f"data=base64.b64decode({encoded!r},validate=True)\n"
+        + f"want={digest!r}\n"
+        + "assert hashlib.sha256(data).hexdigest()==want\n"
+        + "Path('/kaggle/working/submission.zip').write_bytes(data)\n"
+        + "print('GEMMA_CALLER_HOP_BUILDER_HASH='+want)\n"
     )
+    compile(code, 'caller_hop_private_cpu_builder.py', 'exec')
     nb = nbformat.v4.new_notebook(cells=[
         nbformat.v4.new_markdown_cell(
             "31B one-hop conditional caller localization; pinned Toolcap60 scored control; "
