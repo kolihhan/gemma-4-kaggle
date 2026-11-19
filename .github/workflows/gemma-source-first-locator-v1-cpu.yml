@@ -29,6 +29,7 @@ jobs:
             /scripts/prepare_public_budgetfit_v2.py
             /tests/test_build_source_first_localization_v1.py
             /scripts/gemma31_uploaded_coder_adapter_one_variable_cpu.py
+            /scripts/gemma31_lora_private_cpu_builder_20261119.py
             /tests/test_gemma31_uploaded_coder_adapter_one_variable_cpu.py
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
@@ -36,7 +37,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m py_compile scripts/build_source_first_localization_v1.py scripts/submit_source_first_localization_v1_once.py scripts/gemma31_uploaded_coder_adapter_one_variable_cpu.py
+          python -m py_compile scripts/build_source_first_localization_v1.py scripts/submit_source_first_localization_v1_once.py scripts/gemma31_uploaded_coder_adapter_one_variable_cpu.py scripts/gemma31_lora_private_cpu_builder_20261119.py
           python -m unittest discover -s tests -p test_build_source_first_localization_v1.py -v
           python -m unittest discover -s tests -p test_gemma31_uploaded_coder_adapter_one_variable_cpu.py -v
       - name: Pin original scored 31B source, enforce 0.18 budget and test one-variable real archive
@@ -121,6 +122,7 @@ jobs:
           from scripts.prepare_public_budgetfit_v2 import validate_source_zip
           from scripts.build_toolcap60_timeout_recovery import build as build_control
           from scripts.gemma31_uploaded_coder_adapter_one_variable_cpu import package,compile_adapter_without_inference
+          from scripts.gemma31_lora_private_cpu_builder_20261119 import render as render_private_builder
           with tempfile.TemporaryDirectory(prefix='gemma-31b-lora-compiled-') as d:
               a=Path(d)/'control'; b=Path(d)/'adapter'
               a.mkdir();b.mkdir()
@@ -139,9 +141,54 @@ jobs:
                   raise RuntimeError('NO_UNIQUE_REAL_ADAPTER_FOR_COMPILER')
               treatment,meta=package(scored,match[0].parent)
               compile_adapter_without_inference(treatment)
+              builder=render_private_builder(scored,match[0].parent,Path('/tmp/gemma-31b-real-lora-private-cpu-builder'))
+              assert builder['candidate_zip_sha256']==meta['candidate_zip_sha256']
+              print('GEMMA_REAL_LORA_PRIVATE_CPU_BUILDER_PREPARED='+builder['kernel'],flush=True)
               print('GEMMA_REAL_LORA_OFFICIAL_CPU_COMPILE=PASS',flush=True)
               print('GEMMA_REAL_LORA_PINNED_ZIP_SHA='+meta['candidate_zip_sha256'],flush=True)
               print('GEMMA_REAL_LORA_EXPECTED_PILOT=UNMEASURED',flush=True)
           print('GEMMA_REAL_LORA_GPU_SCORING_SUBMISSION_AND_PUBLIC_ARTIFACT=NONE',flush=True)
           PY
           rm -rf /tmp/gemma-31b-real-adapter-wheelhouse
+
+      - name: Stage and verify private Kaggle CPU-built LoRA ZIP exactly once (no scoring)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,subprocess,tempfile,time
+          from pathlib import Path
+          kernel='kolihhan/gemma31-018-coder-lora-cpu-nov19'
+          code_dir='/tmp/gemma-31b-real-lora-private-cpu-builder'
+          expected='deccb0f8cecc69bc4b1eb81db73b208fb84d45571730fa43b033f21c27885b5e'
+          probe=subprocess.run(['kaggle','kernels','status',kernel],
+                               capture_output=True,text=True,timeout=50)
+          if probe.returncode==0 and 'KernelWorkerStatus.' in probe.stdout:
+              print('GEMMA_PRIVATE_CPU_BUILDER_ALREADY_EXISTS_NO_OVERWRITE',flush=True)
+              raise SystemExit(0)
+          subprocess.run(['kaggle','kernels','push','-p',code_dir,'-t','600'],
+                         check=True,stdout=subprocess.DEVNULL,timeout=220)
+          print('GEMMA_PRIVATE_CPU_BUILDER_PUSH_ACCEPTED='+kernel,flush=True)
+          for _ in range(36):
+              p=subprocess.run(['kaggle','kernels','status',kernel],
+                      capture_output=True,text=True,timeout=55,check=True)
+              status=p.stdout+p.stderr
+              if 'KernelWorkerStatus.COMPLETE' in status:
+                  break
+              if any(x in status for x in ('KernelWorkerStatus.ERROR','KernelWorkerStatus.FAILED','KernelWorkerStatus.CANCELLED')):
+                  raise RuntimeError('PRIVATE_CPU_BUILDER_FAILED_NO_RESUBMISSION')
+              time.sleep(8)
+          else:
+              raise RuntimeError('PRIVATE_CPU_BUILDER_NOT_TERMINAL_NO_RETRY')
+          with tempfile.TemporaryDirectory(prefix='gemma-lora-private-output-') as d:
+              subprocess.run(['kaggle','kernels','output',kernel+'/1','-p',d,'-o'],
+                             check=True,stdout=subprocess.DEVNULL,timeout=160)
+              blob=(Path(d)/'submission.zip').read_bytes()
+              digest=hashlib.sha256(blob).hexdigest()
+              if digest!=expected:
+                  raise ValueError('PRIVATE_CPU_BUILDER_OUTPUT_SHA_DRIFT:'+digest)
+              print('GEMMA_PRIVATE_CPU_BUILDER_REMOTE_SHA_VERIFIED='+digest,flush=True)
+              print('GEMMA_PRIVATE_CPU_BUILDER_BYTES='+str(len(blob)),flush=True)
+              print('GEMMA_PRIVATE_CPU_BUILDER_URL=https://www.kaggle.com/code/'+kernel,flush=True)
+          print('GEMMA_PRIVATE_CPU_BUILDER_NO_GPU_NO_COMPETITION_SUBMISSION=TRUE',flush=True)
+          PY
