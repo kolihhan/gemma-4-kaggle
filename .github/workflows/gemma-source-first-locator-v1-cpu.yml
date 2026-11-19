@@ -4,6 +4,7 @@ on:
     branches: [research/dual-agent-recovery-v0-20261108]
     paths:
       - .github/workflows/gemma-source-first-locator-v1-cpu.yml
+      - scripts/gemma31_lora_private_cpu_builder_20261119.py
 permissions: {contents: read}
 concurrency:
   group: gemma-source-first-locator-cpu-20261118
