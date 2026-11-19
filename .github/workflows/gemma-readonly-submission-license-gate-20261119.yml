@@ -63,8 +63,22 @@ jobs:
                           'keys':names,'values':{k:blob.get(k) for k in names
                              if 'source' not in k.lower()},
                           'license_proven':any('licen' in k.lower() and blob.get(k)
-                             for k in names)},sort_keys=True),flush=True)
+                             for k in names),
+                          'competition_sources':blob.get('competition_sources'),
+                          'kernel_sources':blob.get('kernel_sources')},sort_keys=True),flush=True)
                   else:
                       print('GEMMA_ADAPTER_PUBLIC_NOTEBOOK_METADATA_NOT_FOUND',flush=True)
+          import requests
+          try:
+              resp=requests.get('https://www.kaggle.com/code/ayush04barai/lora-step-2',timeout=20,
+                                headers={'User-Agent':'Mozilla/5.0'})
+              body=resp.text.lower()
+              result={'http_status':resp.status_code,
+                      'page_licenses_apache2':('apache 2.0 open source license' in body),
+                      'contains_notebook_title':('lora-step-2' in body),
+                      'content_length':len(body)}
+          except Exception as exc:
+              result={'error_type':type(exc).__name__}
+          print('GEMMA_UPSTREAM_PUBLIC_HTML_LICENSE='+json.dumps(result,sort_keys=True),flush=True)
           print('GEMMA_READONLY_AUDIT_NO_GPU_NO_TRAINING_NO_SCORER_SUBMISSION=TRUE',flush=True)
           PY
