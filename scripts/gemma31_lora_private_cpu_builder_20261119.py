@@ -70,7 +70,7 @@ def render(scored_zip:bytes, adapter_dir:Path, target:Path)->dict:
     (target/CODE_FILE).write_text(code,encoding="utf8")
     meta={
         "id":KERNEL,
-        "title":"Gemma 31B scored 0.18 matched coder LoRA CPU builder",
+        "title":KERNEL.split("/",1)[1],
         "code_file":CODE_FILE,
         "language":"python",
         "kernel_type":"script",
