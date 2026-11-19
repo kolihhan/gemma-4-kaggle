@@ -1,0 +1,70 @@
+name: Gemma one-shot read-only submission quota and public adapter license gate
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths:
+      - .github/workflows/gemma-readonly-submission-license-gate-20261119.yml
+permissions: {contents: read}
+jobs:
+  quota_and_provenance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read authenticated competition quota, receipts and public notebook metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import csv,io,json,subprocess,tempfile
+          from pathlib import Path
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          api=KaggleApi()
+          api.authenticate()
+          limits=api.competition_get_submission_limits('gemma-4-developer-agent')
+          raw=subprocess.run(['kaggle','competitions','submissions','gemma-4-developer-agent','-v','-q'],
+                             capture_output=True,text=True,check=True,timeout=90).stdout.lstrip('\ufeff')
+          rows=list(csv.DictReader(io.StringIO(raw)))
+          active=[{k:r.get(k) for k in ('ref','status','description')}
+                  for r in rows if str(r.get('status') or '').upper().split('.')[-1]
+                  in ('PENDING','RUNNING','QUEUED','SCORING','EVALUATING')]
+          valid=[]
+          for r in rows:
+              try:
+                  score=float(r.get('publicScore') or '')
+              except ValueError:
+                  continue
+              valid.append({'ref':r.get('ref'),'publicScore':score,
+                            'status':r.get('status'),'date':r.get('date')})
+          valid.sort(key=lambda r:r['publicScore'],reverse=True)
+          print('GEMMA_OFFICIAL_READONLY_QUOTA='+json.dumps({
+              'allowed_now':limits.num_allowed_now,'num_today':limits.num_today,
+              'limited_by_total':limits.limited_by_total,'active':active[:15],
+              'top_scored':valid[:8],'total_ledger_rows':len(rows)},sort_keys=True),flush=True)
+          with tempfile.TemporaryDirectory(prefix='gemma-lora-license-census-') as d:
+              pull=subprocess.run(['kaggle','kernels','pull','ayush04barai/lora-step-2','-p',d,'-m'],
+                                  capture_output=True,text=True,timeout=90)
+              if pull.returncode!=0:
+                  print('GEMMA_ADAPTER_NOTEBOOK_METADATA_ACCESS=UNAVAILABLE',flush=True)
+              else:
+                  m=Path(d)/'kernel-metadata.json'
+                  if m.is_file():
+                      blob=json.loads(m.read_text())
+                      names=[k for k in blob.keys() if 'licen' in k.lower() or
+                             'owner' in k.lower() or 'source' in k.lower() or 'is_private' in k]
+                      print('GEMMA_ADAPTER_PUBLIC_NOTEBOOK_LICENSE_FIELDS='+json.dumps({
+                          'keys':names,'values':{k:blob.get(k) for k in names
+                             if 'source' not in k.lower()},
+                          'license_proven':any('licen' in k.lower() and blob.get(k)
+                             for k in names)},sort_keys=True),flush=True)
+                  else:
+                      print('GEMMA_ADAPTER_PUBLIC_NOTEBOOK_METADATA_NOT_FOUND',flush=True)
+          print('GEMMA_READONLY_AUDIT_NO_GPU_NO_TRAINING_NO_SCORER_SUBMISSION=TRUE',flush=True)
+          PY
