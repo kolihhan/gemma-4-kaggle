@@ -1,0 +1,30 @@
+name: Gemma 31B Real Coder LoRA official scorer exactly once
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths:
+      - .github/workflows/gemma-real-coder-lora-official-once-20261119.yml
+permissions: {contents: read}
+concurrency: {group: gemma-real-coder-lora-one-official-20261119, cancel-in-progress: false}
+jobs:
+  one_official_submission:
+    if: "${{ github.event.head_commit.message == 'GO_GEMMA_REAL_31B_LORA_OFFICIAL_20261119' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Authoritative one-shot preflight and official score request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m py_compile scripts/submit_gemma_real_coder_lora_once_20261119.py
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python -m scripts.submit_gemma_real_coder_lora_once_20261119
+# If rerun, duplicate marker or unavailable quota blocks a second competition submission.
+# Original 0.18 scored control and previously verified private CPU builder are immutable.
