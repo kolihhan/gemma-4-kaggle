@@ -131,6 +131,54 @@ def package(scored_zip: bytes, adapter_dir: Path) -> tuple[bytes,dict]:
         **meta
     }
 
+
+def compile_adapter_without_inference(candidate: bytes) -> dict:
+    """Validate actual LoRA router with official ADK, no model or tool inference.
+
+    Bare-model compile assertions must not reject the correct openai/main_lora route.
+    """
+    from tempfile import TemporaryDirectory
+    from adk_submission import validate_directory, compile_submission, ModelRegistry, ToolRegistry
+    from google.adk.models.base_llm import BaseLlm
+    from swegemma.config import build_submission_limits
+
+    class NoInferenceModel(BaseLlm):
+        async def generate_content_async(self, *args, **kwargs):
+            raise AssertionError("CPU_COMPILER_MUST_NOT_RUN_MODEL")
+            yield
+
+    natives=("run_command","read_file","edit_file","write_file","get_status",
+             "submit_patch","get_code_neighbors","search_similar_code","get_code_subgraph")
+    with TemporaryDirectory(prefix="gemma31-lora-no-inference-") as root:
+        target=Path(root)
+        with zipfile.ZipFile(io.BytesIO(candidate)) as z:
+            if z.testzip() is not None or set(z.namelist()) != FILES | {
+                PREFIX+"adapter_config.json",PREFIX+"adapter_model.safetensors"}:
+                raise ValueError("STOP_INVALID_REAL_ADAPTER_ZIP_MEMBERS")
+            z.extractall(target)
+        limits,_=build_submission_limits()
+        validate_directory(target,limits=limits)
+        models=ModelRegistry()
+        models.register(MODEL,NoInferenceModel(model=MODEL))
+        tools=ToolRegistry()
+        for name in natives:
+            def no_tool_call(*args,**kwargs):
+                raise AssertionError("CPU_COMPILER_MUST_NOT_USE_TOOLS")
+            tools.register(name,no_tool_call)
+        agent=compile_submission(submission_dir=target,model_registry=models,tool_registry=tools)
+        route=str(getattr(getattr(agent,"model",None),"model",""))
+        print("GEMMA_31B_CPU_COMPILED_MODEL_ROUTE="+route,flush=True)
+        if route!="openai/main_lora":
+            raise ValueError("STOP_ADAPTER_NOT_SELECTED_BY_OFFICIAL_ADK")
+        if len(agent.tools)!=len(natives):
+            raise ValueError("STOP_NATIVE_TOOLS_DRIFT")
+    return {"official_adk_cpu_compile":True,
+            "root_model_route":"openai/main_lora",
+            "unchanged_base":MODEL,
+            "native_tools":len(natives),
+            "model_inference":False,
+            "official_submission":False}
+
 def main() -> None:
     p=argparse.ArgumentParser()
     p.add_argument("--scored-zip",type=Path,required=True)
