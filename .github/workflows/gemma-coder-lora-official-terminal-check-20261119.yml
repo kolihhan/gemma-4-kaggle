@@ -1,0 +1,38 @@
+name: Gemma Coder LoRA one-time official terminal receipt read
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-coder-lora-official-terminal-check-20261119.yml]
+permissions: {contents: read}
+jobs:
+  receipt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Check only the exact submitted scorer receipt without modification
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import csv,io,json,subprocess
+          cmd=['kaggle','competitions','submissions','gemma-4-developer-agent','-v','-q']
+          raw=subprocess.run(cmd,capture_output=True,text=True,check=True,timeout=80).stdout.lstrip('\ufeff')
+          rows=list(csv.DictReader(io.StringIO(raw)))
+          ref='58558350'
+          matching=[r for r in rows if r.get('ref')==ref]
+          if len(matching)!=1:
+              raise RuntimeError('OFFICIAL_RECEIPT_MISSING_OR_DUPLICATED')
+          r=matching[0]
+          if r.get('description')!='gemma31-real-coder-lora-one-variable-20261119':
+              raise RuntimeError('OFFICIAL_RECEIPT_MARKER_MISMATCH')
+          print('GEMMA_58558350_AUTHENTICATED_LEDGER='+json.dumps({
+              k:r.get(k) for k in ('ref','date','status','publicScore','privateScore','description')
+          },sort_keys=True),flush=True)
+          print('GEMMA_ONE_SHOT_READ_ONLY_CHECK_NO_SCORER_SUBMIT=TRUE',flush=True)
+          PY
