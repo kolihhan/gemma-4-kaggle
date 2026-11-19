@@ -1,3 +1,13 @@
+## 2026-11-19 19:48 MYT — Official Kaggle real 31B Coder-LoRA candidate accepted, score PENDING
+
+- **Actual authenticated Kaggle competition code submission ID `58558350`**, marker `gemma31-real-coder-lora-one-variable-20261119`, accepted 2026-11-19 11:48:01 UTC. [One-time GitHub Actions #44517965803](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44517965803) terminal **SUCCESS** and contains official API `{"ref": 58558350}` plus independent authenticated ledger `SubmissionStatus.PENDING`, empty Public score at 11:48:03 UTC. **Not a gain or completed score.** No resubmission or repeated polling.
+- Real third-party Coder LoRA from **public** `ayush04barai/lora-step-2`, metadata `is_private=false`, competition source `gemma-4-developer-agent`; public competition-code sharing provisions provide open-source license basis. **No independent specific license statement for adapter weights**, which is a residual reuse/licensing risk, not claimed otherwise.
+- Official submitted ZIP from private CPU builder `kolihhan/gemma31-018-coder-lora-cpu-nov19/1`: SHA256 **`deccb0f8cecc69bc4b1eb81db73b208fb84d45571730fa43b033f21c27885b5e`**. Source scored 0.18 control SHA256 `ff08c10240a38e151a2ea1d0478e999ee5d2f437d2dad5571d912cf12859922b`. Only root `adapter: main_lora` and adapter config/weights differ; base Gemma 4 31B, original champion prompt, sampling, 5-min/60-tools/80-turns and 9 native tools unchanged.
+- Preflight ADK CPU compiler route `gemma-4-31b-it-qat-w4a16-ct:main_lora`, 10 CPU tests PASS, private Kaggle builder `submission.zip` re-downloaded byte-identical. **No local model GPU inference, no model-resolved-task evidence, one official scorer entry**. Do not claim the third-party training loss or 31B adapter activity means patch success. Prior best Public remains **0.18 (#58183466)** until new official COMPLETE score.
+- Official quota immediately before submit `allowed_now=1`, `num_today=0`, no active graders; one slot consumed by this submission. No more submission of this candidate.
+
+---
+
 ## 2026-11-19 — Real third-party 31B coder LoRA recovered; exact matched private CPU ZIP VERIFIED
 
 - **No new Kaggle competition submission, no scored gain. Authenticated previous best Public remains 0.18 (#58183466).** Real adapter is an attributed external asset from `ayush04barai/lora-step-2`; source Notebook training numbers (217 examples, 54 updates, held-out loss .015→.0035) are only its historic printed output, not independently replicated repair efficacy or a license grant.
