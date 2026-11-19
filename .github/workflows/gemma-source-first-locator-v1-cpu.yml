@@ -69,5 +69,39 @@ jobs:
           print('GEMMA_SOURCE_FIRST_REAL_ARCHIVE_CONTRACT='+json.dumps(summary(raw),sort_keys=True),flush=True)
           print('GEMMA_SOURCE_FIRST_OFFICIAL_SUBMISSION=FALSE',flush=True)
           print('GEMMA_SOURCE_FIRST_GPU_INFERENCE=FALSE',flush=True)
+          # Try the user-supplied Notebook's genuine upstream adapter source.
+          # This is authenticated read-only CPU handling; no license assertion,
+          # no public upload, no submission, and no hidden task material.
+          import subprocess, tempfile
+          from scripts.gemma31_uploaded_coder_adapter_one_variable_cpu import package as add_adapter
+          with tempfile.TemporaryDirectory(prefix='gemma-owner-adapter-access-') as d:
+              source='ayush04barai/lora-step-2'
+              try:
+                  fetch=subprocess.run(
+                      ['kaggle','kernels','output',source,'-p',d,'-o'],
+                      capture_output=True,text=True,timeout=180)
+              except subprocess.TimeoutExpired:
+                  print('GEMMA_EXTERNAL_ADAPTER_STATUS=UNAVAILABLE_TIMEOUT_NO_RETRY',flush=True)
+              else:
+                  if fetch.returncode:
+                      print('GEMMA_EXTERNAL_ADAPTER_STATUS=NOT_ACCESSIBLE_OR_NOT_PUBLISHED',flush=True)
+                  else:
+                      from pathlib import Path
+                      candidates=list(Path(d).rglob('main_lora/adapter_model.safetensors'))
+                      candidates=[p for p in candidates if p.with_name('adapter_config.json').is_file()]
+                      if len(candidates)!=1:
+                          print('GEMMA_EXTERNAL_ADAPTER_STATUS=NO_UNIQUE_REAL_MAIN_LORA_PAIR count='+str(len(candidates)),flush=True)
+                      else:
+                          try:
+                              archive, meta = add_adapter(baseline,candidates[0].parent)
+                          except (ValueError,FileNotFoundError,RuntimeError,KeyError,TypeError) as e:
+                              print('GEMMA_EXTERNAL_ADAPTER_STATUS=STRICT_CPU_CHECK_REJECTED type='+type(e).__name__,flush=True)
+                          else:
+                              print('GEMMA_EXTERNAL_ADAPTER_STATUS=STRICT_MATCHED_ZIP_BUILT_IN_TEMP',flush=True)
+                              print('GEMMA_EXTERNAL_ADAPTER_SHA256='+meta['weights_sha256'],flush=True)
+                              print('GEMMA_MATCHED_CPU_CANDIDATE_SHA256='+meta['candidate_zip_sha256'],flush=True)
+                              print('GEMMA_MATCHED_CPU_CANDIDATE_BYTES='+str(len(archive)),flush=True)
+                              print('GEMMA_ADAPTER_LICENSE_AND_AGENT_UPTAKE_UNVERIFIED=TRUE',flush=True)
+          print('GEMMA_EXTERNAL_ADAPTER_NO_GPU_NO_SUBMISSION_NO_PUBLIC_WEIGHTS=TRUE',flush=True)
           PY
           rm -rf /tmp/gemma-source-first-original
