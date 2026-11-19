@@ -168,12 +168,12 @@ def compile_adapter_without_inference(candidate: bytes) -> dict:
         agent=compile_submission(submission_dir=target,model_registry=models,tool_registry=tools)
         route=str(getattr(getattr(agent,"model",None),"model",""))
         print("GEMMA_31B_CPU_COMPILED_MODEL_ROUTE="+route,flush=True)
-        if route!="openai/main_lora":
+        if route!=MODEL+":main_lora":
             raise ValueError("STOP_ADAPTER_NOT_SELECTED_BY_OFFICIAL_ADK")
         if len(agent.tools)!=len(natives):
             raise ValueError("STOP_NATIVE_TOOLS_DRIFT")
     return {"official_adk_cpu_compile":True,
-            "root_model_route":"openai/main_lora",
+            "root_model_route":MODEL+":main_lora",
             "unchanged_base":MODEL,
             "native_tools":len(natives),
             "model_inference":False,
