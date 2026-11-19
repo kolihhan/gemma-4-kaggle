@@ -105,3 +105,44 @@ jobs:
           print('GEMMA_EXTERNAL_ADAPTER_NO_GPU_NO_SUBMISSION_NO_PUBLIC_WEIGHTS=TRUE',flush=True)
           PY
           rm -rf /tmp/gemma-source-first-original
+
+      - name: Official CPU ADK compile real recovered 31B LoRA
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gemma-31b-real-adapter-wheelhouse
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel" -p /tmp/gemma-31b-real-adapter-wheelhouse --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check /tmp/gemma-31b-real-adapter-wheelhouse/*.whl
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,subprocess,tempfile
+          from scripts.prepare_public_budgetfit_v2 import validate_source_zip
+          from scripts.build_toolcap60_timeout_recovery import build as build_control
+          from scripts.gemma31_uploaded_coder_adapter_one_variable_cpu import package
+          from scripts.submit_v2_toolcap60_official_once import compile_without_inference
+          with tempfile.TemporaryDirectory(prefix='gemma-31b-lora-compiled-') as d:
+              a=Path(d)/'control'; b=Path(d)/'adapter'
+              a.mkdir();b.mkdir()
+              subprocess.run(['kaggle','kernels','output',
+                  'lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2',
+                  '-p',str(a),'-o'],check=True,stdout=subprocess.DEVNULL,timeout=180)
+              subprocess.run(['kaggle','kernels','output',
+                  'ayush04barai/lora-step-2',
+                  '-p',str(b),'-o'],check=True,stdout=subprocess.DEVNULL,timeout=180)
+              source=(a/'submission.zip').read_bytes()
+              validate_source_zip(source)
+              scored=build_control(source)
+              match=[p for p in b.rglob('main_lora/adapter_model.safetensors')
+                     if p.with_name('adapter_config.json').is_file()]
+              if len(match)!=1:
+                  raise RuntimeError('NO_UNIQUE_REAL_ADAPTER_FOR_COMPILER')
+              treatment,meta=package(scored,match[0].parent)
+              compile_without_inference(treatment)
+              print('GEMMA_REAL_LORA_OFFICIAL_CPU_COMPILE=PASS',flush=True)
+              print('GEMMA_REAL_LORA_PINNED_ZIP_SHA='+meta['candidate_zip_sha256'],flush=True)
+              print('GEMMA_REAL_LORA_EXPECTED_PILOT=UNMEASURED',flush=True)
+          print('GEMMA_REAL_LORA_GPU_SCORING_SUBMISSION_AND_PUBLIC_ARTIFACT=NONE',flush=True)
+          PY
+          rm -rf /tmp/gemma-31b-real-adapter-wheelhouse
