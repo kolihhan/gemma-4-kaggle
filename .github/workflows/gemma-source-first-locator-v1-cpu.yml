@@ -120,8 +120,7 @@ jobs:
           import hashlib,subprocess,tempfile
           from scripts.prepare_public_budgetfit_v2 import validate_source_zip
           from scripts.build_toolcap60_timeout_recovery import build as build_control
-          from scripts.gemma31_uploaded_coder_adapter_one_variable_cpu import package
-          from scripts.submit_v2_toolcap60_official_once import compile_without_inference
+          from scripts.gemma31_uploaded_coder_adapter_one_variable_cpu import package,compile_adapter_without_inference
           with tempfile.TemporaryDirectory(prefix='gemma-31b-lora-compiled-') as d:
               a=Path(d)/'control'; b=Path(d)/'adapter'
               a.mkdir();b.mkdir()
@@ -139,7 +138,7 @@ jobs:
               if len(match)!=1:
                   raise RuntimeError('NO_UNIQUE_REAL_ADAPTER_FOR_COMPILER')
               treatment,meta=package(scored,match[0].parent)
-              compile_without_inference(treatment)
+              compile_adapter_without_inference(treatment)
               print('GEMMA_REAL_LORA_OFFICIAL_CPU_COMPILE=PASS',flush=True)
               print('GEMMA_REAL_LORA_PINNED_ZIP_SHA='+meta['candidate_zip_sha256'],flush=True)
               print('GEMMA_REAL_LORA_EXPECTED_PILOT=UNMEASURED',flush=True)
