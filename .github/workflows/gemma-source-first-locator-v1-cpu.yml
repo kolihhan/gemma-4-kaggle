@@ -28,14 +28,17 @@ jobs:
             /scripts/build_v2_toolcap_submission.py
             /scripts/prepare_public_budgetfit_v2.py
             /tests/test_build_source_first_localization_v1.py
+            /scripts/gemma31_uploaded_coder_adapter_one_variable_cpu.py
+            /tests/test_gemma31_uploaded_coder_adapter_one_variable_cpu.py
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
       - name: Five local fixed-model contract tests and syntax
         shell: bash
         run: |
           set -euo pipefail
-          python -m py_compile scripts/build_source_first_localization_v1.py scripts/submit_source_first_localization_v1_once.py
+          python -m py_compile scripts/build_source_first_localization_v1.py scripts/submit_source_first_localization_v1_once.py scripts/gemma31_uploaded_coder_adapter_one_variable_cpu.py
           python -m unittest discover -s tests -p test_build_source_first_localization_v1.py -v
+          python -m unittest discover -s tests -p test_gemma31_uploaded_coder_adapter_one_variable_cpu.py -v
       - name: Pin original scored 31B source, enforce 0.18 budget and test one-variable real archive
         shell: bash
         run: |
@@ -50,11 +53,14 @@ jobs:
           from scripts.prepare_public_budgetfit_v2 import validate_source_zip
           from scripts.build_toolcap60_timeout_recovery import build as control_build
           from scripts.build_source_first_localization_v1 import build as treatment_build,summary
+          from scripts.gemma31_uploaded_coder_adapter_one_variable_cpu import control as verify_lora_scored_base
           raw=(Path('/tmp/gemma-source-first-original')/'submission.zip').read_bytes()
           validate_source_zip(raw)
           baseline=control_build(raw)
           ctrl_sha=hashlib.sha256(baseline).hexdigest()
           assert ctrl_sha=='ff08c10240a38e151a2ea1d0478e999ee5d2f437d2dad5571d912cf12859922b',ctrl_sha
+          assert len(verify_lora_scored_base(baseline))==4
+          print('GEMMA_31B_LORA_ONE_VARIABLE_CONTROL_VERIFIED=TRUE',flush=True)
           treatment=treatment_build(raw)
           with zipfile.ZipFile(io.BytesIO(baseline)) as a,zipfile.ZipFile(io.BytesIO(treatment)) as b:
               assert a.namelist()==b.namelist()
