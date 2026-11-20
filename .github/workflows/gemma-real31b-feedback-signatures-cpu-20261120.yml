@@ -1,0 +1,45 @@
+name: Gemma actual existing 31B postedit feedback signals CPU only
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-real31b-feedback-signatures-cpu-20261120.yml]
+permissions: {contents: read}
+jobs:
+  private_existing_audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            scripts/audit_pro_v3r_real31b_uptake_20261115.py
+            scripts/audit_paired_31b_feedback_v2.py
+            scripts/audit_paired_31b_existing_traces.py
+            scripts/gemma_31b_feedback_signatures_20261120.py
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Unit test and compile (no model)
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/gemma_31b_feedback_signatures_20261120.py
+          python -m scripts.gemma_31b_feedback_signatures_20261120 --self-test
+      - name: Download existing completed private genuine 31B traces (not hidden scorer)
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/gemma-real31b-existing
+          kaggle kernels output kolihhan/gemma4-v3r-v2-pro-nov15-v1 \
+            -p /tmp/gemma-real31b-existing -o >/tmp/ntl-gemma-download-status.log 2>&1
+          test -s /tmp/gemma-real31b-existing/paired_prompt_v2_31b_results.json
+      - name: Emit safe per-arm aggregate ONLY
+        run: |
+          set -euo pipefail
+          python -m scripts.gemma_31b_feedback_signatures_20261120 --input /tmp/gemma-real31b-existing
+      - name: Delete private model transcripts
+        if: always()
+        run: rm -rf /tmp/gemma-real31b-existing /tmp/ntl-gemma-download-status.log
