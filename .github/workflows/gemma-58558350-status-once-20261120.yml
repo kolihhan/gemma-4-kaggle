@@ -1,0 +1,43 @@
+name: Gemma 58558350 one-time official outcome check Nov20
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-58558350-status-once-20261120.yml]
+permissions: {contents: read}
+jobs:
+  official_readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Exact official submission record, no submit, no score invention
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import csv,io,json,subprocess
+          cmd=['kaggle','competitions','submissions','gemma-4-developer-agent','-v','-q']
+          raw=subprocess.run(cmd,capture_output=True,text=True,check=True,timeout=80).stdout.lstrip('\ufeff')
+          rows=list(csv.DictReader(io.StringIO(raw)))
+          old='58183466'; target='58558350'
+          def match(ref):
+              found=[r for r in rows if r.get('ref')==ref]
+              if len(found)!=1:
+                  raise RuntimeError('EXACT_SUBMISSION_UNAVAILABLE_'+ref)
+              return found[0]
+          a=match(target)
+          if a.get('description')!='gemma31-real-coder-lora-one-variable-20261119':
+              raise RuntimeError('SUBMISSION_IDENTITY_MISMATCH')
+          b=match(old)
+          print('GEMMA_NOV20_ONE_TIME_AUTHENTICATED='+json.dumps({
+              'target':{k:a.get(k) for k in ('ref','date','status','publicScore','privateScore','description')},
+              'control':{k:b.get(k) for k in ('ref','date','status','publicScore','privateScore')},
+              'active_scored_entries':sum(str(r.get('status','')).upper().endswith(('.PENDING','.RUNNING','.QUEUED')) for r in rows),
+              'no_submission_or_rerun':True,
+          },sort_keys=True),flush=True)
+          PY
