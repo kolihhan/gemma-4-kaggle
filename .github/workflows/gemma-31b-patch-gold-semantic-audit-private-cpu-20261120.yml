@@ -4,6 +4,7 @@ on:
     branches: [research/dual-agent-recovery-v0-20261108]
     paths:
       - .github/workflows/gemma-31b-patch-gold-semantic-audit-private-cpu-20261120.yml
+      - scripts/audit_gemma31b_semantic_gap_private_20261120.py
 permissions:
   contents: read
 concurrency:
