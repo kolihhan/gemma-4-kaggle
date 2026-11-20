@@ -1,0 +1,76 @@
+name: Gemma genuine 31B private patch vs gold read-only CPU audit
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths:
+      - .github/workflows/gemma-31b-patch-gold-semantic-audit-private-cpu-20261120.yml
+permissions:
+  contents: read
+concurrency:
+  group: gemma31b-original-private-patch-audit-once-20261120
+  cancel-in-progress: false
+jobs:
+  cpu_existing_only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      PROMPT_KERNEL: kolihhan/gemma4-prompt-v2-paired-43057377220
+      V3R_KERNEL: kolihhan/gemma4-v3r-v2-pro-nov15-v1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Static no-GPU and safe-output checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/audit_gemma31b_semantic_gap_private_20261120.py
+          python -m scripts.audit_gemma31b_semantic_gap_private_20261120 --self-test
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('scripts/audit_gemma31b_semantic_gap_private_20261120.py').read_text()
+          assert 'def find_artifacts' in s and 'raw_gold_or_issue_or_model_patch_exported' in s
+          assert 'def diff_evidence' in s
+          print('NO_SOLVER_EDIT_NO_GPU_NO_KAGGLE_SUBMISSION=TRUE')
+          PY
+      - name: Read only TWO pre-existing scored development Kernel outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/gemma-private-prompt /tmp/gemma-private-v3r
+          kaggle kernels output "$PROMPT_KERNEL" -p /tmp/gemma-private-prompt -o >/tmp/gemma-prompt-access.log 2>&1
+          kaggle kernels output "$V3R_KERNEL" -p /tmp/gemma-private-v3r -o >/tmp/gemma-v3r-access.log 2>&1
+          test -s /tmp/gemma-private-prompt/paired_prompt_v2_31b_results.json
+          test -s /tmp/gemma-private-v3r/paired_prompt_v2_31b_results.json
+          echo "BOTH_EXISTING_31B_SCORER_SUMMARIES_RECOVERED=TRUE"
+      - name: Audit private patches and reference labels without exposing source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.audit_gemma31b_semantic_gap_private_20261120 \
+            --tasks tasks.jsonl \
+            --prompt-root /tmp/gemma-private-prompt \
+            --v3r-root /tmp/gemma-private-v3r \
+            --output /tmp/gemma-private-safe-audit.json
+          test -s /tmp/gemma-private-safe-audit.json
+          echo "SAFE_CPU_AUDIT_COMPLETE=TRUE"
+      - name: Upload allowlisted numeric and categorical evidence ONLY
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemma31b-genuine-patch-gold-safe-${{ github.run_id }}
+          path: /tmp/gemma-private-safe-audit.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Delete all raw trajectories and reference access files
+        if: always()
+        shell: bash
+        run: |
+          rm -rf /tmp/gemma-private-prompt /tmp/gemma-private-v3r \
+            /tmp/gemma-prompt-access.log /tmp/gemma-v3r-access.log
+          echo "PRIVATE_RAW_TRAJECTORIES_REMOVED=TRUE"
