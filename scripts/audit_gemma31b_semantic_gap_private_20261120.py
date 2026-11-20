@@ -102,6 +102,45 @@ def find_artifacts(trace: Path | None, instance_id: str) -> tuple[str | None, st
             log.read_text(errors="replace") if log.is_file() else None)
 
 
+def model_edit_scope(trace: dict | None, gold_sources: set[str]) -> dict:
+    """Trace-level edit targets, NOT a reconstructed final patch.
+    run_command may edit files without a recognized edit_file invocation.
+    Multiple event records may duplicate a physical call.
+    """
+    if trace is None:
+        return {"observed_edit_path_count": None,
+                "observed_edit_path_gold_overlap": None,
+                "unparsed_edit_tool_calls": None}
+    paths = set()
+    unknown = 0
+    calls_total = 0
+    for step in trace.get("steps", []):
+        if not isinstance(step, dict):
+            continue
+        for call in step.get("tool_calls", []):
+            if not isinstance(call, dict) or call.get("function_name") not in ("edit_file", "write_file"):
+                continue
+            calls_total += 1
+            args = call.get("arguments")
+            name = args.get("filepath") if isinstance(args, dict) else None
+            if not name and isinstance(args, dict):
+                name = args.get("file_path") or args.get("path")
+            if not isinstance(name, str):
+                unknown += 1
+                continue
+            name = name.strip().replace("\\\\", "/")
+            name = name.removeprefix("/workspace/").removeprefix("./")
+            if not name or Path(name).is_absolute() or ".." in Path(name).parts:
+                unknown += 1
+                continue
+            paths.add(name)
+    src = source({x: [] for x in paths})
+    return {"observed_edit_path_count": len(src),
+            "observed_edit_path_gold_overlap": len(src & gold_sources),
+            "unparsed_edit_tool_calls": unknown,
+            "recorded_edit_tool_calls": calls_total}
+
+
 def load_gold(path: Path, ids: set[str]) -> dict:
     out = {}
     with path.open(encoding="utf-8") as handle:
@@ -140,6 +179,7 @@ def audit_cohort(root: Path, flavor: str, gold: dict) -> list[dict]:
         mp = diff_evidence(patch) if patch is not None else None
         gs = source(gp)
         ms = source(mp) if mp is not None else None
+        observed_edits = model_edit_scope(trace, gs)
         validity = VALIDITY_FIRST[tid] if flavor == "prompt" else GOLD_UNKNOWN
         resolved = row["resolved"]
         if type(resolved) is not bool:
@@ -173,6 +213,7 @@ def audit_cohort(root: Path, flavor: str, gold: dict) -> list[dict]:
             "score_record_has_patch": row.get("has_patch"),
             "patch_artifact_recovered": mp is not None,
             "trace_recovered": trace is not None,
+            **observed_edits,
             "gold_source_file_count": len(gs),
             "model_source_file_count": len(ms) if ms is not None else None,
             "source_file_overlap_count": len(gs & ms) if ms is not None else None,
@@ -205,6 +246,7 @@ def self_test() -> None:
     assert diff_evidence("--- a/a.py\n+++ /dev/null\n") == {}
     assert classify_log("ImportError: missing") == "IMPORT_OR_DEPENDENCY_HINT"
     assert classify_log(None) == "UNOBSERVED"
+    assert model_edit_scope({"steps": [{"tool_calls": [{"function_name": "edit_file", "arguments": {"filepath": "/workspace/src/a.py"}}]}]}, {"src/a.py"})["observed_edit_path_gold_overlap"] == 1
     print("GEMMA_PRIVATE_31B_PATCH_AUDITOR_CPU_SELFTEST=PASS")
 
 
@@ -242,6 +284,7 @@ def main() -> None:
         "successful_diagnostic_controls": sum(x["resolved"] for x in rows),
         "unsuccessful": sum(not x["resolved"] for x in rows),
         "patch_artifacts_recovered": sum(x["patch_artifact_recovered"] for x in rows),
+        "patch_files_anywhere_private_outputs": sum(len(list(root.rglob("*.patch"))) for root in (args.prompt_root, args.v3r_root)),
         "trace_artifacts_recovered": sum(x["trace_recovered"] for x in rows),
         "failure_evidence_class_counts": dict(sorted(counts.items())),
         "caution": ("File and hunk overlap cannot prove semantic correctness or fault location; "
