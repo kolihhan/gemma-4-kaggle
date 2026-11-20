@@ -1,0 +1,44 @@
+name: Gemma discover exact newly pushed PRIVATE CPU notebook slug once
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-private-visible-test-actual-slug-discovery-once-20261120.yml]
+permissions: {contents: read}
+jobs:
+  discover_existing_only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Locate exact account private Notebook by matching public title, without output of unrelated kernels
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import json,subprocess,re
+          cmdlist=[
+              ["kaggle","kernels","list","-u","kolihhan","--page-size","100"],
+              ["kaggle","kernels","list","-u","kolihhan"],
+          ]
+          result={"one_user":"kolihhan","no_notebook_push_or_submission":True,"attempts":[]}
+          for cmd in cmdlist:
+              p=subprocess.run(cmd,text=True,capture_output=True,timeout=65)
+              s=p.stdout
+              lines=[l.strip() for l in s.splitlines()
+                if any(term in l.lower() for term in
+                  ("gemma-visible-test","private-gemma-native-test","test-opportunity-cpu","native-test-opportunity"))]
+              result["attempts"].append({
+                  "returncode":p.returncode,
+                  "matched_lines":[x[:350] for x in lines[:8]],
+                  "output_line_count":len(s.splitlines()),
+                  "cli_rejected_arguments":"unrecognized arguments" in p.stderr.lower(),
+                  "permission_error": "permission" in p.stderr.lower(),
+              })
+              if p.returncode==0:break
+          print("GEMMA_VISIBLE_TEST_KERNEL_ACTUAL_SLUG_DISCOVERY="+json.dumps(result,sort_keys=True))
+          PY
