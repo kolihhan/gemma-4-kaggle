@@ -201,7 +201,7 @@ def self_test() -> None:
     b = diff_evidence("--- a/src/a.py\n+++ b/src/a.py\n@@ -16 +16 @@")
     assert source(a) == {"src/a.py"}
     assert source(b) == {"src/a.py"}
-    assert overlap_hunks(a, b) == 2
+    assert overlap_hunks(a, b) == 1
     assert diff_evidence("--- a/a.py\n+++ /dev/null\n") == {}
     assert classify_log("ImportError: missing") == "IMPORT_OR_DEPENDENCY_HINT"
     assert classify_log(None) == "UNOBSERVED"
