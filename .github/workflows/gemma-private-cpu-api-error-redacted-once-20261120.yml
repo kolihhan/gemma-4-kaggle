@@ -1,0 +1,40 @@
+name: Gemma private CPU status error safely redacted once
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-private-cpu-api-error-redacted-once-20261120.yml]
+permissions: {contents: read}
+jobs:
+  private_error:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Query exact existing private CPU kernel once; redact possible secrets before stdout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import os,subprocess,re,json
+          slug="kolihhan/gemma-visible-test-upperbound-20261120"
+          p=subprocess.run(["kaggle","kernels","status",slug],text=True,
+                 capture_output=True,timeout=75)
+          text=(p.stdout+"\n"+p.stderr).strip()
+          # Mask literal identity, API token, long base64/hex strings,
+          # email, filesystem paths and HTTP headers, retaining error wording.
+          text=text.replace(os.environ.get("KAGGLE_API_TOKEN","UNSET_SECRET"),"[TOKEN]")
+          text=text.replace(slug,"[KERNEL]")
+          text=re.sub(r"\S+@\S+\.\S+","[EMAIL]",text)
+          text=re.sub(r"(?:Bearer|Authorization|token|key)\s*[:=]\s*\S+","[REDACTED]",text,flags=re.I)
+          text=re.sub(r"[A-Za-z0-9_+=/.-]{44,}","[LONG_STRING]",text)
+          text=re.sub(r"/(?:home|tmp|kaggle)/[\w./-]+","[PATH]",text)
+          text=text[:700]
+          print("GEMMA_PRIVATE_CPU_STATUS_REDACTED="+json.dumps({
+            "status_rc":p.returncode,"message":text,
+            "no_new_kaggle_kernel_gpu_or_scored_submission":True},sort_keys=True))
+          PY
