@@ -1,0 +1,88 @@
+name: Gemma final exact owned private CPU kernel recovery by Kaggle list pagination
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-visible-cpu-final-owned-recovery-once-20261120.yml]
+permissions: {contents: read}
+jobs:
+  recover_existing_only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 19
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Find exact existing notebook under owner and fetch safe output only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import os,subprocess,json,re
+          from pathlib import Path
+          expected="kolihhan/gemma-visible-test-upperbound-20261120"
+          found=set()
+          hits=[]
+          pages_checked=0
+          failed_pages=[]
+          for pg in range(1,26):
+              p=subprocess.run(["kaggle","kernels","list","--mine","--page",str(pg)],
+                                text=True,capture_output=True,timeout=65)
+              if p.returncode:
+                  failed_pages.append(pg)
+                  break
+              lines=p.stdout.splitlines()
+              pages_checked+=1
+              for line in lines:
+                  if "visible-test-upperbound" in line.lower() or "native test opportunity" in line.lower():
+                      hits.append(line[:280])
+                      tokens=line.strip().split()
+                      if tokens and tokens[0].lower().startswith("kolihhan/"):found.add(tokens[0])
+              # A header-only/no results page is end of account-owned list
+              if len(lines)<=2:break
+          result={"expected_kernel":expected,
+                  "pages_checked":pages_checked,
+                  "failed_pages":failed_pages,
+                  "matching_owned_list_lines":hits[:15],
+                  "resolved_owned_slugs":sorted(found),
+                  "new_kernel_pushed":False,"new_model_run":False,"new_competition_submission":False}
+          if len(found)==1:
+              slug=next(iter(found))
+              result["resolved_slug"]=slug
+              status=subprocess.run(["kaggle","kernels","status",slug],
+                  text=True,capture_output=True,timeout=55)
+              m=(status.stdout+"\n"+status.stderr).lower()
+              result["status_category"]=(
+                  "COMPLETE" if "kernelworkerstatus.complete" in m else
+                  "ERROR" if "kernelworkerstatus.error" in m else
+                  "RUNNING" if "kernelworkerstatus.running" in m else
+                  "INACCESSIBLE")
+              if result["status_category"]=="COMPLETE":
+                  dest=Path("/tmp/gemma-visible-cpu-final-readonly")
+                  dest.mkdir(parents=True,exist_ok=True)
+                  out=subprocess.run(["kaggle","kernels","output",slug,"-p",str(dest),"-o"],
+                      capture_output=True,text=True,timeout=85)
+                  safe=dest/"gemma_visible_test_opportunity_safe.json"
+                  if out.returncode==0 and safe.is_file():
+                      x=json.loads(safe.read_text())
+                      assert x.get("zero_agent_inference") and x.get("zero_model_gpu")
+                      assert x.get("zero_competition_submission")
+                      assert x.get("no_private_task_text_patch_path_or_hidden_test_exported")
+                      rows=x["rows"]
+                      assert len(rows)==4
+                      allowed={"task_ordinal","repo_family","repository_test_python_files",
+                         "source_py_file_count_from_gold_patch","touched_files_with_any_basename_test",
+                         "distinct_maybe_relevant_test_paths","any_test_path_in_original_repo",
+                         "snapshot_kind","snapshot_path_readable","status"}
+                      assert all(set(row).issubset(allowed) for row in rows)
+                      result["safe_actual_rows"]=rows
+                      result["safe_result_ready"]=True
+                  else:
+                      result["safe_result_ready"]=False
+          print("GEMMA_VISIBLE_CPU_FINAL_RECOVERY="+json.dumps(result,sort_keys=True))
+          PY
+      - name: Clear locally downloaded data
+        if: always()
+        run: rm -rf /tmp/gemma-visible-cpu-final-readonly
