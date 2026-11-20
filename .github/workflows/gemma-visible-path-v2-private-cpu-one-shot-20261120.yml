@@ -1,0 +1,141 @@
+name: Gemma v2 actual private CPU test opportunity fix patch-header parser once
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-visible-path-v2-private-cpu-one-shot-20261120.yml]
+permissions: {contents: read}
+jobs:
+  private_cpu_source_only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma-visible-path-v2-20261120
+      KERNEL_DIR: /tmp/gemma-visible-v2-kernel
+      PRIVATE_DIR: /tmp/gemma-visible-v2-private
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            kaggle/gemma_visible_test_opportunity_cpu_v2_20261120.py
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Verify real fixed-parser unit tests before creating private CPU
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile kaggle/gemma_visible_test_opportunity_cpu_v2_20261120.py
+          python - <<'PY'
+          import runpy
+          m=runpy.run_path("kaggle/gemma_visible_test_opportunity_cpu_v2_20261120.py",run_name="source_only")
+          m["smoke"]()
+          PY
+          mkdir -p "$KERNEL_DIR"
+          cp kaggle/gemma_visible_test_opportunity_cpu_v2_20261120.py "$KERNEL_DIR/main.py"
+          python - <<'PY'
+          import os,json
+          from pathlib import Path
+          p=Path(os.environ["KERNEL_DIR"])
+          meta={"id":os.environ["KERNEL_REF"],
+            "title":"gemma-visible-path-v2-20261120",
+            "code_file":"main.py","language":"python","kernel_type":"script",
+            "is_private":True,"enable_gpu":False,"enable_tpu":False,"enable_internet":False,
+            "docker_image":"gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461",
+            "competition_sources":["gemma-4-developer-agent"],
+            "dataset_sources":["metric/gemma-4-developer-agent-wheelhouse"],
+            "model_sources":[],"kernel_sources":[]}
+          assert meta["is_private"] and not meta["enable_gpu"] and not meta["enable_internet"]
+          (p/"kernel-metadata.json").write_text(json.dumps(meta,indent=2))
+          print("GEMMA_V2_PATCH_HEADER_PARSER_TESTS=PASS")
+          PY
+      - name: Push EXACTLY one private CPU-only kernel, not scorer submission
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          if kaggle kernels status "$KERNEL_REF" >/dev/null 2>&1; then
+            echo "REFUSE_DUPLICATE_EXISTING_V2_KERNEL";exit 1
+          fi
+          kaggle kernels push -p "$KERNEL_DIR" -t 3600 >/tmp/gemma-v2-kernel-push 2>&1 || {
+            echo "GEMMA_V2_PRIVATE_CPU_PUSH_FAILED";exit 1;
+          }
+          echo "GEMMA_V2_ONE_PRIVATE_CPU_KERNEL_PUSHED=TRUE"
+      - name: Resolve actual registered slug by exact title, no assumed id
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          slug=""
+          for pg in $(seq 1 25); do
+            output="$(kaggle kernels list --mine --page "$pg" 2>&1)"
+            row="$(printf '%s\n' "$output" | grep -F 'gemma-visible-path-v2-20261120' | head -1 || true)"
+            if [ -n "$row" ]; then
+              slug="$(printf '%s' "$row" | awk '{print $1}')"
+              break
+            fi
+            test "$(printf '%s\n' "$output" | wc -l)" -gt 2 || break
+          done
+          if [ -z "$slug" ]; then echo "GEMMA_V2_REGISTERED_NOTEBOOK_NOT_FOUND";exit 1; fi
+          echo "slug=$slug" >> "$GITHUB_OUTPUT"
+          echo "GEMMA_V2_REGISTERED_ACTUAL_SLUG=$slug"
+      - name: Poll only recovered actual slug and capture terminal state
+        id: poll
+        shell: bash
+        env:
+          ACTUAL_SLUG: ${{ steps.resolve.outputs.slug }}
+        run: |
+          set -euo pipefail
+          state=pending
+          for iteration in $(seq 1 148); do
+            output="$(kaggle kernels status "$ACTUAL_SLUG" 2>&1 || true)"
+            case "$(printf '%s' "$output" | tr '[:upper:]' '[:lower:]')" in
+              *kernelworkerstatus.complete*) state=complete;break;;
+              *kernelworkerstatus.error*) state=error;break;;
+            esac
+            sleep 20
+          done
+          echo "terminal=$state" >> "$GITHUB_OUTPUT"
+          echo "GEMMA_V2_ACTUAL_PRIVATE_CPU_TERMINAL=$state"
+      - name: Consume safe actual aggregate, no raw gold patch, no inference
+        if: always()
+        shell: bash
+        env:
+          ACTUAL_SLUG: ${{ steps.resolve.outputs.slug }}
+        run: |
+          set -euo pipefail
+          test -n "$ACTUAL_SLUG"
+          mkdir -p "$PRIVATE_DIR"
+          kaggle kernels output "$ACTUAL_SLUG" -p "$PRIVATE_DIR" -o >/tmp/gemma-v2-kernel-get 2>&1 || {
+            echo "GEMMA_V2_PRIVATE_CPU_OUTPUT_UNAVAILABLE";exit 1;
+          }
+          python - <<'PY'
+          import os,json
+          from pathlib import Path
+          f=Path(os.environ["PRIVATE_DIR"])/"gemma_visible_test_opportunity_safe.json"
+          if not f.is_file():raise RuntimeError("NO_SAFE_OUTPUT")
+          r=json.loads(f.read_text())
+          assert r["tasks"]==4 and len(r["rows"])==4
+          assert r["zero_agent_inference"] and r["zero_model_gpu"]
+          assert r["zero_competition_submission"] and r["no_private_task_text_patch_path_or_hidden_test_exported"]
+          allow={"task_ordinal","repo_family","repository_test_python_files",
+            "source_py_file_count_from_gold_patch","touched_files_with_any_basename_test",
+            "distinct_maybe_relevant_test_paths","any_test_path_in_original_repo",
+            "snapshot_kind","snapshot_path_readable","status",
+            "patch_chars","patch_nonempty","git_diff_headers","unified_plus_headers",
+            "unified_minus_headers","begin_patch_markers","update_file_markers",
+            "index_markers","patch_lines"}
+          assert all(set(row).issubset(allow) for row in r["rows"])
+          print("GEMMA_V2_PRIVATE_CPU_SAFE_RESULT="+json.dumps({
+            "tasks":len(r["rows"]),
+            "snapshot_ready":sum(x["status"]=="METADATA_COMPLETE" for x in r["rows"]),
+            "patch_nonempty":sum(x.get("patch_nonempty",False) for x in r["rows"]),
+            "source_path_parsed":sum(x.get("source_py_file_count_from_gold_patch",0)>0 for x in r["rows"]),
+            "basename_matches":sum(x.get("touched_files_with_any_basename_test",0)>0 for x in r["rows"]),
+            "rows":r["rows"],"no_gpu_no_scoring":True},sort_keys=True))
+          PY
+      - name: Delete ephemeral original private CPU task data
+        if: always()
+        run: rm -rf "$KERNEL_DIR" "$PRIVATE_DIR" /tmp/gemma-v2-kernel-push /tmp/gemma-v2-kernel-get
