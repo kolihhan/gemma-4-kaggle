@@ -1,0 +1,41 @@
+name: Gemma real public developer commit test-retrieval A B CPU one-shot
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-real-public-test-retrieval-ab-once-20261120.yml]
+permissions: {contents: read}
+jobs:
+  real_public_repo_mechanism:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            scripts/gemma_repo_test_retrieval_public_commits_20261120.py
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Compile, test exact frozen ranking contract
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/gemma_repo_test_retrieval_public_commits_20261120.py
+          python -m scripts.gemma_repo_test_retrieval_public_commits_20261120 --self-test
+      - name: Materialize public upstream commit history ONLY (not competition tasks)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gemma-upstream
+          git clone --quiet --filter=blob:none --depth 125 https://github.com/fastapi/fastapi.git /tmp/gemma-upstream/fastapi
+          git clone --quiet --filter=blob:none --depth 125 https://github.com/Textualize/rich.git /tmp/gemma-upstream/rich
+          echo GEMMA_REAL_UPSTREAM_PUBLIC_CLONES_READY=TRUE
+      - name: Compare existing exact-basename test retrieval with new source-token ranking on real commits
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.gemma_repo_test_retrieval_public_commits_20261120 \
+            --fastapi /tmp/gemma-upstream/fastapi --rich /tmp/gemma-upstream/rich
+      - name: Discard public clone
+        if: always()
+        run: rm -rf /tmp/gemma-upstream
