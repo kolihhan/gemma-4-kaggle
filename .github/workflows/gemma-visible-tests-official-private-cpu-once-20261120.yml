@@ -1,0 +1,109 @@
+name: Gemma real official repo visible test opportunity PRIVATE CPU one-shot
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-visible-tests-official-private-cpu-once-20261120.yml]
+permissions: {contents: read}
+jobs:
+  private_cpu_opportunity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma-visible-test-upperbound-20261120
+      KERNEL_DIR: /tmp/gemma-visible-tests-kernel
+      PRIVATE_DIR: /tmp/gemma-visible-tests-private-output
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            kaggle/gemma_visible_test_opportunity_cpu_20261120.py
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Preflight immutable CPU private-only kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$KERNEL_DIR"
+          cp kaggle/gemma_visible_test_opportunity_cpu_20261120.py "$KERNEL_DIR/main.py"
+          python -m py_compile "$KERNEL_DIR/main.py"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          d=Path(os.environ["KERNEL_DIR"])
+          meta={"id":os.environ["KERNEL_REF"],
+                "title":"Private Gemma Native Test Opportunity CPU",
+                "code_file":"main.py",
+                "language":"python","kernel_type":"script","is_private":True,
+                "enable_gpu":False,"enable_tpu":False,"enable_internet":False,
+                "docker_image":"gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461",
+                "competition_sources":["gemma-4-developer-agent"],
+                "dataset_sources":["metric/gemma-4-developer-agent-wheelhouse"],
+                "model_sources":[],"kernel_sources":[]}
+          assert meta["is_private"] and not meta["enable_gpu"] and not meta["enable_internet"] and not meta["model_sources"]
+          (d/"kernel-metadata.json").write_text(json.dumps(meta,indent=2))
+          print("GEMMA_NATIVE_TEST_PREFLIGHT_PRIVATE_CPU_ONLY=PASS")
+          PY
+      - name: Push one private CPU-only kernel; no contest submit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          if kaggle kernels status "$KERNEL_REF" >/tmp/gemma-existing-kernel-status 2>&1; then
+            echo "STOP_KERNEL_ALREADY_EXISTS"; exit 1
+          fi
+          kaggle kernels push -p "$KERNEL_DIR" -t 3200 >/tmp/gemma-visible-push-result 2>&1 || {
+             echo "STOP_PRIVATE_CPU_KERNEL_PUSH_FAILED"; exit 1;
+          }
+          echo "GEMMA_VISIBLE_TEST_PRIVATE_CPU_KERNEL_PUSHED=TRUE"
+      - name: Poll only this exact private CPU kernel
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          status=pending
+          for i in $(seq 1 85); do
+            output="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            lowered="$(printf '%s' "$output" | tr '[:upper:]' '[:lower:]')"
+            if grep -Eq 'complete|completed' <<< "$lowered"; then status=complete; break; fi
+            if grep -Eq 'error|failed|failure|canceled|cancelled' <<< "$lowered"; then status=error; break; fi
+            sleep 20
+          done
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "GEMMA_VISIBLE_TEST_PRIVATE_CPU_TERMINAL=$status"
+      - name: Retrieve safe aggregate only and assert no raw data
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$PRIVATE_DIR"
+          kaggle kernels output "$KERNEL_REF" -p "$PRIVATE_DIR" -o >/tmp/gemma-visible-output-fetch 2>&1 || {
+             echo "GEMMA_VISIBLE_TEST_OUTPUT_UNAVAILABLE";exit 1;
+          }
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ["PRIVATE_DIR"])
+          file=root/"gemma_visible_test_opportunity_safe.json"
+          if not file.is_file():raise RuntimeError("SAFE_OUTPUT_NOT_PRESENT")
+          x=json.loads(file.read_text())
+          assert x.get("tasks")==4 and len(x.get("rows",[]))==4
+          assert x.get("zero_agent_inference") and x.get("zero_model_gpu") and x.get("zero_competition_submission")
+          assert x.get("no_private_task_text_patch_path_or_hidden_test_exported")
+          assert all(set(z).issubset({
+             "task_ordinal","repo_family","repository_test_python_files",
+             "source_py_file_count_from_gold_patch","touched_files_with_any_basename_test",
+             "distinct_maybe_relevant_test_paths","any_test_path_in_original_repo",
+             "snapshot_kind","snapshot_path_readable","status"}) for z in x["rows"])
+          print("GEMMA_VISIBLE_TEST_PRIVATE_CPU_RESULT="+json.dumps({
+             "complete":sum(z.get("status")=="METADATA_COMPLETE" for z in x["rows"]),
+             "possibly_discoverable":sum(bool(z.get("touched_files_with_any_basename_test")) for z in x["rows"]),
+             "safe_rows":x["rows"],
+             "no_model_gpu_or_submission":True},sort_keys=True))
+          PY
+      - name: Delete locally downloaded grader metadata
+        if: always()
+        run: rm -rf "$KERNEL_DIR" "$PRIVATE_DIR" /tmp/gemma-visible-push-result /tmp/gemma-visible-output-fetch /tmp/gemma-existing-kernel-status
