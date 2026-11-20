@@ -1,0 +1,49 @@
+name: Gemma private CPU kernel status failure cause one-shot
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-native-private-kernel-status-failure-cause-once-20261120.yml]
+permissions: {contents: read}
+jobs:
+  status_cause_only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Distinguish Kaggle CLI/API error from missing exact private kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import subprocess,json,re
+          checks={}
+          for key,slug in [
+              ("new","kolihhan/gemma-visible-test-upperbound-20261120"),
+              ("known","kolihhan/gemma4-v3r-v2-pro-nov15-v1"),
+          ]:
+              p=subprocess.run(["kaggle","kernels","status",slug],
+                       capture_output=True,text=True,timeout=65)
+              s=p.stdout+"\n"+p.stderr
+              lo=s.lower()
+              cat=(
+                 "404_or_absent" if re.search(r"404|not found|does not exist",lo) else
+                 "403_permission" if re.search(r"403|forbidden|permission denied",lo) else
+                 "401_auth" if re.search(r"401|unauthoriz|credentials|invalid.*token",lo) else
+                 "cli_invalid" if re.search(r"unrecognized arguments|usage: kaggle",lo) else
+                 "api_busy" if re.search(r"429|rate limit|too many requests",lo) else
+                 "transport" if re.search(r"timeout|connection|ssl|remoteprotocol",lo) else
+                 "complete" if re.search(r"kernelworkerstatus.complete",lo) else
+                 "running" if re.search(r"kernelworkerstatus.running",lo) else
+                 "error_terminal" if re.search(r"kernelworkerstatus.error",lo) else
+                 "other")
+              checks[key]={"rc":p.returncode,"category":cat,
+                           "total_output_chars":len(s)}
+          print("GEMMA_NATIVE_PRIVATE_CPU_STATUS_ROOTCAUSE="+json.dumps({
+            "checks":checks,"no_new_kernel_or_model_or_submission":True},
+            sort_keys=True))
+          PY
