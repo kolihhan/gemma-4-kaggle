@@ -1,0 +1,58 @@
+name: Gemma native visible test private CPU exact kernel status one-shot
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-native-visible-test-kernel-readonly-check-20261120.yml]
+permissions: {contents: read}
+jobs:
+  exact_readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma-visible-test-upperbound-20261120
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Authenticated status check, only existing kernel, no new kernel/model
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import os,subprocess,json
+          proc=subprocess.run(["kaggle","kernels","status",os.environ["KERNEL_REF"]],
+              text=True,capture_output=True,timeout=70)
+          raw=(proc.stdout+"\n"+proc.stderr).lower()
+          if "kernelworkerstatus.complete" in raw:state="COMPLETE"
+          elif "kernelworkerstatus.error" in raw:state="ERROR"
+          elif "kernelworkerstatus.running" in raw:state="RUNNING"
+          elif "kernelworkerstatus.queued" in raw:state="QUEUED"
+          else:state="UNCLASSIFIED"
+          print("GEMMA_PRIVATE_CPU_EXACT_KERNEL_STATUS="+json.dumps({
+             "kernel":os.environ["KERNEL_REF"],"status":state,
+             "status_exit_code":proc.returncode,"no_new_kernel_or_gpu":True,
+             "no_competition_submit":True},sort_keys=True))
+          if state!="COMPLETE":raise SystemExit(0)
+          import pathlib
+          out=pathlib.Path("/tmp/gemma-native-only")
+          out.mkdir(exist_ok=True)
+          fetched=subprocess.run(["kaggle","kernels","output",os.environ["KERNEL_REF"],
+               "-p",str(out),"-o"],capture_output=True,text=True,timeout=95)
+          result=out/"gemma_visible_test_opportunity_safe.json"
+          if fetched.returncode!=0 or not result.exists():
+              print("GEMMA_PRIVATE_CPU_RESULT_ACCESS=SAFE_JSON_UNAVAILABLE")
+              raise SystemExit(0)
+          d=json.loads(result.read_text())
+          assert d["tasks"]==4 and d["zero_agent_inference"] and d["zero_model_gpu"]
+          assert d["no_private_task_text_patch_path_or_hidden_test_exported"]
+          rows=d["rows"]
+          assert len(rows)==4
+          print("GEMMA_PRIVATE_CPU_TEST_OPPORTUNITY_SAFE="+json.dumps({
+             "tasks":len(rows),"metadata_complete":sum(x["status"]=="METADATA_COMPLETE" for x in rows),
+             "basename_match_tasks":sum(bool(x.get("touched_files_with_any_basename_test")) for x in rows),
+             "per_family":[{"repo":x["repo_family"],"status":x["status"],
+                 "has_candidate":bool(x.get("touched_files_with_any_basename_test"))} for x in rows],
+             "no_model_scoring":True},sort_keys=True))
+          PY
