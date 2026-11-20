@@ -1,3 +1,12 @@
+# 2026-11-20 21:55 MYT — Coder-LoRA official COMPLETE 0.12; reject exact submitted adapter
+
+**NEW VERIFIED OFFICIAL OUTCOME:** Kaggle submission #58558350 (`gemma31-real-coder-lora-one-variable-20261119`) is **SubmissionStatus.COMPLETE**, Public **0.12**, Private blank. Authentic owner Kaggle read-only ledger retrieved in [Actions #44659728947 attempt 3](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44659728947); official scored control #58183466 remains **COMPLETE 0.18**. Observed Public delta **−0.06**; active scored entries **0**. No new competition submission, GPU/model run, or scorer re-submit.
+
+**Decision:** Retire/reject **this exact Coder-LoRA submission** as noncompetitive (do not submit unchanged again). Not proof all LoRA or fine-tuning fails: a single unpaired Public score can vary, and scorer-time adapter weight application, runtime and hidden per-task diagnoses are still UNKNOWN. Retain 0.18 as official best, preserve its original ZIP unchanged.
+
+**Next mechanism-first decision before 2026-12-02 final deadline:** Review existing true model traces and gold-pass/no-op-fail cases to separate wrong-file localization, incorrect edit, failure to run/use tests, and runtime/serving failures. Prioritize one budget-preserving **edit → relevant test → feedback-guided repair** mechanism only when supported by traces, with a frozen 31B 5min/60-call control and explicit stop gate. Existing scored + CPU packaging evidence is not a clean new paired accuracy gain. Do not add another adapter, agent, graph or official submission without new discriminating evidence. Competition rules currently allow 1 submission/day and 2 final choices.
+
+---
 # 2026-11-20 10:17 MYT — official 31B Coder LoRA #58558350 is still PENDING
 
 **New authenticated read-only Kaggle result:** [GitHub Actions #44659728947](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44659728947), terminal SUCCESS. The exact Kaggle submission #58558350 (`gemma31-real-coder-lora-one-variable-20261119`) remains `SubmissionStatus.PENDING` with **blank Public and Private**, and 1 scored entry is still active. Previous incumbent #58183466 remains `SubmissionStatus.COMPLETE`, **Public 0.18**. No scorer re-submission and no model-quality gain.
