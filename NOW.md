@@ -1,3 +1,9 @@
+# 2026-11-20 22:10 MYT — genuine 31B model-visible feedback audit: no verified test-failure repair signal
+
+**Real existing-private-scored 31B trace audit [Action #44750878666](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44750878666) SUCCESS**: 3 same public-dev tasks each arm, V2 **1/3** and V3R optional Skill **1/3** grader-resolved. All 6 emitted edits, but **0/3** per arm had a classifier-recognized explicit post-edit test or recognized assertion/pytest failure; V2 **1/3** has an unconfirmed lexical test keyword, V3R **0/3**. All 6 have opaque commands, so absence of testing and actionable errors remain UNKNOWN; some failed shell command exits occurred. True scorer tool calls 62 vs 81, **zero rescues**. [Full bounded evidence and decision](docs/research/2026-11-20-31b-real-feedback-signatures-decision.md). **Decision**: do NOT repeat optional Skills, SequentialAgent, prompt-only test reminders or blind new LoRA. Next verify an issue-relevant *model-visible* native test path on certified gold-clean cases before any new paired 31B run; otherwise focus on patch semantics. Official best **0.18 #58183466**; scored Coder LoRA #58558350 **0.12**, retired. No GPU or new submission.
+
+---
+
 # 2026-11-20 21:55 MYT — Coder-LoRA official COMPLETE 0.12; reject exact submitted adapter
 
 **NEW VERIFIED OFFICIAL OUTCOME:** Kaggle submission #58558350 (`gemma31-real-coder-lora-one-variable-20261119`) is **SubmissionStatus.COMPLETE**, Public **0.12**, Private blank. Authentic owner Kaggle read-only ledger retrieved in [Actions #44659728947 attempt 3](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44659728947); official scored control #58183466 remains **COMPLETE 0.18**. Observed Public delta **−0.06**; active scored entries **0**. No new competition submission, GPU/model run, or scorer re-submit.
