@@ -1,0 +1,49 @@
+name: Gemma correct Kaggle CLI owned notebook exact lookup CPU one-shot
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-kaggle-kernel-list-correct-cli-one-shot-20261120.yml]
+permissions: {contents: read}
+jobs:
+  lookup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Detect supported Kaggle kernels list CLI then identify exact matching private notebook only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import subprocess,json
+          helpinfo=subprocess.run(["kaggle","kernels","list","--help"],
+              capture_output=True,text=True,timeout=40)
+          h=(helpinfo.stdout+"\n"+helpinfo.stderr).lower()
+          flags=[x for x in ("--mine","-m","--user","-u","--page","-p","--search","-s")
+                 if x in h]
+          candidates=[["kaggle","kernels","list","--mine"],
+                      ["kaggle","kernels","list","-m"],
+                      ["kaggle","kernels","list"]]
+          attempts=[]
+          for cmd in candidates:
+              p=subprocess.run(cmd,text=True,capture_output=True,timeout=70)
+              matches=[line.strip()[:250] for line in p.stdout.splitlines()
+                  if any(v in line.lower() for v in
+                  ("gemma-visible-test","native-test-opportunity","visible-test-upperbound",
+                   "native-test-opportunity-cpu"))]
+              attempts.append({"command_suffix":" ".join(cmd[3:]),
+                  "returncode":p.returncode,
+                  "cli_usage_error":"unrecognized arguments" in p.stderr.lower(),
+                  "output_line_count":len(p.stdout.splitlines()),
+                  "matching_owned_notebooks":matches[:5]})
+              if p.returncode==0:break
+          print("GEMMA_KAGGLE_CLI_OWNED_NOTEBOOK_RESOLVE="+json.dumps({
+             "cli_help_return_code":helpinfo.returncode,
+             "supported_flag_strings":flags,"attempts":attempts,
+             "no_new_kernel_no_model_inference_or_submit":True},sort_keys=True))
+          PY
