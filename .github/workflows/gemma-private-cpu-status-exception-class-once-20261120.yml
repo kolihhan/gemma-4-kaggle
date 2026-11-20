@@ -1,0 +1,64 @@
+name: Gemma exact private CPU status exception class final one-shot
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-private-cpu-status-exception-class-once-20261120.yml]
+permissions: {contents: read}
+jobs:
+  classify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Classify exact status result without logging error body
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import subprocess,hashlib,json,re
+          name="kolihhan/gemma-visible-test-upperbound-20261120"
+          p=subprocess.run(["kaggle","kernels","status",name],
+                           capture_output=True,text=True,timeout=65)
+          raw=p.stderr+"\n"+p.stdout
+          patterns={
+            "exception_HTTPError":r"HTTPError",
+            "exception_ApiException":r"ApiException",
+            "exception_ClientError":r"ClientError",
+            "exception_AttributeError":r"AttributeError",
+            "exception_KeyError":r"KeyError",
+            "exception_TypeError":r"TypeError",
+            "exception_UnicodeDecodeError":r"UnicodeDecodeError",
+            "word_Non_Existent":r"non.exist|not.exist|doesn.t.exist",
+            "word_deleted":r"deleted|removed",
+            "word_invalid":r"invalid",
+            "word_kernel_not_found":r"kernel.{0,25}not.{0,20}found",
+            "word_redirect":r"redirect",
+            "word_unauthorized":r"unauthoriz",
+            "word_bad_request":r"bad.request",
+            "word_notebook":r"notebook",
+            "word_running":r"running",
+            "word_busy":r"busy",
+            "word_conflict":r"conflict",
+            "word_503":r"503",
+            "word_500":r"500",
+            "word_404":r"404",
+            "word_403":r"403",
+            "word_429":r"429",
+            "traceback":r"traceback",
+            "worker_status":r"KernelWorkerStatus.",
+            "status_complete":r"complete",
+            "status_error":r"error",
+            "kernel_ref_in_error":r"gemma-visible-test-upperbound",
+          }
+          print("GEMMA_PRIVATE_CPU_EXCEPTION_SIGNATURE="+json.dumps({
+             "status_return_code":p.returncode,
+             "fingerprint_sha256":hashlib.sha256(raw.encode()).hexdigest(),
+             "error_length":len(raw),
+             "pattern_hits":{k:bool(re.search(v,raw,re.I|re.S)) for k,v in patterns.items()},
+             "no_new_inference_or_submission":True},sort_keys=True))
+          PY
