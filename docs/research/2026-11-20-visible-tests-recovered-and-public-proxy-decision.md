@@ -33,3 +33,19 @@ New [GHA #44764497251](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/4
 - If v2 parses source files but most have no exact-basename tests, **reject exact basename as a general verification strategy**, consistent with the failed public-proxy gate.
 - If v2 finds candidate tests, still need a model-visible, no-hidden-grader path and fresh paired actual 31B grader-resolved test before claims of improved performance. Do not use gold touched paths as model inputs.
 - Official Kaggle best remains **0.18** ref #58183466; the submitted Coder LoRA **0.12** ref #58558350 is worse. No score gain or new official code submission here.
+## FINAL v2 official-private CPU result — terminal SUCCESS (2026-11-20)
+
+**[GHA #44764497251](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44764497251) completed SUCCESS**, including private Kaggle script terminal COMPLETE and downloaded schema-checked safe aggregate. Registered private slug `kolihhan/gemma-visible-path-v2-20261120`. This is a parser-corrected replay of the SAME four previously certified official public-dev tasks, not new model inference.
+
+| Frozen public-development task | Repo-family Python test files in original snapshot | Gold source `.py` paths parsed | Exact basename-related tests found |
+|---|---:|---:|---:|
+| FastAPI task ordinal 1 | 362 | 1 | 0 |
+| FastAPI task ordinal 2 | 498 | 1 | 0 |
+| Rich task ordinal 3 | 62 | 1 | 0 |
+| Rich task ordinal 4 | 63 | 1 | 1 |
+
+All four gold patches are nonempty and are **unified diff** format: per task 1 `---` header and 1 `+++` header, **zero** `diff --git` headers. The v1 parser had zero input on all four; v2 supports unified patch paths and recovered **4/4** valid modified source `.py` paths. **Exact basename test retrieval found a candidate for only 1/4**; the other three may have related tests under different names or indirect packages, unknown. Actual availability/execution of a relevant test, model consumption of test feedback and additional grader PASS remain UNOBSERVED. Do not call this a solver negative or a confirmation that tests are absent.
+
+Together with 53-case actual public commit test-proxy C1 23 vs C0 21 (+2, prereg fail), stop promoting exact-basename and weak token-rank retrieval as the main competitive lever. Next mechanism should distinguish **incorrect patch semantics** from incomplete localization on real scored model traces, and only then nominate a new actionable 31B change.
+
+**Official score unchanged:** best 0.18 #58183466; no GPU, model training or official submission this correction.
