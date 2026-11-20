@@ -1,3 +1,10 @@
+# 2026-11-20 10:17 MYT — official 31B Coder LoRA #58558350 is still PENDING
+
+**New authenticated read-only Kaggle result:** [GitHub Actions #44659728947](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44659728947), terminal SUCCESS. The exact Kaggle submission #58558350 (`gemma31-real-coder-lora-one-variable-20261119`) remains `SubmissionStatus.PENDING` with **blank Public and Private**, and 1 scored entry is still active. Previous incumbent #58183466 remains `SubmissionStatus.COMPLETE`, **Public 0.18**. No scorer re-submission and no model-quality gain.
+
+**Decision:** no new LoRA candidates before true scorer completion. Preserve serving/time/KV-cache and weight activation as *unverified*, not presumed faults. Do not judge single-score differences against 0.18 using arbitrary 0.21/0.24/0.25 thresholds: public repeated identical bundles have yielded 0.18/0.13/0.13 in community [source CSV](https://github.com/fjcarmona78/gemma4-agent-noise-study/blob/main/results/kaggle_submissions.csv), with contextual serving/denominator uncertainty. A terminal future result is necessary but not sufficient for attributing improvement to LoRA.
+---
+
 ## 2026-11-19 19:48 MYT — Official Kaggle real 31B Coder-LoRA candidate accepted, score PENDING
 
 - **Actual authenticated Kaggle competition code submission ID `58558350`**, marker `gemma31-real-coder-lora-one-variable-20261119`, accepted 2026-11-19 11:48:01 UTC. [One-time GitHub Actions #44517965803](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44517965803) terminal **SUCCESS** and contains official API `{"ref": 58558350}` plus independent authenticated ledger `SubmissionStatus.PENDING`, empty Public score at 11:48:03 UTC. **Not a gain or completed score.** No resubmission or repeated polling.
