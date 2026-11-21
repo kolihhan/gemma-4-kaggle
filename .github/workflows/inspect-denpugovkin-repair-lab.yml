@@ -1,0 +1,51 @@
+name: Inspect external Gemma Repair Lab notebook (one-off)
+on:
+  push:
+    branches: [ops/inspect-denpugovkin-repair-lab-20261121]
+    paths:
+      - '.github/workflows/inspect-denpugovkin-repair-lab.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read-only fetch of public notebook (no execution or submission)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q 'kaggle==2.2.5' 'six==1.17.0'
+          mkdir -p /tmp/repair-lab
+          kaggle kernels pull denpugovkin/gemma-4-repair-lab-compare-before-you-submit -p /tmp/repair-lab --metadata
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('/tmp/repair-lab')
+          print('PULLED_FILES',[(x.name,x.stat().st_size) for x in p.iterdir()])
+          for meta in p.glob('*metadata.json'):
+              d=json.loads(meta.read_text())
+              print('SOURCE_METADATA',json.dumps({k:d.get(k) for k in ['id','title','code_file','competition_sources','dataset_sources','enable_gpu','enable_internet']},ensure_ascii=False))
+          for f in p.iterdir():
+              if f.suffix=='.ipynb':
+                  nb=json.loads(f.read_text())
+                  cells=[(''.join(x.get('source',[]))) for x in nb.get('cells',[]) if x.get('cell_type')=='code']
+              elif f.suffix=='.py':
+                  cells=[f.read_text()]
+              else:
+                  continue
+              print('SOURCE_FILE',f.name,'CODE_CELLS',len(cells))
+              text='\n\n'.join(cells)
+              triggers=['submission.zip','competitions submit','kernels push','agent.yaml','zipfile','evaluate','compare','kaggle/working']
+              for token in triggers:
+                  print('TOKEN',repr(token),'FOUND',token.lower() in text.lower())
+              print('SOURCE_START_BEGIN')
+              print(text[:38000])
+              print('SOURCE_START_END')
+          PY
