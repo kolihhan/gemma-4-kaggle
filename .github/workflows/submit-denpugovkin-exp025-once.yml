@@ -1,0 +1,35 @@
+name: Submit Den Pugovkin exp025 to Gemma 4 (one shot)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/submit-denpugovkin-exp025-once.yml'
+permissions:
+  contents: read
+concurrency:
+  group: gemma4-denpugovkin-exp025-one-shot-20261121
+  cancel-in-progress: false
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned Kaggle client and notebook builder
+        run: |
+          python -m pip install -q --disable-pip-version-check 'kaggle==2.2.5' 'six==1.17.0' 'nbformat==5.10.4'
+          python -m py_compile scripts/submit_denpugovkin_exp025_once.py
+      - name: Validate public candidate, reproduce private ZIP, submit and confirm receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -u scripts/submit_denpugovkin_exp025_once.py
+          echo "ONE_SHOT_FINISHED_CHECK_LOG_FOR_AUTHENTICATED_RECEIPT"
