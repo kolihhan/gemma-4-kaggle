@@ -29,14 +29,14 @@ class RetrieverTests(unittest.TestCase):
         self.assertEqual(len([x for x in retrieve('validate_token',self.root) if x['symbol']=='validate_token']),1)
     def test_251st_relevant_file_not_lost(self):
         for i in range(250):
-            (self.root / f'a{i:03}.py').write_text('def irrelevant():\\n    return 1\\n')
-        (self.root / 'z_auth.py').write_text('def refresh_token():\\n    return 1\\n')
+            (self.root / f'a{i:03}.py').write_text('def irrelevant():\n    return 1\n')
+        (self.root / 'z_auth.py').write_text('def refresh_token():\n    return 1\n')
         found = retrieve('refresh token', self.root)
         self.assertEqual(found[0]['symbol'], 'refresh_token')
         self.assertEqual(found[0]['path'], 'z_auth.py')
     def test_hidden_fixture_not_visible(self):
         (self.root / 'fixtures').mkdir()
-        (self.root / 'fixtures' / 'auth.py').write_text('def refresh_token():\\n    return "PRIVATE_FIXTURE_SENTINEL"\\n')
+        (self.root / 'fixtures' / 'auth.py').write_text('def refresh_token():\n    return "PRIVATE_FIXTURE_SENTINEL"\n')
         self.assertNotIn('PRIVATE_FIXTURE_SENTINEL', repr(retrieve('refresh token', self.root)))
     def test_root_test_file_is_not_model_visible(self):
         (self.root/'test_auth.py').write_text('def validate_token():\n    return "HIDDEN_TEST_SENTINEL"\n')
