@@ -1,3 +1,12 @@
+# NOW — Official Den Pugovkin exp025 submitted (2026-11-21)
+
+- **VERIFIED OFFICIAL KAGGLE CODE SUBMISSION:** ref **58654875** accepted **2026-11-21 06:51:43 UTC** (14:51 MYT). Authenticated ledger returned `SubmissionStatus.PENDING`; both Public and Private scores were empty when checked. **No score or gain established.** [Successful submit and receipt](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44877473767).
+- **EXACT CANDIDATE:** [Den Pugovkin Repair Lab](https://www.kaggle.com/code/denpugovkin/gemma-4-repair-lab-compare-before-you-submit) `exp025` **CANDIDATE**, not its archived 0.22 control. 31B Patchsmith, 8-minute limit, **40** max tool calls. Third-party notebook source was downloaded but **not executed**; six attributed runtime files were extracted by AST literals and packaged. Source notebook SHA256 `2b618e9d8022d9a056fb861f54d39b9475e8cb9f4240cffc75d84f8481c28fa3`.
+- **BYTE-VERIFIED:** local ZIP and Kaggle private CPU-builder output match byte-for-byte, SHA256 `ad4601edc36821583d490e7f12ce3188343f36c4ca73feb840a38752afa464b0`. Private pinned kernel `kolihhan/gemma4-denpugovkin-exp025-20261121/1`. Submission quota before launch: 1 allowed, 0 today, 0 active. No training/new inference until Kaggle's scoring process. Script `scripts/submit_denpugovkin_exp025_once.py` retains duplicate and quota guards; automatic push submit trigger was retired after the receipt.
+- **Next verification:** check authenticated Kaggle submissions ledger for final terminal status and numeric score; compare only then with independently verified historical best.
+
+---
+
 # NOW — Official Early-Edit 31B Kaggle submission accepted (2026-11-12)
 
 - **ACTUAL OFFICIAL CODE SUBMISSION:** Kaggle accepted **ref 58267012** at **2026-11-12 08:38:04 UTC**. Source branch `research/31b-earlyedit-paired-20261112`, immutable exact submitted ZIP SHA256 `e13cba448589157030b3dd3d980c6aca3ee932779b4847d565e4e60b6a1813fb`, private CPU builder `kolihhan/gemma4-earlyedit-official-43184445981`. GitHub [successful Action 43184445981](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/43184445981) independently checked the remote archive byte-for-byte, authenticated one available official slot, and received an actual numeric Kaggle API receipt. **Competition score is PENDING/NOT YET VERIFIED; this is not an improved 0.18 score.**
