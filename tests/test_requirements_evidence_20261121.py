@@ -60,5 +60,41 @@ class EvidenceTests(unittest.TestCase):
         self.assertLessEqual(len(a['matches']), 4)
 
 
+    def test_sensitive_filenames_fail_closed_even_at_workspace_root(self):
+        # These are normal .py files, so excluding only directory names leaks them.
+        (self.root/'hidden_test.py').write_text(
+            'def refresh_token():\n    assert "LEAK_ROOT_HIDDEN"\n')
+        (self.root/'grader_case.py').write_text(
+            'def refresh_token():\n    assert "LEAK_ROOT_GRADER"\n')
+        (self.root/'src'/'reference_fix.py').write_text(
+            'def refresh_token():\n    assert "LEAK_NESTED_REFERENCE"\n')
+        (self.root/'tests'/'private_case.py').write_text(
+            'def refresh_token():\n    assert "LEAK_NESTED_PRIVATE"\n')
+        (self.root/'tests'/'test_api.py').write_text(
+            'def test_refresh_token():\n    assert refresh_token(None) is None\n')
+        result = find_evidence('refresh token', self.root)
+        paths = {r['path'] for r in result['matches']}
+        self.assertEqual(result['status'], 'EVIDENCE')
+        self.assertIn('tests/test_api.py', paths)
+        self.assertFalse({'hidden_test.py', 'grader_case.py',
+                          'src/reference_fix.py', 'tests/private_case.py'} & paths)
+        self.assertNotIn('LEAK_', repr(result))
+
+    def test_sensitive_directory_names_and_symlink_remain_excluded(self):
+        (self.root/'src'/'grader_snapshots').mkdir()
+        (self.root/'src'/'grader_snapshots'/'api.py').write_text(
+            'def refresh_token():\n    assert "LEAK_DIR_GRADER"\n')
+        (self.root/'src'/'secret_case').mkdir()
+        (self.root/'src'/'secret_case'/'api.py').write_text(
+            'def refresh_token():\n    assert "LEAK_DIR_SECRET"\n')
+        (self.root/'tests'/'test_public.py').write_text(
+            'def test_refresh_token():\n    assert refresh_token(None) is None\n')
+        (self.root/'tests'/'hidden_link.py').symlink_to(
+            self.root/'src'/'grader_snapshots'/'api.py')
+        result = find_evidence('refresh token', self.root)
+        self.assertEqual([x['path'] for x in result['matches']], ['tests/test_public.py'])
+        self.assertNotIn('LEAK_', repr(result))
+
+
 if __name__ == '__main__':
     unittest.main()
