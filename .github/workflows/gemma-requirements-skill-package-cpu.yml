@@ -1,0 +1,31 @@
+name: Gemma Requirements Skill Candidate CPU Gate
+
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths:
+      - scripts/requirements_evidence_20261121.py
+      - scripts/build_requirements_skill_candidate_20261121.py
+      - tests/test_requirements_evidence_20261121.py
+      - tests/test_build_requirements_skill_candidate_20261121.py
+      - .github/workflows/gemma-requirements-skill-package-cpu.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-cpu-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Static syntax gate
+        run: python -m py_compile scripts/requirements_evidence_20261121.py scripts/build_requirements_skill_candidate_20261121.py
+      - name: Evidence extraction tests
+        run: python -m unittest discover -s tests -p 'test_requirements_evidence_20261121.py' -v
+      - name: 31B package control tests
+        run: python -m unittest discover -s tests -p 'test_build_requirements_skill_candidate_20261121.py' -v
