@@ -18,6 +18,20 @@ EXCLUDE = frozenset({
     'private', 'hidden', 'grader', 'evaluation', 'fixtures', 'fixture',
     'benchmarks', 'examples', 'node_modules', 'dist', 'build',
 })
+# Only regular, non-evaluator repository sources may be shown to the model.
+# Deny filename and directory components, including root-level hidden/grader files.
+# This is a conservative name guard, not proof that arbitrary visible files are safe.
+SENSITIVE_PATH_TOKEN = re.compile(
+    r'(?:^|[_.-])(?:hidden|private|grader|grading|gold|reference|secret|eval|evaluation|evaluator)(?:[_.-]|$)',
+    re.IGNORECASE,
+)
+
+
+def _blocked_component(name: str) -> bool:
+    return (name.startswith('.') or name.lower() in EXCLUDE or
+            bool(SENSITIVE_PATH_TOKEN.search(name)))
+
+
 STOP = frozenset({'the','and','for','that','with','should','when','from','this',
                   'there','what','which','issue','code','file','error',
                   'return','fix','function','bug','not','its','but'})
@@ -55,10 +69,10 @@ def find_evidence(issue: str, root: Path, max_files: int = 240,
     scanned, truncated, candidates = 0, False, []
     start = time.monotonic()
     for directory, dirs, files in os.walk(root, followlinks=False):
-        dirs[:] = sorted(d for d in dirs if not d.startswith('.') and d.lower() not in EXCLUDE
+        dirs[:] = sorted(d for d in dirs if not _blocked_component(d)
                          and not (Path(directory)/d).is_symlink())
         for name in sorted(files):
-            if not name.endswith('.py') or name.startswith('.'):
+            if not name.endswith('.py') or _blocked_component(Path(name).stem):
                 continue
             path = Path(directory)/name
             if path.is_symlink():
