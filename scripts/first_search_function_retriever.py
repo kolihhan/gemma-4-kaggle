@@ -61,7 +61,7 @@ def retrieve(issue: str, root: Path, limit: int = 3, max_files: int = 250, max_b
             visited += 1
             path_score = len(query & words(rel.replace('_', ' ').replace('/', ' ')))
             header_score = 0
-            for name in re.findall(r'^\\s*(?:async\\s+)?def\\s+([A-Za-z_][A-Za-z_0-9]*)\\s*\\(', headers, re.M):
+            for name in re.findall(r'^\s*(?:async\s+)?def\s+([A-Za-z_][A-Za-z_0-9]*)\s*\(', headers, re.M):
                 header_score = max(header_score, len(query & words(name.replace('_', ' '))))
             candidates.append((-(10 * header_score + 4 * path_score), rel, path))
     candidates.sort(key=lambda item: (item[0], item[1]))
@@ -76,7 +76,7 @@ def retrieve(issue: str, root: Path, limit: int = 3, max_files: int = 250, max_b
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             start, end = node.lineno, min(node.end_lineno or node.lineno + 23)
-            snippet = '\\n'.join(lines[start-1:end])[:1600]
+            snippet = '\n'.join(lines[start-1:end])[:1600]
             name_words = words(node.name.replace('_', ' '))
             path_words = words(rel.replace('/', ' ').replace('_', ' '))
             doc_words = words(ast.get_docstring(node) or '')
