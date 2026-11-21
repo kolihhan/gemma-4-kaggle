@@ -46,6 +46,9 @@ jobs:
               for token in triggers:
                   print('TOKEN',repr(token),'FOUND',token.lower() in text.lower())
               print('SOURCE_START_BEGIN')
-              print(text[:38000])
+              print('CODE_LENGTH',len(text))
+              print('CODE_TAIL_BEGIN')
+              print(text[-25000:])
+              print('CODE_TAIL_END')
               print('SOURCE_START_END')
           PY
