@@ -123,7 +123,7 @@ def builder(payload):
     p=ROOT/"builder";p.mkdir()
     (p/"builder.ipynb").write_text(nbformat.writes(nb))
     (p/"kernel-metadata.json").write_text(json.dumps({
-      "id":KERNEL,"title":"Den Pugovkin exp025 Patchsmith 40call candidate",
+      "id":KERNEL,"title":KERNEL.split("/")[-1],
       "code_file":"builder.ipynb","language":"python","kernel_type":"notebook",
       "is_private":True,"enable_gpu":False,"enable_tpu":False,"enable_internet":False,
       "competition_sources":[COMP],"dataset_sources":[],"kernel_sources":[],
