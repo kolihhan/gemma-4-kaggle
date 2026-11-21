@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/submit-denpugovkin-exp025-once.yml'
+      - 'scripts/submit_denpugovkin_exp025_once.py'
 permissions:
   contents: read
 concurrency:
