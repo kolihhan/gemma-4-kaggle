@@ -1,0 +1,30 @@
+name: Gemma Native First-Search CPU Gate
+
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths:
+      - "scripts/build_first_search_toolcap60_inline.py"
+      - "tests/test_build_first_search_toolcap60_inline.py"
+      - ".github/workflows/gemma-native-first-search-cpu.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-run-command-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile candidate builder
+        run: python -m py_compile scripts/build_first_search_toolcap60_inline.py
+      - name: Test exact native shell command and fail-closed contracts
+        run: python -m unittest discover -s tests -p "test_build_first_search_toolcap60_inline.py" -v
+      - name: Boundaries
+        run: |
+          echo "CPU integration gate only; no 31B inference and no Kaggle submission"
