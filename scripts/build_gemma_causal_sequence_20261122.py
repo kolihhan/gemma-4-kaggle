@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import re
 from pathlib import Path
 import zipfile
 
@@ -94,13 +95,13 @@ def build_files(control: dict[str, str]) -> dict[str, str]:
     files = dict(control)
     files["agent.yaml"] = ROOT
     files["sub_agents/scout.yaml"] = SCOUT
-    files["sub_agents/coder.yaml"] = old_yaml
+    files["sub_agents/coder.yaml"] = re.sub(r"(?m)^name:\\s+\\S+\\s*$", "name: swe_coder", old_yaml, count=1)
     files["prompts/scout.md"] = SCOUT_PROMPT
     files["prompts/system.md"] = old_prompt.rstrip() + CODER_ADDENDUM
     if "scout_evidence" not in files["prompts/system.md"]:
         raise AssertionError("scout state not linked to coder")
     # Truly two distinct agents, one base variant.
-    if files["sub_agents/coder.yaml"].count("model: " + MODEL) != 1:
+    if "name: swe_coder" not in files["sub_agents/coder.yaml"]:\n        raise ValueError("scored coder name not recognized")\n    if files["sub_agents/coder.yaml"].count("model: " + MODEL) != 1:
         raise ValueError("coder model mismatch")
     if files["eval_config.yaml"] != budget or files["configs/sampling.yaml"] != control["configs/sampling.yaml"]:
         raise AssertionError("changed budget or sampling")
