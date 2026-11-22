@@ -1,0 +1,44 @@
+name: Gemma existing Candidate History evidence - one terminal check
+on:
+  push:
+    branches: [research/gemma-history-evidence-once-20261122]
+    paths: [.github/workflows/gemma-history-existing-output-check-20261122.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Probe exact existing private 31B job, avoid any GPU or duplicate push
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install --disable-pip-version-check -q 'kaggle==2.2.5' 'six==1.17.0'
+          python - <<'PY'
+          import subprocess,re,json
+          ref='kolihhan/gemma31-candidate-history-2issues-20261122-v1'
+          cmd=['kaggle','kernels','status',ref]
+          p=subprocess.run(cmd,capture_output=True,text=True,timeout=90)
+          v=p.stdout+p.stderr
+          states=re.findall(r'KernelWorkerStatus[.][A-Z_]+',v)
+          if p.returncode!=0 or not states:
+              print('GEMMA_HISTORY_STATUS=UNKNOWN')
+              print('GEMMA_HISTORY_STATUS_EXIT='+str(p.returncode))
+              raise SystemExit(0)
+          status=states[0].split('.')[-1]
+          print('GEMMA_HISTORY_EXACT_PRIVATE_KERNEL_STATUS='+status)
+          if status!='COMPLETE':
+              print('GEMMA_HISTORY_GRADE=NOT_AVAILABLE')
+              raise SystemExit(0)
+          p=subprocess.run(['kaggle','kernels','files',ref,'-v'],capture_output=True,text=True,timeout=120)
+          names=sorted(set(re.findall(r'[A-Za-z0-9_.-]+[.](?:json|patch|zip)',p.stdout)))
+          print('GEMMA_HISTORY_OUTPUT_MANIFEST='+json.dumps({'status_exit':p.returncode,'known_file_names':names[:30]},sort_keys=True))
+          print('GEMMA_HISTORY_REQUIRES_INDEPENDENT_GRADER=TRUE')
+          PY
