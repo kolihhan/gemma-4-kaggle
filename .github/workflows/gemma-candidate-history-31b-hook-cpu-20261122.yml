@@ -1,0 +1,81 @@
+name: Gemma candidate history real31B integration feasibility CPU-only 20261122
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths:
+      - .github/workflows/gemma-candidate-history-31b-hook-cpu-20261122.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/dual-agent-recovery-v0-20261108
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install exact ADK and Kaggle harness CPU wheels
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q 'kaggle==2.2.5' 'six==1.17.0'
+          mkdir -p /tmp/candidate-history-wheelhouse
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel" -p /tmp/candidate-history-wheelhouse --unzip >/dev/null
+          done
+          python -m pip install -q --disable-pip-version-check /tmp/candidate-history-wheelhouse/adk_submission*.whl /tmp/candidate-history-wheelhouse/google_adk*.whl /tmp/candidate-history-wheelhouse/adk_eval_core*.whl
+          python -m py_compile scripts/candidate_history.py
+      - name: Run existing official ADK Candidate History tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -v tests.test_candidate_history tests.test_candidate_history_adk tests.test_candidate_history_inventory tests.test_paired_check_skill > /tmp/candidate-history-tests.log 2>&1
+          tail -n 8 /tmp/candidate-history-tests.log
+          echo GEMMA_HISTORY_CPU_OFFICIAL_ADK_FIXTURES=PASS
+      - name: Identify official swegemma Runner instrumentation hook without model inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          whl=next(Path('/tmp/candidate-history-wheelhouse').glob('swegemma*.whl'))
+          with ZipFile(whl) as z:
+              p='swegemma/harness/agent_runner.py'
+              data=z.read(p).decode().splitlines()
+              marks=('async def run_agent_sandbox','def run_agent_sandbox','Runner(', 'App(', 'plugins=', 'BasePlugin', 'SwegemmaContext(', 'sandbox.create', 'submit_patch')
+              indexes=[i for i,l in enumerate(data) if any(s in l for s in marks)]
+              print('SWAGEMMA_AGENT_RUNNER_LINES='+str(len(data)))
+              print('HOOK_INDEX_COUNT='+str(len(indexes)))
+              selected=set()
+              for i in indexes:
+                  selected.update(range(max(0,i-3),min(len(data),i+6)))
+              for i in sorted(selected):
+                  if len(data[i])>240:continue
+                  print(f'HOOK_SOURCE_{i+1}: {data[i]}')
+          print('NO_RAW_TASKS_NO_GOLD_NO_INFERENCE=TRUE')
+          PY
+      - name: Current Gemma pending result and GPU quota, read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import subprocess,csv,io,json
+          p=subprocess.run(['kaggle','competitions','submissions','gemma-4-developer-agent','-v','-q'],capture_output=True,text=True,timeout=90,check=True)
+          rows=list(csv.DictReader(io.StringIO(p.stdout.lstrip('\ufeff'))))
+          found=[{k:r.get(k) for k in ('ref','status','date','publicScore')} for r in rows if r.get('ref') in ('58654875','58183466')]
+          print('GEMMA_PENDING_AND_CHAMPION='+json.dumps(found,sort_keys=True))
+          q=subprocess.run(['kaggle','quota','--format','json'],capture_output=True,text=True,timeout=90)
+          if q.returncode==0:
+              pools=[x for x in json.loads(q.stdout) if x.get('resource')=='GPU']
+              print('GEMMA_GPU_QUOTA_POOL='+json.dumps([{'resource':x.get('resource'),'remaining':x.get('remaining')} for x in pools],sort_keys=True))
+          else: print('GEMMA_GPU_QUOTA_UNAVAILABLE=TRUE')
+          print('NO_GPU_NO_SUBMISSION_NO_TRAINING=TRUE')
+          PY
