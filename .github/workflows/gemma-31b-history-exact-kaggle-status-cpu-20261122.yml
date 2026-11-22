@@ -1,0 +1,35 @@
+name: Gemma 31B Candidate History exact private kernel status once
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma-31b-history-exact-kaggle-status-cpu-20261122.yml]
+permissions: {contents: read}
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Get exact private Notebook terminal state and safe file manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q 'kaggle==2.2.5' 'six==1.17.0'
+          python - <<'PY'
+          import subprocess,re
+          k='kolihhan/gemma31-candidate-history-2issues-20261122-v1'
+          for command in (['kernels','status',k],['kernels','files',k,'-v']):
+              p=subprocess.run(['kaggle',*command],capture_output=True,text=True,timeout=90)
+              if command[0]=='status':
+                  print('GEMMA_31B_PRIVATE_STATUS_QUERY_EXIT='+str(p.returncode))
+                  states=re.findall(r'KernelWorkerStatus[.][A-Z_]+',p.stdout+p.stderr)
+                  print('GEMMA_31B_PRIVATE_STATE='+str(states[:2]))
+              else:
+                  print('GEMMA_PRIVATE_OUTPUT_FILES_QUERY_EXIT='+str(p.returncode))
+                  allowed=sorted(set(re.findall(r'[A-Za-z0-9_.-]+[.](?:json|patch|zip)',p.stdout)))
+                  print('GEMMA_PRIVATE_KNOWN_FILES='+str(allowed[:22]))
+          print('NO_GPU_NO_INFERENCE_NO_COMPETITION_SUBMISSION=TRUE')
+          PY
