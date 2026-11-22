@@ -1,0 +1,115 @@
+name: Gemma 31B original champion two-issue Candidate History private experiment
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma31-candidate-history-2issue-real-once-20261122.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma31-history-2issues-20261122
+  cancel-in-progress: false
+jobs:
+  run_once:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      REF: kolihhan/gemma31-candidate-history-2issues-20261122-v1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/dual-agent-recovery-v0-20261108
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Pin original 0.18 archive and private observer source, check quota and idempotency
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q 'kaggle==2.2.5' 'six==1.17.0'
+          python -m py_compile scripts/gemma_candidate_history_live31.py scripts/render_gemma31_history_private_20261122.py scripts/candidate_history.py
+          set +e
+          status="$(kaggle kernels status "$REF" 2>&1)"
+          set -e
+          if [[ "$status" == *KernelWorkerStatus.* ]]; then
+            echo "STOP_EXACT_PRIVATE_KERNEL_ALREADY_EXISTS=$REF"
+            exit 1
+          fi
+          python - <<'PY'
+          import subprocess,json
+          p=subprocess.run(['kaggle','quota','--format','json'],capture_output=True,text=True,timeout=90,check=True)
+          pools=[v for v in json.loads(p.stdout) if v.get('resource')=='GPU']
+          if len(pools)!=1: raise SystemExit('GEMMA_CANNOT_VERIFY_GPU_POOL')
+          hours=float(str(pools[0]['remaining']).rstrip('h'))
+          print('GEMMA_GPU_QUOTA_BEFORE_HOURS='+str(hours))
+          if hours<3.0:raise SystemExit('GEMMA_INSUFFICIENT_GPU_QUOTA_NO_LAUNCH')
+          PY
+          mkdir -p /tmp/gemma31-history-source
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p /tmp/gemma31-history-source -o >/dev/null
+          python -m scripts.render_gemma31_history_private_20261122 --source-zip /tmp/gemma31-history-source/submission.zip --out /tmp/gemma31-history-private
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path=Path('/tmp/gemma31-history-private')
+          meta=json.loads((path/'kernel-metadata.json').read_text())
+          assert meta['id']=='kolihhan/gemma31-candidate-history-2issues-20261122-v1'
+          assert meta['is_private'] is True and meta['enable_gpu'] is True and meta['enable_internet'] is False
+          assert meta['model_sources']==['google/gemma-4/Other/gemma-4-31b-it-qat-w4a16-ct/2']
+          code=(path/'experiment.py').read_text()
+          compile(code,'experiment.py','exec')
+          assert "('control',)" in code and 'candidate_history' in code
+          print('GEMMA_PRIVATE_31B_HISTORY_PREFLIGHT_PASS=TRUE')
+          PY
+          rm -rf /tmp/gemma31-history-source
+      - name: Push ONE private GPU notebook for two original 31B tasks (not competition submission)
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle kernels push -p /tmp/gemma31-history-private --accelerator NvidiaL4 -t 2700 > /tmp/gemma-history-push.log 2>&1 || {
+            echo GEMMA_PRIVATE_PUSH_FAILED=TRUE
+            tail -n 12 /tmp/gemma-history-push.log | sed -E 's/KGAT_[A-Za-z0-9_-]+/[REDACTED]/g'
+            exit 1
+          }
+          echo GEMMA_31B_PRIVATE_EXPERIMENT_PUSHED=TRUE
+          echo NO_OFFICIAL_COMPETITION_SUBMISSION=TRUE
+      - name: Inspect terminal outcome and aggregate private candidate history only
+        shell: bash
+        run: |
+          set -euo pipefail
+          state=PENDING
+          for i in $(seq 1 66); do
+            s="$(kaggle kernels status "$REF" 2>&1 || true)"
+            if [[ "$s" == *KernelWorkerStatus.COMPLETE* ]]; then state=COMPLETE; break; fi
+            if [[ "$s" == *KernelWorkerStatus.ERROR* || "$s" == *KernelWorkerStatus.FAILED* ]]; then state=ERROR; break; fi
+            if ((i % 10 == 0)); then echo "GEMMA_31B_PRIVATE_POLL=$i"; fi
+            sleep 40
+          done
+          echo "GEMMA_31B_PRIVATE_KERNEL_STATUS=$state"
+          if [ "$state" != COMPLETE ]; then
+            echo 'GEMMA_REAL_HISTORY_RESULT=UNVERIFIED'
+            exit 0
+          fi
+          mkdir -p /tmp/gemma31-history-result
+          kaggle kernels output "$REF" -p /tmp/gemma31-history-result -o >/dev/null
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path('/tmp/gemma31-history-result')
+          statuses=sorted(root.rglob('status.json'))
+          outputs=sorted(root.rglob('solver-results-11.json'))
+          print('GEMMA_HISTORY_REAL_STATUS_RECORD_COUNT='+str(len(statuses)))
+          print('GEMMA_HISTORY_REAL_SOLVER_SUMMARY_COUNT='+str(len(outputs)))
+          for p in statuses:
+              s=json.loads(p.read_text())
+              safe={k:s.get(k) for k in ('version','observer_installed','finalized_before_sandbox_stop','history_complete','unique_revisions','nonempty_revisions','boundary_events','capture_seconds','submit_attempts','hook_error_type','model_error_type')}
+              print('GEMMA_REAL_HISTORY_ONE='+json.dumps(safe,sort_keys=True))
+          for p in outputs:
+              d=json.loads(p.read_text())
+              for row in d['rows']:
+                  safe={k:row.get(k) for k in ('model_response','error','seconds','tool_calls','patch_sha256')}
+                  print('GEMMA_REAL_31B_SOLVER_ROW='+json.dumps(safe,sort_keys=True))
+          print('GEMMA_PRIVATE_MODEL_TRACE_NOT_PUBLIC=TRUE')
+          if len(statuses)!=2 or len(outputs)!=1:
+              raise SystemExit('INCOMPLETE_CANDIDATE_HISTORY_CAPTURE')
+          PY
+          rm -rf /tmp/gemma31-history-result
