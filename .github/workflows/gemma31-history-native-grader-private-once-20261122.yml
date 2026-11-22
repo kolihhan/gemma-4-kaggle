@@ -1,0 +1,58 @@
+name: Gemma 31B Candidate History private independent CPU grader (only after solver COMPLETE)
+on:
+  push:
+    branches: [research/dual-agent-recovery-v0-20261108]
+    paths: [.github/workflows/gemma31-history-native-grader-private-once-20261122.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma31-history-native-grader-v1-20261122
+  cancel-in-progress: false
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      SOLVER: kolihhan/gemma31-candidate-history-2issues-20261122-v1
+      GRADER: kolihhan/gemma31-history-native-grade-2issues-20261122-v1
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: research/dual-agent-recovery-v0-20261108, persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Validate frozen private native grader and exact 31B source status
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/render_gemma31_history_native_grader_20261122.py kaggle/gemma31_candidate_history_grade_cpu_20261122.py
+          python -m pip install -q 'kaggle==2.2.5' 'six==1.17.0'
+          python -m scripts.render_gemma31_history_native_grader_20261122 --out /tmp/gemma31-native-history-grader
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('/tmp/gemma31-native-history-grader')
+          meta=json.loads((root/'kernel-metadata.json').read_text())
+          assert meta['is_private'] and not meta['enable_gpu'] and not meta['enable_internet']
+          assert meta['kernel_sources']==['kolihhan/gemma31-candidate-history-2issues-20261122-v1']
+          assert meta['model_sources']==[]
+          compile((root/'experiment.py').read_text(),'experiment.py','exec')
+          print('GEMMA31_NATIVE_GRADER_STATIC_PREFLIGHT_PASS=TRUE')
+          PY
+          state="$(kaggle kernels status "$SOLVER" 2>&1 || true)"
+          echo "GEMMA31_NATIVE_GRADER_SOLVER_STATE=$state"
+          if [[ "$state" != *KernelWorkerStatus.COMPLETE* ]]; then
+            echo 'GEMMA31_NATIVE_GRADER_NOT_LAUNCHED_UNTIL_SOLVER_COMPLETE=TRUE'
+            exit 0
+          fi
+          grader="$(kaggle kernels status "$GRADER" 2>&1 || true)"
+          if [[ "$grader" == *KernelWorkerStatus.* ]]; then
+            echo 'GEMMA31_NATIVE_GRADER_ALREADY_EXISTS_NO_DUPLICATE=TRUE'
+            exit 0
+          fi
+          kaggle kernels push -p /tmp/gemma31-native-history-grader >/tmp/gemma31-history-grade-push.log 2>&1 || {
+            echo 'GEMMA31_PRIVATE_CPU_GRADER_PUSH_FAILURE=TRUE'
+            sed -E 's/KGAT_[A-Za-z0-9_-]+/[REDACTED]/g' /tmp/gemma31-history-grade-push.log | tail -n 12
+            exit 1
+          }
+          echo 'GEMMA31_PRIVATE_CPU_GRADER_PUSHED=TRUE'
+          echo 'NO_GPU_NO_MODEL_NO_COMPETITION_SUBMISSION=TRUE'
