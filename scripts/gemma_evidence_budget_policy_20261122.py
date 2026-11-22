@@ -34,7 +34,7 @@ TESTS = {"pass", "fail", "blocked", "unknown"}
 def normal_path(path: str) -> str:
     p = path.removeprefix("/workspace/").removeprefix("./")
     obj = PurePosixPath(p)
-    if not p or p.startswith("/") or ".." in obj.parts or "\\x00" in p:
+    if not p or p.startswith("/") or ".." in obj.parts or chr(0) in p:
         raise ValueError("unsafe source path")
     return str(obj)
 
@@ -68,7 +68,7 @@ class Budget:
         self.seen_paths |= canonical
         self.observed_source_evidence |= bool(source_evidence)
         if patch_changed is True:
-            if not self.patch_changed:
+            if action == "edit" or not self.patch_changed:
                 self.focused_test = "unknown"
             self.patch_changed = True
         elif patch_changed is False:
@@ -142,6 +142,8 @@ def self_test():
     failed.observe("edit", patch_changed=True)
     failed.observe("test", test_outcome="fail")
     assert failed.choose() == Next.REVISE
+    failed.observe("edit", patch_changed=True)
+    assert failed.choose() == Next.VERIFY
     failed.observe("test", test_outcome="fail")
     assert failed.choose() == Next.STOP_FAILED_CHECK
     try:
@@ -161,8 +163,8 @@ def main():
     parser.add_argument("--calls-left", type=int, default=28)
     parser.add_argument("--seconds-left", type=int, default=240)
     args = parser.parse_args()
-    self_test()
     if args.test:
+        self_test()
         return
     raw = json.loads(args.events_json)
     if not isinstance(raw, list) or len(raw) > 60:
