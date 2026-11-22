@@ -23,7 +23,7 @@ jobs:
           k='kolihhan/gemma31-candidate-history-2issues-20261122-v1'
           for command in (['kernels','status',k],['kernels','files',k,'-v']):
               p=subprocess.run(['kaggle',*command],capture_output=True,text=True,timeout=90)
-              if command[0]=='status':
+              if command[1]=='status':
                   print('GEMMA_31B_PRIVATE_STATUS_QUERY_EXIT='+str(p.returncode))
                   states=re.findall(r'KernelWorkerStatus[.][A-Z_]+',p.stdout+p.stderr)
                   print('GEMMA_31B_PRIVATE_STATE='+str(states[:2]))
