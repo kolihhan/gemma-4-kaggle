@@ -1,0 +1,55 @@
+name: Gemma 31B mandatory evidence-channel official one-shot score
+on:
+  push:
+    branches: [research/mandatory-evidence-channel-20261122]
+    paths:
+      - .github/workflows/gemma-evidence-channel-official-once-20261122.yml
+permissions: {contents: read}
+concurrency:
+  group: gemma-evidence-official-one-shot-20261122
+  cancel-in-progress: false
+jobs:
+  official-once:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      CPU_REF: kolihhan/gemma-evidence-channel-native-cpu-20261122
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install Kaggle API, validate the score script and reserve official slot
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m py_compile scripts/submit_gemma_mandatory_evidence_once_20261122.py
+          python -m pip install -q --disable-pip-version-check 'kaggle==2.2.5' 'six==1.17.0' 'nbformat>=5,<6'
+      - name: Observe existing native CPU compiler until terminal (do not start GPU)
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os,subprocess,re,time
+          ref=os.environ['CPU_REF']
+          for i in range(72):
+              p=subprocess.run(['kaggle','kernels','status',ref],capture_output=True,text=True,timeout=75)
+              states=re.findall(r'KernelWorkerStatus[.][A-Z_]+',p.stdout+p.stderr)
+              if p.returncode==0 and states:
+                  state=states[0].split('.')[-1]
+                  if state=='COMPLETE':
+                      print('GEMMA_EVIDENCE_NATIVE_CPU_TERMINAL=COMPLETE',flush=True)
+                      break
+                  if state in ('ERROR','FAILED','CANCELLED'):
+                      raise RuntimeError('GEMMA_NATIVE_CPU_COMPILE_KERNEL_TERMINAL_FAILURE')
+              time.sleep(12)
+          else:
+              print('GEMMA_EVIDENCE_NO_NATIVE_COMPILER_RESULT_NO_OFFICIAL_SUBMIT=TRUE',flush=True)
+              raise SystemExit(1)
+          PY
+      - name: Execute exactly ONE official Gemma code submission only on real ADK compile PASS
+        shell: bash
+        run: |
+          python -m scripts.submit_gemma_mandatory_evidence_once_20261122
+          echo GEMMA_EVIDENCE_OFFICIAL_ONE_SHOT_SCRIPT_RETURNED=TRUE
