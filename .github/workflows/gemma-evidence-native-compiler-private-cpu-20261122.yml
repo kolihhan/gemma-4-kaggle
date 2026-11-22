@@ -1,0 +1,86 @@
+name: Gemma evidence-channel official native compiler private CPU once
+on:
+  push:
+    branches: [research/mandatory-evidence-channel-20261122]
+    paths:
+      - .github/workflows/gemma-evidence-native-compiler-private-cpu-20261122.yml
+permissions:
+  contents: read
+concurrency:
+  group: gemma-evidence-channel-native-20261122
+  cancel-in-progress: false
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      REF: kolihhan/gemma-evidence-channel-native-cpu-20261122
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Preflight renderer and check no existing CPU duplicate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m py_compile scripts/render_gemma_evidence_channel_native_cpu_20261122.py
+          python -m pip install -q --disable-pip-version-check 'kaggle==2.2.5' 'six==1.17.0'
+          if kaggle kernels status "$REF" >/tmp/gemma-evidence-existing.log 2>&1; then
+            echo GEMMA_EVIDENCE_NATIVE_CPU_ALREADY_EXISTS_NO_DUPLICATE=TRUE
+            exit 1
+          fi
+          mkdir -p /tmp/gemma-evidence-reference
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p /tmp/gemma-evidence-reference -o >/tmp/gemma-evidence-source.log 2>&1
+          python -m scripts.render_gemma_evidence_channel_native_cpu_20261122 --source-zip /tmp/gemma-evidence-reference/submission.zip --out /tmp/gemma-evidence-native-cpu
+      - name: Launch ONLY CPU native compiler on the official wheelhouse
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle kernels push -p /tmp/gemma-evidence-native-cpu -t 600 > /tmp/gemma-evidence-push.log 2>&1
+          echo GEMMA_EVIDENCE_NATIVE_CPU_PUSH_ACCEPTED=TRUE
+      - name: Read-only wait for compiler result
+        shell: bash
+        run: |
+          python - <<'PY'
+          import subprocess,re,time,json,os
+          ref=os.environ['REF']
+          for i in range(48):
+            p=subprocess.run(['kaggle','kernels','status',ref],capture_output=True,text=True,timeout=80)
+            states=re.findall(r'KernelWorkerStatus[.][A-Z_]+',p.stdout+p.stderr)
+            if p.returncode==0 and states:
+              state=states[0].split('.')[-1]
+              if i==0 or state in ('COMPLETE','ERROR','FAILED','CANCELLED'):
+                print('GEMMA_EVIDENCE_NATIVE_CPU_STATE='+state,flush=True)
+              if state in ('COMPLETE','ERROR','FAILED','CANCELLED'):
+                break
+            time.sleep(15)
+          else:
+            print('GEMMA_EVIDENCE_NATIVE_CPU_STATE=UNKNOWN_ACTIVE',flush=True)
+            raise SystemExit(0)
+          if state!='COMPLETE':
+            print('GEMMA_EVIDENCE_NATIVE_COMPILER_NOT_PASSED=TRUE',flush=True)
+            raise SystemExit(0)
+          dest='/tmp/gemma-evidence-cpu-result'
+          import pathlib
+          pathlib.Path(dest).mkdir()
+          p=subprocess.run(['kaggle','kernels','output',ref,'-p',dest,'-o'],capture_output=True,text=True,timeout=120)
+          f=pathlib.Path(dest,'gemma_evidence_channel_native_cpu.json')
+          if p.returncode!=0 or not f.is_file():
+            print('GEMMA_EVIDENCE_NATIVE_CPU_RESULTS_NOT_ACCESSIBLE=TRUE',flush=True)
+            raise SystemExit(0)
+          d=json.loads(f.read_text())
+          print('GEMMA_EVIDENCE_NATIVE_COMPILER_RESULT='+json.dumps({
+            'status':d.get('status'),'root_class':d.get('root_class'),
+            'registered_tools':d.get('registered_tools'),
+            'failure_type':d.get('failure_type'),
+            'no_gpu':d.get('no_gpu'),'no_model_inference':d.get('no_model_inference'),
+          },sort_keys=True),flush=True)
+          PY
+      - name: Remove local artifacts including all private Kaggle output
+        if: always()
+        run: |
+          rm -rf /tmp/gemma-evidence-reference /tmp/gemma-evidence-native-cpu /tmp/gemma-evidence-cpu-result /tmp/gemma-evidence-source.log /tmp/gemma-evidence-push.log /tmp/gemma-evidence-existing.log
+          echo GEMMA_EVIDENCE_NATIVE_CPU_NO_GPU_NO_COMPETITION_SUBMISSION=TRUE
