@@ -1,3 +1,13 @@
+# 2026-11-22 23:55 MYT — REAL OFFICIAL GEMMA 31B EVIDENCE-CHANNEL SUBMISSION PENDING
+
+**FACT:** Authenticated Kaggle official Code Submission **#58729456** accepted at 2026-11-22 15:55 UTC, marker `gemma31-mandatory-evidence-tool-channel-once-20261122`, status **PENDING**, numeric score EMPTY. Real acceptance in [Action #45040840527](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45040840527). Old scored 31B **0.18 #58183466** remains best unless verified otherwise.
+
+**Mechanism:** Action-space restriction (not a prompt-only patch or optional add-on): original root 31B still 5min/60 native tool calls/80 turns with original sampling and base source. Removed free-form `run_command`, `search_similar_code`, graph and `write_file`; preserved native `read_file`, `edit_file`, `get_status`, `submit_patch`; added one SkillToolset providing bounded Python source localization, focused pytest and git diff. Official CPU wheelhouse native compiler [#45040577108](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45040577108) **PASS**, compiled tool list 4 native + `SkillToolset` and no unrestricted search/command. Code candidate archive SHA256 **652105308ee649322cc3f237618e4641c2e3c01ee15590758eb89dc3c59f08ea**, remotely CPU builder hash checked. Standalone source/path safety CPU gate [#45040388829](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45040388829) PASS. **No development GPU, no LoRA training, no default Champion changes.**
+
+**Research hypothesis (not score):** Public BA ≥0.20 (+0.02) versus 0.18. **Stop condition:** empty score, ≤0.18, failed tool use/Skill uptake, or budget-induced regressions. A Kaggle COMPLETE/green CI alone is NOT a PASS. Actual grader resolves and rescues are UNKNOWN until official receipt. Original queued private 2-issue Candidate History is a separate run, not an independent verification of this treatment.
+
+---
+
 # 2026-11-20 — Genuine 31B patch-vs-gold private CPU audit: target mismatch signal, full semantic outcome HOLD
 
 **Actual completed [CPU Action #44771279117](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44771279117)** recovered 12/12 real private 31B execution traces (six issues, four different arm/cohort configurations), including 2/12 grader PASS from the SAME `rich_3718` control issue. **No final scored Agent Patch artifacts were retained in either downloaded private output (0/12; 0 `.patch` files), so do not claim a completed code-semantic/root-cause diagnosis.** Explicit edit-tool target paths were recovered on all 12, but opaque shell editing and trace duplication limit causal claims.
