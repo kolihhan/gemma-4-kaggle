@@ -60,6 +60,22 @@ jobs:
               for i in sorted(selected):
                   if len(data[i])>240:continue
                   print(f'HOOK_SOURCE_{i+1}: {data[i]}')
+          # Inspect only public harness API / runner control flow, never tasks or model traces.
+          with ZipFile(whl) as z:
+              p='swegemma/harness/agent_runner.py'
+              d=z.read(p).decode().splitlines()
+              for lo,hi in ((477,553),(647,705)):
+                  for i in range(lo-1,min(hi,len(d))):
+                      print(f'RUNNER_SECTION_{i+1}: {d[i][:220]}')
+              for p in z.namelist():
+                  if not p.startswith('swegemma/') or not p.endswith('.py'): continue
+                  s=z.read(p).decode().splitlines()
+                  if 'class SwegemmaContext' in '\n'.join(s):
+                      print('CONTEXT_SOURCE_FILE='+p)
+                      for i,line in enumerate(s):
+                          if any(x in line for x in ('class SwegemmaContext','def run_command','async def run_command','def _run_command','self.docker_manager','self.container_id','def execute','async def execute')):
+                              for k in range(max(i-1,0),min(i+5,len(s))):
+                                  print(f'CONTEXT_SECTION_{k+1}: {s[k][:220]}')
           print('NO_RAW_TASKS_NO_GOLD_NO_INFERENCE=TRUE')
           PY
       - name: Current Gemma pending result and GPU quota, read-only
