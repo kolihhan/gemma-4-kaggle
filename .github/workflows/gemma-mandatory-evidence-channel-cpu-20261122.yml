@@ -1,0 +1,79 @@
+name: Gemma mandatory evidence-channel scored 31B CPU source gate
+on:
+  push:
+    branches: [research/mandatory-evidence-channel-20261122]
+    paths:
+      - .github/workflows/gemma-mandatory-evidence-channel-cpu-20261122.yml
+permissions:
+  contents: read
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Python compile and synthetic structural fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/build_gemma_mandatory_evidence_channel_20261122.py experiments/mandatory-evidence-channel-20261122/evidence.py
+          python - <<'PY'
+          import runpy,tempfile,subprocess,json,pathlib
+          script=pathlib.Path('experiments/mandatory-evidence-channel-20261122/evidence.py')
+          ns=runpy.run_path(str(script),run_name='unit_only')
+          with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp)
+            subprocess.run(['git','init','-q',str(root)],check=True)
+            (root/'src').mkdir(); (root/'tests').mkdir()
+            (root/'src'/'widget.py').write_text('def parse_widget(data):\n    return str(data)\n')
+            (root/'tests'/'test_widget.py').write_text('from src.widget import parse_widget\n\ndef test_widget(): assert parse_widget(5)=="5"\n')
+            (root/'src'/'__init__.py').write_text('')
+            (root/'tests'/'__init__.py').write_text('')
+            subprocess.run(['git','-C',str(root),'add','.'],check=True)
+            ns['run'].__globals__['ROOT']=root
+            found=ns['run']({'mode':'locate','query':'parse_widget'})
+            assert found['mode']=='locate' and found['matches'],found
+            assert found['matches'][0]['path']=='src/widget.py'
+            assert ns['run']({'mode':'diff'})['check']['exit_code']==0
+            unsafe=ns['run']({'mode':'status'})
+            assert unsafe['mode']=='status'
+            try:ns['relpath']('../etc/passwd');raise AssertionError('path traversal not blocked')
+            except ValueError:pass
+            print('GEMMA_EVIDENCE_CHANNEL_FIXTURE_SOURCE_MATCH=PASS',flush=True)
+            print('GEMMA_EVIDENCE_CHANNEL_PATH_SAFETY=PASS',flush=True)
+          PY
+      - name: Fetch ONLY exact public 31B 0.18 ancestor and build treatment ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q --disable-pip-version-check 'kaggle==2.2.5' 'six==1.17.0'
+          mkdir -p /tmp/gemma-evidence-scored-src
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p /tmp/gemma-evidence-scored-src -o >/tmp/gemma-evidence-pull.log 2>&1
+          python - <<'PY'
+          from pathlib import Path
+          import json,hashlib,zipfile,io
+          from scripts.build_gemma_mandatory_evidence_channel_20261122 import build,files_for_candidate,MODEL
+          p=Path('/tmp/gemma-evidence-scored-src/submission.zip')
+          raw=p.read_bytes()
+          control=files_for_candidate(raw)
+          built=build(raw)
+          Path('/tmp/gemma-evidence-channel.zip').write_bytes(built)
+          assert control['agent.yaml'].count('model: '+MODEL)==1
+          assert 'run_command' not in control['agent.yaml']
+          assert 'skills/evidence-channel/SKILL.md' in control
+          assert 'skills/evidence-channel/scripts/evidence.py' in control
+          print('GEMMA_EVIDENCE_CHANNEL_CANDIDATE_SHA256='+hashlib.sha256(built).hexdigest(),flush=True)
+          print('GEMMA_EVIDENCE_CHANNEL_31B_NATIVE_TOOLS_RESTRICTED=TRUE',flush=True)
+          print('GEMMA_EVIDENCE_CHANNEL_CANDIDATE_CPU_GATE=PASS_NO_SCORE',flush=True)
+          PY
+      - name: Only legal source packaging, no GPU or official grader
+        if: always()
+        run: |
+          rm -rf /tmp/gemma-evidence-scored-src /tmp/gemma-evidence-pull.log /tmp/gemma-evidence-channel.zip
+          echo GEMMA_EVIDENCE_CHANNEL_NO_GPU_NO_OFFICIAL_SUBMISSION=TRUE
