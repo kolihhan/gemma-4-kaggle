@@ -144,6 +144,8 @@ def prepare() -> None:
 
 
 def official_once() -> None:
+    if Path('experiments/causal-sequence-v1/NO_GO.md').is_file():
+        raise RuntimeError('STOP_KNOWN_ROOT_SEQUENTIAL_COMPACTION_FAILURE_NO_OFFICIAL_SUBMISSION')
     if not GO.is_file() or GO.read_text().strip() != "GO_CAUSAL_SEQUENCE_20261122_V1":
         raise RuntimeError("EXPLICIT_GO_MARKER_MISSING")
     if not check_slot():
