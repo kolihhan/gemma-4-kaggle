@@ -1,4 +1,4 @@
-name: Gemma Evgen public Notebook source audit (read-only CPU once)
+name: Gemma Evgen public Notebook source audit (read-only CPU pass 2)
 on:
   push:
     branches: [research/evgen-source-audit-20261123]
