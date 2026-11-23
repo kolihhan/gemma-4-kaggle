@@ -1,0 +1,63 @@
+name: Gemma existing Candidate History FAILED kernel read-only diagnosis
+on:
+  push:
+    branches: [research/evgen-source-audit-20261123]
+    paths: [.github/workflows/gemma-history-failure-readonly-20261123.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-history-failure-readonly-20261123
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      REF: kolihhan/gemma31-candidate-history-2issues-20261122-v1
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: research/evgen-source-audit-20261123, persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Existing kernel status and safe exception taxonomy only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q 'kaggle==2.2.5' 'six==1.17.0'
+          status="$(kaggle kernels status "$REF" 2>&1 || true)"
+          if [[ "$status" == *KernelWorkerStatus.ERROR* || "$status" == *KernelWorkerStatus.FAILED* ]]; then
+            echo GEMMA_EXISTING_HISTORY_KAGGLE_STATE=FAILED
+          elif [[ "$status" == *KernelWorkerStatus.COMPLETE* ]]; then
+            echo GEMMA_EXISTING_HISTORY_KAGGLE_STATE=COMPLETE
+          elif [[ "$status" == *KernelWorkerStatus.QUEUED* ]]; then
+            echo GEMMA_EXISTING_HISTORY_KAGGLE_STATE=QUEUED
+          else
+            echo GEMMA_EXISTING_HISTORY_KAGGLE_STATE=OTHER_OR_UNKNOWN
+          fi
+          if kaggle kernels logs "$REF" > /tmp/gemma-existing-history.log 2>&1; then
+            echo GEMMA_EXISTING_HISTORY_LOGS_FETCH=SUCCESS
+          else
+            echo GEMMA_EXISTING_HISTORY_LOGS_FETCH=FAIL
+          fi
+          python - <<'PY'
+          from collections import Counter
+          from pathlib import Path
+          import json,re
+          source=Path('/tmp/gemma-existing-history.log').read_text(errors='replace')
+          # Do not print raw logs: they may contain private Kaggle issue text.
+          kinds=re.findall(r'\b(?:[A-Za-z_][A-Za-z_0-9]*)(?:Error|Exception)\b',source)
+          common=Counter(kinds)
+          safe={
+              'log_bytes':len(source.encode()),
+              'exception_types':dict(common.most_common(8)),
+              'traceback_seen':'Traceback (most recent call last)' in source,
+              'out_of_memory_mentions':len(re.findall(r'out.of.memory|CUDA.*memory|OOM',source,re.I)),
+              'timeout_mentions':len(re.findall(r'\btimeout\b|timed out',source,re.I)),
+              'permission_denied_mentions':len(re.findall(r'permission denied',source,re.I)),
+              'cause_confirmed':False
+          }
+          print('GEMMA_EXISTING_HISTORY_SAFE_ERROR_TAXONOMY='+json.dumps(safe,sort_keys=True))
+          print('GEMMA_HISTORY_PRIVATE_LOGS_NOT_PUBLISHED=TRUE')
+          PY
+          echo NO_GPU_NO_RETRY_NO_OFFICIAL_SUBMISSION=TRUE
