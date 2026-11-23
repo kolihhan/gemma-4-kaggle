@@ -56,6 +56,32 @@ jobs:
           print('CANDIDATE_METADATA='+json.dumps(d,sort_keys=True))
           print('NO_GPU=TRUE;NO_MODEL_INFERENCE=TRUE;NO_OFFICIAL_SUBMISSION=TRUE')
           PY
+      - name: Read-only current official submission statuses - no submit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import csv, io, json, subprocess
+          try:
+              proc=subprocess.run(["kaggle","competitions","submissions","-c",
+                  "gemma-4-developer-agent","--csv"],capture_output=True,
+                  text=True,timeout=90,check=True)
+              rows=list(csv.DictReader(io.StringIO(proc.stdout.lstrip("\ufeff"))))
+              for sid in ("58183466","58729456","58558350"):
+                  found=[row for row in rows if str(row.get("ref",row.get("Ref",""))).strip()==sid]
+                  if len(found)!=1:
+                      print("READONLY_SCORE="+json.dumps({"ref":sid,"found":False}),flush=True)
+                      continue
+                  row=found[0]
+                  print("READONLY_SCORE="+json.dumps({"ref":sid,
+                      "status":row.get("status",row.get("Status")),
+                      "public_score":row.get("publicScore",row.get("public_score")),
+                      "date":row.get("date",row.get("Date"))},
+                      sort_keys=True),flush=True)
+              print("NO_COMPETITION_SUBMISSION=TRUE")
+          except Exception as exc:
+              print("READONLY_SCORE=UNAVAILABLE_"+type(exc).__name__,flush=True)
+          PY
       - name: Remove transient bundles
         if: always()
         run: rm -rf /tmp/gemma-behavioral
