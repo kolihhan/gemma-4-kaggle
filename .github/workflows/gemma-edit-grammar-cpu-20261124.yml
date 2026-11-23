@@ -1,0 +1,59 @@
+name: Gemma edit grammar single-variable CPU package gate
+on:
+  push:
+    branches: [research/gemma-edit-grammar-single-variable-20261124]
+    paths:
+      - scripts/build_gemma_edit_grammar_20261124.py
+      - .github/workflows/gemma-edit-grammar-cpu-20261124.yml
+permissions: {contents: read}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Verify syntax and exact Champion provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/build_gemma_edit_grammar_20261124.py
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/gemma-grammar-source
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p /tmp/gemma-grammar-source -o >/tmp/gemma-grammar-download.log 2>&1
+          test -s /tmp/gemma-grammar-source/submission.zip
+          python -m scripts.build_gemma_edit_grammar_20261124 --source-zip /tmp/gemma-grammar-source/submission.zip --out /tmp/gemma-grammar-output
+      - name: Verify one changed member, zip integrity and SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import json,zipfile,hashlib
+          p=Path('/tmp/gemma-grammar-output')
+          m=json.loads((p/'manifest.json').read_text())
+          a,b=(p/(n+'.zip') for n in ('control','candidate'))
+          with zipfile.ZipFile(a) as ca, zipfile.ZipFile(b) as cb:
+              assert ca.testzip() is None and cb.testzip() is None
+              assert set(ca.namelist())==set(cb.namelist())=={'agent.yaml','eval_config.yaml','configs/sampling.yaml','prompts/system.md'}
+              changed=[name for name in ca.namelist() if ca.read(name)!=cb.read(name)]
+              assert changed==['prompts/system.md'],changed
+              assert b'old_string' in cb.read('prompts/system.md')
+          assert hashlib.sha256(a.read_bytes()).hexdigest()==m['control_sha256']
+          assert hashlib.sha256(b.read_bytes()).hexdigest()==m['candidate_sha256']
+          assert m['max_time_minutes']==5 and m['max_tool_calls']==60
+          assert not m['official_submission'] and not m['gpu_inference']
+          print('GEMMA_EDIT_GRAMMAR_PACKAGE_GATE=PASS')
+          print('CONTROL_SHA256='+m['control_sha256'])
+          print('CANDIDATE_SHA256='+m['candidate_sha256'])
+          print('ONE_CHANGED_MEMBER='+changed[0])
+          print('NO_GPU_OR_COMPETITION_SUBMISSION=TRUE')
+          PY
+      - name: Remove source ZIP and candidate packages
+        if: always()
+        run: rm -rf /tmp/gemma-grammar-source /tmp/gemma-grammar-output /tmp/gemma-grammar-download.log
