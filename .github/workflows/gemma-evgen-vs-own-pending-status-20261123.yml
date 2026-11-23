@@ -1,4 +1,4 @@
-name: Gemma Evgen Patchsmith vs own pending Evidence Channel READ ONLY
+name: Gemma latest official submission 58729456 read-only status refresh 13h
 on:
   push:
     branches: [research/evgen-source-audit-20261123]
