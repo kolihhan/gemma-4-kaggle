@@ -1,0 +1,161 @@
+name: Gemma 31B behavioral probe 8-issue paired private REAL once
+on:
+  push:
+    branches: [exp/gemma-behavioral-verify-timeout-safe-20261123]
+    paths: [.github/workflows/gemma-behavioral-real31b-private-once-20261123.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma31b-behavioral-vs-champion-4min-20261123
+  cancel-in-progress: false
+jobs:
+  real_31b:
+    if: "${{ github.event.head_commit.message == 'GO_GEMMA_BEHAVIORAL_PAIRED31B_PRIVATE_20261123' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 175
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-behavioral-paired-20261123-v1
+      BUILD_DIR: /tmp/gemma-bhv-real31b-build
+      SOURCE_DIR: /tmp/gemma-bhv-real31b-source
+      RESULT_DIR: /tmp/gemma-bhv-real31b-result
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Exact paired CPU contract gate, before spending GPU
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_build_behavioral_probe_timeout_safe_20261123
+          python -m py_compile scripts/render_behavioral_probe_paired31b_20261123.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.render_behavioral_probe_paired31b_20261123 import validate_manifest
+          m=json.loads(Path('experiments/behavioral-probe-timeout-safe-20261123/manifest.json').read_text())
+          validate_manifest(m)
+          assert m['shared_budget']['max_time_minutes']==4
+          assert m['experiment']['model_task_evaluations']==16
+          assert m['resources']['private_kernel_only'] and not m['resources']['official_submission']
+          print('BEHAVIORAL_31B_PREREGISTERED_AND_CPU_VALID=PASS')
+          PY
+      - name: Authenticated GPU quota >= 6h and one-kernel no-duplicate gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import json, subprocess
+          r=subprocess.run(['kaggle','quota','--format','json'],capture_output=True,text=True,check=True,timeout=90)
+          rows=json.loads(r.stdout)
+          gpu=[x for x in rows if x.get('resource')=='GPU']
+          if len(gpu)!=1:raise RuntimeError('GPU_QUOTA_AMBIGUOUS')
+          remaining=float(str(gpu[0]['remaining']).rstrip('h'))
+          print('BEHAVIORAL_31B_GPU_REMAINING_HOURS='+str(remaining),flush=True)
+          if remaining<6.0:raise RuntimeError('STOP_GPU_QUOTA_BELOW_6H')
+          print('BEHAVIORAL_31B_GPU_GATE=PASS')
+          PY
+          if kaggle kernels status "$KERNEL_REF" >/tmp/gemma-bhv-existing.log 2>&1; then
+            echo "STOP_EXACT_PRIVATE_KERNEL_ALREADY_EXISTS"; exit 1
+          fi
+      - name: Build only private, pinned real 31B paired Notebook
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$SOURCE_DIR" "$RESULT_DIR"
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p "$SOURCE_DIR" -o >/dev/null
+          python -m scripts.render_behavioral_probe_paired31b_20261123 \
+            --source-zip "$SOURCE_DIR/submission.zip" --out "$BUILD_DIR" --kernel-ref "$KERNEL_REF"
+          python - <<'PY'
+          import json,os,py_compile
+          from pathlib import Path
+          p=Path(os.environ['BUILD_DIR'])
+          m=json.loads((p/'kernel-metadata.json').read_text())
+          assert m['is_private'] and m['enable_gpu'] and not m['enable_internet']
+          assert m['model_sources']==['google/gemma-4/Other/gemma-4-31b-it-qat-w4a16-ct/2']
+          py_compile.compile(str(p/'paired_behavioral_probe31b_4min_runtime.py'),doraise=True)
+          print('BEHAVIORAL_31B_PRIVATE_NOTEBOOK_RENDER=PASS')
+          PY
+      - name: Push exactly one PRIVATE L4 model kernel; never competition submit
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle kernels push -p "$BUILD_DIR" --accelerator NvidiaL4 -t 9000 >/tmp/gemma-bhv-push.log 2>&1 || {
+            echo BEHAVIORAL_31B_KERNEL_PUSH=FAILED
+            grep -Ei 'error|failed|invalid|not found|quota' /tmp/gemma-bhv-push.log | tail -n 8 || true
+            exit 1
+          }
+          echo "BEHAVIORAL_31B_PRIVATE_KERNEL_PUSHED=$KERNEL_REF"
+          echo "OFFICIAL_COMPETITION_SUBMISSION=FALSE"
+      - name: Observe same private model run, never relaunch
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=UNKNOWN
+          for attempt in $(seq 1 100); do
+            raw="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            case "$raw" in
+              *KernelWorkerStatus.COMPLETE*) terminal=COMPLETE; break ;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*|*KernelWorkerStatus.CANCELLED*) terminal=ERROR; break ;;
+            esac
+            if (( attempt % 8 == 0 )); then echo "BEHAVIORAL_31B_PRIVATE_POLL=$attempt"; fi
+            sleep 75
+          done
+          echo "BEHAVIORAL_31B_PRIVATE_KERNEL_TERMINAL=$terminal"
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          if [[ "$terminal" != COMPLETE ]]; then exit 1; fi
+      - name: Read only safe paired scores - no raw tasks, gold, reference patch or traces
+        if: steps.poll.outputs.terminal == 'COMPLETE'
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle kernels output "$KERNEL_REF" -p "$RESULT_DIR" -o >/tmp/gemma-bhv-download.log 2>&1
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path(os.environ['RESULT_DIR'])/'paired_behavioral_probe31b_4min_results.json'
+          if not p.is_file():raise RuntimeError('NO_REAL_PAIRED_RESULTS')
+          d=json.loads(p.read_text())
+          arms=['champion_4min','behavioral_4min']
+          rows=d.get('results',[])
+          if d.get('status')!='completed' or len(rows)!=16:raise RuntimeError('INCOMPLETE_REAL_PAIR_DENOMINATOR')
+          index={}
+          for r in rows:
+              key=(r.get('instance_id'),r.get('arm'))
+              if key in index:raise RuntimeError('DUPLICATE_PAIRED_RECORD')
+              if r.get('arm') not in arms:raise RuntimeError('UNEXPECTED_ARM')
+              index[key]=r
+          tasks={x[0] for x in index}
+          if len(tasks)!=8:raise RuntimeError('TASK_COUNT_NOT_8')
+          if any((tid,arm) not in index for tid in tasks for arm in arms):
+              raise RuntimeError('MISSING_PAIRED_EVAL')
+          rescued=regressed=both=neither=0
+          for tid in sorted(tasks):
+              c=index[(tid,arms[0])].get('resolved') is True
+              b=index[(tid,arms[1])].get('resolved') is True
+              if b and not c:rescued+=1
+              elif c and not b:regressed+=1
+              elif b and c:both+=1
+              else:neither+=1
+          result={
+              'evaluations':len(rows),'independent_dev_issues':len(tasks),
+              'champion_resolved':both+regressed,
+              'behavioral_resolved':both+rescued,
+              'rescued':rescued,'regressed':regressed,'net':rescued-regressed,
+              'both':both,'neither':neither,
+              'error_count':sum(r.get('status')!='completed' for r in rows),
+              'total_tool_calls':{arm:sum(r.get('tool_calls') or 0 for r in rows if r['arm']==arm) for arm in arms},
+              'total_duration_seconds':{arm:round(sum(r.get('duration_seconds') or 0 for r in rows if r['arm']==arm),2) for arm in arms},
+              'private_dev_not_public_score':True,
+              'gold_noop_screen_not_completed':True,
+          }
+          print('BEHAVIORAL_31B_REAL_PAIRED_SAFE_RESULT='+json.dumps(result,sort_keys=True),flush=True)
+          print('OFFICIAL_COMPETITION_SUBMISSION=FALSE',flush=True)
+          PY
+      - name: Wipe original ZIP, model task traces and private result data
+        if: always()
+        shell: bash
+        run: rm -rf "$BUILD_DIR" "$SOURCE_DIR" "$RESULT_DIR" /tmp/gemma-bhv-push.log /tmp/gemma-bhv-download.log /tmp/gemma-bhv-existing.log

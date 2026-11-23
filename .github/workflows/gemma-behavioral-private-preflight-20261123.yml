@@ -1,0 +1,81 @@
+name: Gemma 31B paired behavioral real-model CPU preflight
+on:
+  push:
+    branches: [exp/gemma-behavioral-verify-timeout-safe-20261123]
+    paths:
+      - .github/workflows/gemma-behavioral-private-preflight-20261123.yml
+      - scripts/render_behavioral_probe_paired31b_20261123.py
+      - experiments/behavioral-probe-timeout-safe-20261123/manifest.json
+permissions: {contents: read}
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Render exact two-arm private Notebook without GPU
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m py_compile scripts/render_behavioral_probe_paired31b_20261123.py
+          python -m unittest -q tests.test_build_behavioral_probe_timeout_safe_20261123
+          python -m pip install -q kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/gemma-bhv-preflight/source
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p /tmp/gemma-bhv-preflight/source -o >/dev/null
+          python -m scripts.render_behavioral_probe_paired31b_20261123 \
+            --source-zip /tmp/gemma-bhv-preflight/source/submission.zip \
+            --out /tmp/gemma-bhv-preflight/notebook \
+            --kernel-ref kolihhan/gemma4-behavioral-paired-20261123-v1
+          python - <<'PY'
+          import json, pathlib, py_compile
+          root=pathlib.Path('/tmp/gemma-bhv-preflight/notebook')
+          m=json.loads((root/'kernel-metadata.json').read_text())
+          assert m['is_private'] is True and m['enable_gpu'] is True and m['enable_internet'] is False
+          assert m['model_sources']==['google/gemma-4/Other/gemma-4-31b-it-qat-w4a16-ct/2']
+          s=root/'paired_behavioral_probe31b_4min_runtime.py'
+          py_compile.compile(str(s),doraise=True)
+          txt=s.read_text()
+          import ast, base64
+          tree=ast.parse(txt)
+          embedded={}
+          for node in tree.body:
+              if isinstance(node,ast.Assign):
+                  for target in node.targets:
+                      if isinstance(target,ast.Name) and target.id in {'SUBMISSION_PAYLOAD_B64','TREATMENT_PAYLOAD_B64'}:
+                          embedded[target.id]=json.loads(base64.b64decode(ast.literal_eval(node.value)).decode())
+          assert set(embedded)=={'SUBMISSION_PAYLOAD_B64','TREATMENT_PAYLOAD_B64'}
+          for payload in embedded.values():
+              config=payload['eval_config.yaml']
+              assert 'max_time_minutes: 4' in config and 'max_tool_calls: 60' in config
+              assert 'max_turns: 80' in config
+          assert embedded['SUBMISSION_PAYLOAD_B64']['prompts/system.md'] != embedded['TREATMENT_PAYLOAD_B64']['prompts/system.md']
+          assert 'BEHAVIORAL_FROZEN_SELECTED_PUBLIC_DEV_IDS' in txt
+          assert 'champion_4min' in txt and 'behavioral_4min' in txt
+          assert 'if len(records) != 16:' in txt
+          assert 'competition_submit_code' not in txt
+          print('PRIVATE_31B_RENDER_SYNTAX_AND_BUDGET=PASS')
+          print('NO_GPU=TRUE;NO_INFERENCE=TRUE;NO_OFFICIAL_SUBMISSION=TRUE')
+          PY
+      - name: Read current GPU quota, do not launch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import subprocess, json
+          r=subprocess.run(["kaggle","quota","--format","json"],text=True,capture_output=True,timeout=90)
+          if r.returncode!=0:
+              print("GPU_QUOTA_READ=UNAVAILABLE")
+          else:
+              data=json.loads(r.stdout)
+              gpu=[x for x in data if x.get("resource")=="GPU"]
+              print("GPU_QUOTA_SAFE="+json.dumps([{"remaining":x.get("remaining"),"unit":x.get("unit")} for x in gpu]))
+          PY
+      - name: Cleanup all private source payloads from runner
+        if: always()
+        run: rm -rf /tmp/gemma-bhv-preflight
