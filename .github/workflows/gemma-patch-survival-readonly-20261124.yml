@@ -1,0 +1,93 @@
+name: Gemma patch survival and official ledger read only
+on:
+  push:
+    branches: [research/gemma-patch-survival-audit-20261124]
+    paths:
+      - .github/workflows/gemma-patch-survival-readonly-20261124.yml
+permissions: {contents: read}
+jobs:
+  ledger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read official Kaggle competition ledger and remaining quota
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/gemma-ledger
+          kaggle competitions submissions gemma-4-developer-agent --csv > /tmp/gemma-ledger/submissions.csv
+          kaggle quota --format json > /tmp/gemma-ledger/quota.json
+          python - <<'PY'
+          import csv,json,pathlib
+          root=pathlib.Path("/tmp/gemma-ledger")
+          rows=list(csv.DictReader((root/"submissions.csv").open()))
+          print("LEDGER_ROW_COUNT",len(rows))
+          active=0
+          for row in rows:
+              status=row.get("status","")
+              if "PENDING" in status or "RUNNING" in status:
+                  active+=1
+              if row.get("ref") in ("58183466","58729456") or "PENDING" in status or "RUNNING" in status:
+                  print("LEDGER_SAFE",json.dumps({k:row.get(k) for k in ("ref","status","publicScore","date")},sort_keys=True))
+          print("ACTIVE_SUBMISSION_COUNT",active)
+          data=json.loads((root/"quota.json").read_text())
+          for item in (data if isinstance(data,list) else data.get("quotas",[])):
+              if item.get("resource") in ("GPU","COMPETITION_SUBMISSIONS"):
+                  print("QUOTA_SAFE",json.dumps({k:item.get(k) for k in ("resource","remaining","limit")},sort_keys=True))
+          PY
+      - name: Audit completed fresh paired traces without GPU
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref=kolihhan/gemma4-edit-grammar-paired-20261124-v1
+          raw="$(kaggle kernels status "$ref" 2>&1)"
+          [[ "$raw" == *KernelWorkerStatus.COMPLETE* ]]
+          mkdir -p /tmp/gemma-ledger/paired
+          kaggle kernels output "$ref" -p /tmp/gemma-ledger/paired -o >/tmp/gemma-ledger/download.log 2>&1
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from collections import Counter
+          from scripts.audit_gemma_edit_reliability_20261124 import reduce_trace
+          root=Path('/tmp/gemma-ledger/paired')
+          d=json.loads((root/'paired_edit_grammar31b_5min_results.json').read_text())
+          rows=d['results']
+          arms=('champion_5min','edit_grammar_5min')
+          assert d['status']=='completed' and len(rows)==16
+          assert len({(r['instance_id'],r['arm']) for r in rows})==16
+          out={}
+          for arm in arms:
+              counts=Counter()
+              for row in rows:
+                  if row['arm']!=arm: continue
+                  paths=[p for p in root.rglob('trace_*.json') if p.name=='trace_'+row['instance_id']+'.json' and ('public-prompt' in p.relative_to(root).parts)==(arm==arms[1])]
+                  assert len(paths)<=1
+                  counts['tasks']+=1
+                  counts['empty_patch']+=not row['has_patch']
+                  if not paths:
+                      counts['missing_trace']+=1
+                      continue
+                  t=reduce_trace(json.loads(paths[0].read_text()))
+                  counts['invalid_edit_events']+=t['edit_argument_anomalies']
+                  counts['confirmed_edit_errors']+=t['edit_confirmed_error']
+                  counts['unknown_edit_observations']+=t['edit_observation_unknown']
+                  counts['explicit_submit_tasks']+=t['submit_requests']>0
+                  if not row['has_patch']:
+                      counts['empty_with_confirmed_edit']+=t['edit_confirmed_ok']>0
+                      counts['empty_without_edit_event']+=t['edit_events']==0
+                      counts['empty_with_submit']+=t['submit_requests']>0
+                  counts['over_300s_record']+=(row.get('duration_seconds') or 0)>300
+              out[arm]=dict(counts)
+          print('PATCH_SURVIVAL_SAFE='+json.dumps(out,sort_keys=True))
+          PY
+      - name: Remove temporary Kaggle data
+        if: always()
+        run: rm -rf /tmp/gemma-ledger
