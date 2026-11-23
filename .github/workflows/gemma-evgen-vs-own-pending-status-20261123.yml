@@ -1,0 +1,53 @@
+name: Gemma Evgen Patchsmith vs own pending Evidence Channel READ ONLY
+on:
+  push:
+    branches: [research/evgen-source-audit-20261123]
+    paths: [.github/workflows/gemma-evgen-vs-own-pending-status-20261123.yml]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/evgen-source-audit-20261123
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Download public author's latest Notebook SOURCE, no execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q 'kaggle==2.2.5' 'six==1.17.0'
+          python -m py_compile scripts/compare_evgen_patchsmith_source_20261123.py
+          mkdir -p /tmp/gemma-author-public
+          kaggle kernels pull evgendvorkin/can-gemma-4-become-a-software-engineer -p /tmp/gemma-author-public -m >/dev/null
+          python -m scripts.compare_evgen_patchsmith_source_20261123 --root /tmp/gemma-author-public
+          echo AUTHOR_CODE_NOT_EXECUTED=true
+      - name: Current authenticated official submission status only
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle competitions submissions -c gemma-4-developer-agent --csv >/tmp/owner-submissions.csv
+          python - <<'PY'
+          from pathlib import Path
+          import csv, json
+          with Path('/tmp/owner-submissions.csv').open(encoding='utf-8-sig') as handle:
+              rows=list(csv.DictReader(handle))
+          for sid in ('58729456','58183466','58558350'):
+              items=[r for r in rows if r.get('ref',r.get('Ref',''))==sid]
+              if len(items)!=1:
+                  print('OWNER_CURRENT_SCORE='+json.dumps({'ref':sid,'found':False}))
+                  continue
+              item=items[0]
+              print('OWNER_CURRENT_SCORE='+json.dumps({
+                  'ref':sid,'status':item.get('status',item.get('Status')),
+                  'public_score':item.get('publicScore',item.get('public_score')),
+                  'private_score':item.get('privateScore',item.get('private_score')),
+                  'date':item.get('date',item.get('Date'))},sort_keys=True))
+          print('KAGGLE_READONLY_NO_SUBMISSION=true')
+          PY
