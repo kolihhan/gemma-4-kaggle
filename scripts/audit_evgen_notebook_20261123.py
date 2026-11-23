@@ -81,6 +81,10 @@ def analyze(cells, filename):
         "cell_count": len(cells),
         "section11_found": bool(section_text),
         "section11_chars": len(section_text),
+        "section11_line_previews": [
+            re.sub(r"\\s+", " ", line).strip()[:180]
+            for line in section_text.splitlines() if line.strip()
+        ][:40],
         "heading_titles": [h["title"] for h in headings[:35]],
         "all_topic_hits": hits(full_text),
         "section11_topic_hits": hits(section_text),
