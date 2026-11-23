@@ -1,4 +1,4 @@
-name: Gemma Evgen public Notebook source audit (read-only CPU pass 2)
+name: Gemma Evgen public Notebook + action funnel CPU verified
 on:
   push:
     branches: [research/evgen-source-audit-20261123]
@@ -26,8 +26,9 @@ jobs:
         run: |
           set -euo pipefail
           python -m py_compile scripts/audit_evgen_notebook_20261123.py
-          python -m unittest -v tests.test_audit_evgen_notebook_20261123
-          echo EVGEN_AUDITOR_UNIT_TESTS=PASS
+          python -m py_compile scripts/gemma_action_funnel_20261123.py
+          python -m unittest -v tests.test_audit_evgen_notebook_20261123 tests.test_gemma_action_funnel_20261123
+          echo EVGEN_AUDITOR_AND_GEMMA_ACTION_FUNNEL_UNIT_TESTS=PASS
       - name: Pull public Notebook SOURCE only (do not execute)
         shell: bash
         run: |
@@ -69,6 +70,23 @@ jobs:
               },sort_keys=True))
           print('GEMMA_NO_OFFICIAL_SUBMISSION_FROM_THIS_WORKFLOW=TRUE')
           PY
+      - name: Read existing private 31B Candidate History kernel state (no relaunch)
+        shell: bash
+        run: |
+          set -euo pipefail
+          state="$(kaggle kernels status kolihhan/gemma31-candidate-history-2issues-20261122-v1 2>&1 || true)"
+          if [[ "$state" == *KernelWorkerStatus.COMPLETE* ]]; then
+            echo GEMMA_CANDIDATE_HISTORY_EXISTING_STATUS=COMPLETE
+          elif [[ "$state" == *KernelWorkerStatus.QUEUED* ]]; then
+            echo GEMMA_CANDIDATE_HISTORY_EXISTING_STATUS=QUEUED
+          elif [[ "$state" == *KernelWorkerStatus.RUNNING* ]]; then
+            echo GEMMA_CANDIDATE_HISTORY_EXISTING_STATUS=RUNNING
+          elif [[ "$state" == *KernelWorkerStatus.ERROR* || "$state" == *KernelWorkerStatus.FAILED* ]]; then
+            echo GEMMA_CANDIDATE_HISTORY_EXISTING_STATUS=FAILED
+          else
+            echo GEMMA_CANDIDATE_HISTORY_EXISTING_STATUS=UNKNOWN
+          fi
+          echo GEMMA_CANDIDATE_HISTORY_NOT_RELAUNCHED=TRUE
       - name: Upload ONLY aggregate safe summary (never notebook source)
         uses: actions/upload-artifact@v4
         with:
