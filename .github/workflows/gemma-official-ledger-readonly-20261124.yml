@@ -37,7 +37,7 @@ jobs:
                   print("LEDGER_SAFE",json.dumps({k:row.get(k) for k in ("ref","status","publicScore","date")},sort_keys=True))
           print("ACTIVE_SUBMISSION_COUNT",active)
           data=json.loads((root/"quota.json").read_text())
-          for item in data.get("quotas",[]):
+          for item in (data if isinstance(data,list) else data.get("quotas",[])):
               if item.get("resource") in ("GPU","COMPETITION_SUBMISSIONS"):
                   print("QUOTA_SAFE",json.dumps({k:item.get(k) for k in ("resource","remaining","limit")},sort_keys=True))
           PY
