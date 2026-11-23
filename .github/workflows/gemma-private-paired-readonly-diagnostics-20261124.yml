@@ -1,0 +1,66 @@
+name: Gemma private paired failure diagnostics and submission ledger READ ONLY
+on:
+  push:
+    branches: [exp/gemma-behavioral-verify-timeout-safe-20261123]
+    paths: [.github/workflows/gemma-private-paired-readonly-diagnostics-20261124.yml]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Kaggle READ ONLY ledger and real 31B issue-pair diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/gemma-paired-readonly
+          kaggle kernels output kolihhan/gemma4-behavioral-paired-20261123-v1 -p /tmp/gemma-paired-readonly -o >/dev/null
+          python - <<'PY'
+          import json, pathlib
+          p=pathlib.Path('/tmp/gemma-paired-readonly/paired_behavioral_probe31b_4min_results.json')
+          d=json.loads(p.read_text())
+          rows=d['results']
+          assert len(rows)==16
+          groups={}
+          for row in rows:
+              groups.setdefault(row['instance_id'],{})[row['arm']]=row
+          for i,(task,arms) in enumerate(sorted(groups.items()),1):
+              assert set(arms)=={'champion_4min','behavioral_4min'}
+              a=arms['champion_4min']; b=arms['behavioral_4min']
+              def safe(r):
+                  return {'resolved':r.get('resolved') is True,'has_patch':r.get('has_patch'),'patch_chars':r.get('patch_chars'),'tool_calls':r.get('tool_calls'),'duration_seconds':r.get('duration_seconds'),'status':r.get('status'),'error_type':r.get('error_type'),'test_exit_code':r.get('test_exit_code')}
+              print('PAIR_DIAG='+json.dumps({'pair_index':i,'control':safe(a),'candidate':safe(b),'class':'regression' if a.get('resolved') and not b.get('resolved') else 'rescue' if b.get('resolved') and not a.get('resolved') else 'both' if a.get('resolved') else 'neither'},sort_keys=True),flush=True)
+          PY
+          kaggle competitions submissions gemma-4-developer-agent --csv > /tmp/gemma-paired-readonly/submissions.csv || true
+          python - <<'PY'
+          import csv,pathlib
+          p=pathlib.Path('/tmp/gemma-paired-readonly/submissions.csv')
+          if not p.is_file() or not p.stat().st_size:
+              print('OFFICIAL_LEDGER=UNAVAILABLE');raise SystemExit(0)
+          try:
+              rows=list(csv.DictReader(p.open()))
+              print('OFFICIAL_LEDGER_ROWS='+str(len(rows)))
+              for row in rows[:12]:
+                  safe={k:v for k,v in row.items() if k.lower() in ('ref','id','date','status','publicscore','privatescore','description')}
+                  print('OFFICIAL_SUBMISSION_SAFE='+json.dumps(safe,sort_keys=True))
+          except Exception as exc:print('OFFICIAL_LEDGER_PARSE_ERROR='+type(exc).__name__)
+          PY
+          kaggle quota --format json > /tmp/gemma-paired-readonly/quota.json || true
+          python - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('/tmp/gemma-paired-readonly/quota.json')
+          if p.exists() and p.stat().st_size:
+              for x in json.loads(p.read_text()):
+                  if x.get('resource') in ('GPU','COMPETITION_SUBMISSIONS'):
+                      print('QUOTA_SAFE='+json.dumps({'resource':x.get('resource'),'remaining':x.get('remaining')}))
+          PY
+      - name: Clean up
+        if: always()
+        run: rm -rf /tmp/gemma-paired-readonly
