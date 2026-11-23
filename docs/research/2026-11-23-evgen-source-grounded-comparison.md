@@ -34,13 +34,15 @@ frozen 0.18 champion.
   shell, graph and semantic search, retaining four native tools plus a
   bounded source/test/diff Skill. This is not a verified improvement yet.
 - Own scored Coder LoRA ref 58558350 is COMPLETE **0.12** (worse than control).
-- Own [real private 31B trace audit](docs/evaluation/gemma31b-failed-repair-vs-gold-20261120.md):
+- Own [real private 31B trace audit](../evaluation/gemma31b-failed-repair-vs-gold-20261120.md):
   12 traces, 2 PASS evaluations on the *same* issue; 0/12 full final scored
   Patch artifacts recovered; 3 of 4 gold-informative failed evaluations had
   an explicit edit-path localization mismatch. The file-path proxy does not
   prove the final patch root cause.
-- Own two-issue private Candidate History diagnostic was queued at last
-  verified read. Do not label it scored or launch a duplicate.
+- Own two-issue private Candidate History diagnostic is now **FAILED** per a
+  2026-11-23 authenticated Kaggle state read; it had previously been QUEUED.
+  No independent real-model patch-history grade exists. Do not relaunch GPU
+  without distinguishing an infrastructure failure from model behavior.
 
 ## Comparison: what to borrow and what to reject
 
@@ -71,8 +73,10 @@ frozen 0.18 champion.
 decisions cause correct early edits that later survive verification and
 submission, or merely more tool activity?
 
-**Precondition gate:** first obtain an actual COMPLETE independent Candidate
-History grade, with gold PASS/no-op FAIL controls; verify candidate coverage.
+**Precondition gate:** first diagnose the FAILED existing history Notebook;
+then obtain an actual COMPLETE independent Candidate History grade, with gold
+PASS/no-op FAIL controls and verified candidate coverage. An infrastructure
+crash or incomplete history cannot be counted as a bad model repair.
 If unavailable or scored candidate missing, report UNKNOWN, not 0%.
 
 **Only after that evidence and the pending official submission resolve:**
