@@ -1,0 +1,46 @@
+name: Gemma official ledger and quota read only
+on:
+  push:
+    branches: [research/gemma-tool-edit-reliability-20261124]
+    paths:
+      - .github/workflows/gemma-official-ledger-readonly-20261124.yml
+permissions: {contents: read}
+jobs:
+  ledger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read official Kaggle competition ledger and remaining quota
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/gemma-ledger
+          kaggle competitions submissions gemma-4-developer-agent --csv > /tmp/gemma-ledger/submissions.csv
+          kaggle quota --format json > /tmp/gemma-ledger/quota.json
+          python - <<'PY'
+          import csv,json,pathlib
+          root=pathlib.Path("/tmp/gemma-ledger")
+          rows=list(csv.DictReader((root/"submissions.csv").open()))
+          print("LEDGER_ROW_COUNT",len(rows))
+          active=0
+          for row in rows:
+              status=row.get("status","")
+              if "PENDING" in status or "RUNNING" in status:
+                  active+=1
+              if row.get("ref") in ("58183466","58729456") or "PENDING" in status or "RUNNING" in status:
+                  print("LEDGER_SAFE",json.dumps({k:row.get(k) for k in ("ref","status","publicScore","date")},sort_keys=True))
+          print("ACTIVE_SUBMISSION_COUNT",active)
+          data=json.loads((root/"quota.json").read_text())
+          for item in data.get("quotas",[]):
+              if item.get("resource") in ("GPU","COMPETITION_SUBMISSIONS"):
+                  print("QUOTA_SAFE",json.dumps({k:item.get(k) for k in ("resource","remaining","limit")},sort_keys=True))
+          PY
+      - name: Remove temporary Kaggle data
+        if: always()
+        run: rm -rf /tmp/gemma-ledger
