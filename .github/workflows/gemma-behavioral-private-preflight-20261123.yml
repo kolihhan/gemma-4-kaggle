@@ -41,7 +41,20 @@ jobs:
           s=root/'paired_behavioral_probe31b_4min_runtime.py'
           py_compile.compile(str(s),doraise=True)
           txt=s.read_text()
-          assert 'max_time_minutes: 4' in txt and 'max_tool_calls: 60' in txt
+          import ast, base64
+          tree=ast.parse(txt)
+          embedded={}
+          for node in tree.body:
+              if isinstance(node,ast.Assign):
+                  for target in node.targets:
+                      if isinstance(target,ast.Name) and target.id in {'SUBMISSION_PAYLOAD_B64','TREATMENT_PAYLOAD_B64'}:
+                          embedded[target.id]=json.loads(base64.b64decode(ast.literal_eval(node.value)).decode())
+          assert set(embedded)=={'SUBMISSION_PAYLOAD_B64','TREATMENT_PAYLOAD_B64'}
+          for payload in embedded.values():
+              config=payload['eval_config.yaml']
+              assert 'max_time_minutes: 4' in config and 'max_tool_calls: 60' in config
+              assert 'max_turns: 80' in config
+          assert embedded['SUBMISSION_PAYLOAD_B64']['prompts/system.md'] != embedded['TREATMENT_PAYLOAD_B64']['prompts/system.md']
           assert 'BEHAVIORAL_FROZEN_SELECTED_PUBLIC_DEV_IDS' in txt
           assert 'champion_4min' in txt and 'behavioral_4min' in txt
           assert 'if len(records) != 16:' in txt
