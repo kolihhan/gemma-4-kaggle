@@ -67,6 +67,14 @@ frozen 0.18 champion.
 - Pure CPU unit tests cover no-execution, version caveat, event boundaries,
   patch timing and duplicate-submit calls.
 
+## Verified 2026-11-23 follow-up diagnostics
+
+- [CPU Action funnel and source audit #45103758132](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45103758132): **7/7** CPU unit tests PASS; existing 31B private Candidate History status confirmed **FAILED**, not QUEUED.
+- [Existing failed-kernel logs #45103907646](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45103907646): original Kaggle logs fetched without starting a model. The derived *safe* error taxonomy reports **ServerStartupError** and **RuntimeError**, with OOM/timeout mentions. Exact root cause is **not confirmed**; do not treat it as a model repair failure or rerun blindly.
+- Official ref `58729456` remained **PENDING** with blank score at 2026-11-23 11:04 MYT; incumbent `58183466` COMPLETE **0.18**.
+
+Instrumented "calls 16/20" count observed distinct tool callbacks, with submit attempt/result deduplicated; it is **not automatically the physical scorer tool-call count**. Cross-validate with scorer counters before making task-time claims.
+
 ## Next genuine model-quality experiment (NOT yet launched)
 
 **Question:** When a 31B agent already sees repository evidence, do its tool
