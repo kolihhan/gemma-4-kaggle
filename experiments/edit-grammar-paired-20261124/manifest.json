@@ -1,0 +1,99 @@
+{
+  "version": "edit-grammar-31b-5min-paired-v1",
+  "preregistered_date": "2026-11-24",
+  "purpose": "Independent matched 31B Champion vs one-variable edit grammar; exclude all earlier paired pilot IDs before deterministic selection; private only",
+  "source_notebook": "lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2",
+  "source_zip_sha256": "a4b10f6b8034fd7fffa144a7ee3fbd8faf9a84503ffb1349d1522ba048b534d3",
+  "champion_zip_sha256": "ff08c10240a38e151a2ea1d0478e999ee5d2f437d2dad5571d912cf12859922b",
+  "control_zip_sha256": "ff08c10240a38e151a2ea1d0478e999ee5d2f437d2dad5571d912cf12859922b",
+  "candidate_zip_sha256": "dda74a68742c6cd1592917bdd1d00cf35de44979094de5bb0ae19adf38f45b38",
+  "model": "gemma-4-31b-it-qat-w4a16-ct",
+  "shared_budget": {
+    "max_time_minutes": 5,
+    "max_tool_calls": 60,
+    "max_turns": 80,
+    "timeout_seconds": 300
+  },
+  "selection": {
+    "salt": "gemma-edit-grammar-20261124-independent-holdout-v1",
+    "counts_by_repo": {
+      "fastapi_": 3,
+      "rich_": 3,
+      "requests_": 2
+    },
+    "exclude_instance_ids": [
+      "fastapi_13920",
+      "fastapi_14258",
+      "fastapi_14266",
+      "fastapi_14303",
+      "fastapi_14361",
+      "fastapi_14448",
+      "fastapi_14458",
+      "fastapi_14463",
+      "fastapi_14487",
+      "fastapi_14609",
+      "fastapi_14873",
+      "fastapi_14986",
+      "fastapi_15280",
+      "fastapi_15589",
+      "fastapi_15661",
+      "fastapi_5077",
+      "fastapi_9425",
+      "fastapi_9555",
+      "requests_6592",
+      "requests_6757",
+      "requests_7205",
+      "requests_7328",
+      "requests_7427",
+      "requests_7502",
+      "rich_2725",
+      "rich_3052",
+      "rich_3061",
+      "rich_3063",
+      "rich_3064",
+      "rich_3067",
+      "rich_3105",
+      "rich_3180",
+      "rich_3278",
+      "rich_3676",
+      "rich_3718",
+      "rich_3777",
+      "rich_3782",
+      "rich_3894",
+      "rich_3905",
+      "rich_3930",
+      "rich_3934",
+      "rich_3942",
+      "rich_4079"
+    ],
+    "policy": "Frozen salt and strata, exclude all prior 8 matched pilot issue IDs by reading only prior private results before GPU; no task text, outcome, gold or score enters selection."
+  },
+  "experiment": {
+    "arms": [
+      "champion_5min",
+      "edit_grammar_5min"
+    ],
+    "tasks": 8,
+    "model_task_evaluations": 16,
+    "order": "alternate arm order by task index",
+    "primary": "official swegemma resolved independent issues",
+    "secondary": [
+      "rescue and regression",
+      "patch emission",
+      "tool calls",
+      "task wall time",
+      "failure types",
+      "task timeouts"
+    ],
+    "failure_handling": "All selected pairs retained; any error counted as unresolved, no replacement."
+  },
+  "resources": {
+    "gpu_quota_gate_hours": 6,
+    "min_gpu_count": 4,
+    "max_kernel_wall_seconds": 10000,
+    "private_kernel_only": true,
+    "official_submission": false,
+    "no_training": true
+  },
+  "limitations": "Previously uninspected deterministic public-dev IDs, prior 8 excluded before selection; gold-pass/no-op-fail not yet certified; no official submission without net gain and full notebook budget proof."
+}
