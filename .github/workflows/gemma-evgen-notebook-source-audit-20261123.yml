@@ -1,0 +1,95 @@
+name: Gemma Evgen public Notebook + action funnel CPU verified
+on:
+  push:
+    branches: [research/evgen-source-audit-20261123]
+    paths: [.github/workflows/gemma-evgen-notebook-source-audit-20261123.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-evgen-public-source-20261123
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      REF: evgendvorkin/can-gemma-4-become-a-software-engineer
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/evgen-source-audit-20261123
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Static auditor tests, no notebook execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/audit_evgen_notebook_20261123.py
+          python -m py_compile scripts/gemma_action_funnel_20261123.py
+          python -m unittest -v tests.test_audit_evgen_notebook_20261123 tests.test_gemma_action_funnel_20261123
+          echo EVGEN_AUDITOR_AND_GEMMA_ACTION_FUNNEL_UNIT_TESTS=PASS
+      - name: Pull public Notebook SOURCE only (do not execute)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          python -m pip install -q 'kaggle==2.2.5' 'six==1.17.0'
+          mkdir -p /tmp/gemma-evgen-public-code
+          kaggle kernels pull "$REF" -p /tmp/gemma-evgen-public-code -m >/tmp/kaggle-evgen-pull.txt 2>&1 || {
+            echo EVGEN_PUBLIC_CODE_PULL=FAILED
+            tail -n 6 /tmp/kaggle-evgen-pull.txt | sed -E 's/KGAT_[A-Za-z0-9_-]+/[REDACTED]/g'
+            exit 1
+          }
+          echo EVGEN_PUBLIC_NOTEBOOK_PULL=SUCCESS_LATEST_VERSION_ONLY
+          python -m scripts.audit_evgen_notebook_20261123 --input /tmp/gemma-evgen-public-code --output /tmp/evgen-safe-summary.json
+          echo NOTEBOOK_CELLS_WERE_NEVER_EXECUTED=TRUE
+      - name: Read status of EXISTING official entries (no new submission)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! kaggle competitions submissions -c gemma-4-developer-agent --csv >/tmp/gemma-scores.csv 2>/tmp/gemma-scores-err.txt; then
+            echo GEMMA_EXISTING_OFFICIAL_SCORES=UNAVAILABLE
+            exit 0
+          fi
+          python - <<'PY'
+          import csv, json
+          with open('/tmp/gemma-scores.csv',encoding='utf-8-sig') as handle:
+              rows=list(csv.DictReader(handle))
+          for sid in ('58729456','58183466','58558350'):
+              hit=[row for row in rows if str(row.get('ref', row.get('Ref', ''))).strip()==sid]
+              if len(hit)!=1:
+                  print('GEMMA_SCORE_REF_'+sid+'=NOT_IN_RETURNED_LEDGER')
+                  continue
+              row=hit[0]
+              print('GEMMA_SCORE_ENTRY='+json.dumps({
+                  'ref':sid,
+                  'status':row.get('status', row.get('Status')),
+                  'public_score':row.get('publicScore',row.get('public_score')),
+                  'private_score':row.get('privateScore',row.get('private_score'))
+              },sort_keys=True))
+          print('GEMMA_NO_OFFICIAL_SUBMISSION_FROM_THIS_WORKFLOW=TRUE')
+          PY
+      - name: Read existing private 31B Candidate History kernel state (no relaunch)
+        shell: bash
+        run: |
+          set -euo pipefail
+          state="$(kaggle kernels status kolihhan/gemma31-candidate-history-2issues-20261122-v1 2>&1 || true)"
+          if [[ "$state" == *KernelWorkerStatus.COMPLETE* ]]; then
+            echo GEMMA_CANDIDATE_HISTORY_EXISTING_STATUS=COMPLETE
+          elif [[ "$state" == *KernelWorkerStatus.QUEUED* ]]; then
+            echo GEMMA_CANDIDATE_HISTORY_EXISTING_STATUS=QUEUED
+          elif [[ "$state" == *KernelWorkerStatus.RUNNING* ]]; then
+            echo GEMMA_CANDIDATE_HISTORY_EXISTING_STATUS=RUNNING
+          elif [[ "$state" == *KernelWorkerStatus.ERROR* || "$state" == *KernelWorkerStatus.FAILED* ]]; then
+            echo GEMMA_CANDIDATE_HISTORY_EXISTING_STATUS=FAILED
+          else
+            echo GEMMA_CANDIDATE_HISTORY_EXISTING_STATUS=UNKNOWN
+          fi
+          echo GEMMA_CANDIDATE_HISTORY_NOT_RELAUNCHED=TRUE
+      - name: Upload ONLY aggregate safe summary (never notebook source)
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemma-evgen-public-notebook-static-summary
+          path: /tmp/evgen-safe-summary.json
+          retention-days: 7
