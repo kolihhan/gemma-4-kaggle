@@ -1,0 +1,59 @@
+name: Gemma real 31B private edit reliability read-only CPU audit
+on:
+  push:
+    branches: [research/gemma-tool-edit-reliability-20261124]
+    paths:
+      - .github/workflows/gemma-edit-reliability-readonly-20261124.yml
+      - scripts/audit_gemma_edit_reliability_20261124.py
+      - tests/test_audit_gemma_edit_reliability_20261124.py
+permissions: {contents: read}
+concurrency:
+  group: gemma-edit-reliability-existing-private-trace-audit
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-behavioral-paired-20261123-v1
+      PRIVATE_DIR: /tmp/gemma-edit-reliability-private
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Pure-Python tests and syntax only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/audit_gemma_edit_reliability_20261124.py
+          python -m unittest -v tests.test_audit_gemma_edit_reliability_20261124
+          echo EDIT_AUDIT_UNIT_TESTS=PASS
+      - name: Inspect exact existing private kernel without relaunch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          raw="$(kaggle kernels status "$KERNEL_REF" 2>&1)"
+          if [[ "$raw" != *KernelWorkerStatus.COMPLETE* ]]; then
+            echo "STOP_SOURCE_PRIVATE_KERNEL_NOT_COMPLETE"
+            exit 1
+          fi
+          mkdir -p "$PRIVATE_DIR"
+          kaggle kernels output "$KERNEL_REF" -p "$PRIVATE_DIR" -o >/tmp/gemma-private-edit-output.log 2>&1
+          test -s "$PRIVATE_DIR/paired_behavioral_probe31b_4min_results.json" || {
+            echo "STOP_SOURCE_SUMMARY_NOT_FOUND"; exit 1;
+          }
+          echo "EXISTING_PRIVATE_KERNEL_CONFIRMED=TRUE;NEW_GPU=FALSE"
+      - name: Analyze original 16 evaluations, export ONLY sanitized aggregate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.audit_gemma_edit_reliability_20261124 --root "$PRIVATE_DIR"
+          echo "REFERENCE_OR_RAW_PATCH_EXPORTED=FALSE;OFFICIAL_SUBMISSION=FALSE"
+      - name: Remove private artifacts and downloaded traces
+        if: always()
+        shell: bash
+        run: rm -rf "$PRIVATE_DIR" /tmp/gemma-private-edit-output.log
