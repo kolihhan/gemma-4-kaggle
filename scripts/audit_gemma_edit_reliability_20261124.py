@@ -206,6 +206,7 @@ def audit(root: Path) -> dict:
             "trace_found": False
         }
         reports.append({
+            "_internal_id": row["instance_id"],
             "arm": row["arm"], "resolved": row["resolved"],
             "has_patch": row["has_patch"],
             "tool_calls_scorer": row.get("tool_calls"),
@@ -242,12 +243,38 @@ def audit(root: Path) -> dict:
                 )
             },
         }
+    by_id = {}
+    for r in reports:
+        by_id.setdefault(r["_internal_id"], {})[r["arm"]] = r
+    if len(by_id) != 8 or any(set(pair) != set(ARMS) for pair in by_id.values()):
+        raise ValueError("incomplete internal pair table")
+    breakdown = {}
+    for pair in by_id.values():
+        control, candidate = (pair[arm] for arm in ARMS)
+        label = ("both_resolved" if control["resolved"] and candidate["resolved"]
+                 else "regression" if control["resolved"]
+                 else "rescue" if candidate["resolved"]
+                 else "neither_resolved")
+        b = breakdown.setdefault(label, {
+            "issues": 0, "candidate_issues_with_invalid_edit_args": 0,
+            "candidate_issues_with_submit": 0,
+            "champion_issues_with_submit": 0,
+            "candidate_issues_over_4min_record_seconds": 0,
+        })
+        b["issues"] += 1
+        b["candidate_issues_with_invalid_edit_args"] += int(
+            candidate.get("edit_argument_anomalies", 0) > 0)
+        b["candidate_issues_with_submit"] += int(candidate.get("submit_requests", 0) > 0)
+        b["champion_issues_with_submit"] += int(control.get("submit_requests", 0) > 0)
+        b["candidate_issues_over_4min_record_seconds"] += int(
+            (candidate.get("duration_seconds") or 0) > 240)
     return {
         "version": "gemma-private-edit-reliability-audit-v1",
         "source_kernel": "kolihhan/gemma4-behavioral-paired-20261123-v1",
         "paired_issues": 8,
         "model_task_evaluations": 16,
         "results_by_arm": result,
+        "paired_outcome_cross_tab": breakdown,
         "raw_private_content_exported": False,
         "gpu_inference_launched": False,
         "competition_submission_created": False,
