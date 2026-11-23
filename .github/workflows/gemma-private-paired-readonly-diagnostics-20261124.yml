@@ -40,7 +40,7 @@ jobs:
           PY
           kaggle competitions submissions gemma-4-developer-agent --csv > /tmp/gemma-paired-readonly/submissions.csv || true
           python - <<'PY'
-          import csv,pathlib
+          import csv,json,pathlib
           p=pathlib.Path('/tmp/gemma-paired-readonly/submissions.csv')
           if not p.is_file() or not p.stat().st_size:
               print('OFFICIAL_LEDGER=UNAVAILABLE');raise SystemExit(0)
