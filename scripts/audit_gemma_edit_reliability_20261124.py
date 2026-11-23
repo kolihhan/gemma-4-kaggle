@@ -152,8 +152,13 @@ def reduce_trace(trace: dict) -> dict:
                 counts["edit_events"] += 1
                 first_edit = first_edit or ordinal
                 last_edit = ordinal
-                shape = _arg_shape(name, call.get("arguments"))
+                args = call.get("arguments")
+                shape = _arg_shape(name, args)
                 counts["edit_arg_" + shape] += 1
+                if shape == "invalid_missing_or_wrong_type" and isinstance(args, dict):
+                    for required_key in REQUIRED[name]:
+                        if not isinstance(args.get(required_key), str):
+                            counts["invalid_" + name + "_" + required_key] += 1
                 status, category = _observe(step.get("observation")) if observable else ("unknown", "UNKNOWN")
                 counts["edit_observation_" + status] += 1
                 if status == "error":
@@ -180,6 +185,11 @@ def reduce_trace(trace: dict) -> dict:
         "edit_arg_unexpected_keys_present": counts["edit_arg_unexpected_keys_present"],
         "edit_file_events": counts["tool_edit_file"],
         "write_file_events": counts["tool_write_file"],
+        "invalid_edit_file_filepath": counts["invalid_edit_file_filepath"],
+        "invalid_edit_file_old_string": counts["invalid_edit_file_old_string"],
+        "invalid_edit_file_new_string": counts["invalid_edit_file_new_string"],
+        "invalid_write_file_filepath": counts["invalid_write_file_filepath"],
+        "invalid_write_file_content": counts["invalid_write_file_content"],
         "edit_confirmed_ok": counts["edit_observation_ok"],
         "edit_confirmed_error": counts["edit_observation_error"],
         "edit_observation_unknown": counts["edit_observation_unknown"],
@@ -234,6 +244,9 @@ def audit(root: Path) -> dict:
                     "edit_arg_invalid_non_object", "edit_arg_invalid_missing_or_wrong_type",
                     "edit_arg_invalid_empty_target", "edit_arg_unexpected_keys_present",
                     "edit_file_events", "write_file_events",
+                    "invalid_edit_file_filepath", "invalid_edit_file_old_string",
+                    "invalid_edit_file_new_string", "invalid_write_file_filepath",
+                    "invalid_write_file_content",
                     "edit_confirmed_ok", "edit_confirmed_error",
                     "edit_observation_unknown", "edit_dispatch_missing_args",
                     "edit_match_or_validation_errors", "edit_other_errors",
