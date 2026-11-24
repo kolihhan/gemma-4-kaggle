@@ -1,0 +1,136 @@
+name: Gemma sampling regime v2 repair exhausted strata only
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-sampling-regime-v2-private-20261124.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-sampling-regime-private-once
+  cancel-in-progress: false
+jobs:
+  paired:
+    if: ${{ github.event.head_commit.message == 'GO_GEMMA_SAMPLING_REGIME_V2_PRIVATE_20261124' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 190
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-sampling-regime-paired-20261124-v2
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Verify official receipt, quota and exact paired sampling packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0 pyyaml
+          python -m py_compile scripts/render_sampling_regime31b_v2_20261124.py
+          python - <<'PY'
+          import json,subprocess
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions
+          for r in authenticated_submissions():
+              if str(r.get("ref")) in {"58808118","58183466"}:
+                  print("SAMPLING_OFFICIAL_LEDGER="+json.dumps({k:r.get(k) for k in ("ref","date","status","publicScore")}),flush=True)
+          q=json.loads(subprocess.run(["kaggle","quota","--format","json"],capture_output=True,text=True,check=True,timeout=90).stdout)
+          g=[r for r in q if r.get("resource")=="GPU"]
+          if len(g)!=1:raise RuntimeError("unverified GPU quota")
+          rem=float(str(g[0]["remaining"]).rstrip("h"))
+          print("CLI_REPORTED_GPU_REMAINING_HOURS="+str(rem),flush=True)
+          if rem<8:raise RuntimeError("less than 8h CLI-reported GPU quota")
+          PY
+          if kaggle kernels status "$KERNEL_REF" >/tmp/samp-exists.log 2>&1; then
+            echo STOP_EXACT_PRIVATE_KERNEL_EXISTS; exit 1
+          fi
+          # The failed v1 must have stopped at selection, before any model task.
+          old=kolihhan/gemma4-sampling-regime-paired-20261124-v1
+          raw="$(kaggle kernels status "$old" 2>&1)"
+          [[ "$raw" == *KernelWorkerStatus.ERROR* ]]
+          mkdir -p /tmp/samp-old
+          kaggle kernels output "$old" -p /tmp/samp-old -o >/tmp/samp-old.log 2>&1
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path("/tmp/samp-old")
+          logs=[p.read_text(errors="replace") for p in root.rglob("*.log")]
+          assert logs and any("not enough untouched tasks in " in s for s in logs)
+          assert not any("PRIVATE_PAIRED_31B_TASK=" in s or "vLLM ready at" in s for s in logs)
+          d=json.loads((root/"paired_sampling_regime31b_5min_results.json").read_text())
+          assert d["status"]=="error" and not d.get("results")
+          print("V1_CONFIRMED_PRE_INFERENCE_FAILURE",flush=True)
+          PY
+          mkdir -p /tmp/samp-source /tmp/samp-a /tmp/samp-b /tmp/samp-c /tmp/samp-results
+          for spec in 'kolihhan/gemma4-behavioral-paired-20261123-v1 a' 'kolihhan/gemma4-edit-grammar-paired-20261124-v1 b' 'kolihhan/gemma4-single-edit-channel-paired-20261124-v1 c'; do
+            read -r ref key <<< "$spec"
+            raw="$(kaggle kernels status "$ref" 2>&1)"
+            [[ "$raw" == *KernelWorkerStatus.COMPLETE* ]]
+            kaggle kernels output "$ref" -p "/tmp/samp-$key" -o >/tmp/samp-download.log 2>&1
+          done
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p /tmp/samp-source -o >/tmp/samp-source.log 2>&1
+          python -m scripts.render_sampling_regime31b_v2_20261124 \
+            --source /tmp/samp-source/submission.zip --out /tmp/samp-render \
+            --previous /tmp/samp-a/paired_behavioral_probe31b_4min_results.json /tmp/samp-b/paired_edit_grammar31b_5min_results.json /tmp/samp-c/paired_single_edit_channel31b_4min_results.json
+          python -m py_compile /tmp/samp-render/sampling_regime_runtime.py
+      - name: Push exactly one private GPU experiment
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle kernels push -p /tmp/samp-render --accelerator NvidiaL4 -t 9000 >/tmp/samp-push.log 2>&1 || {
+            grep -Ei 'error|failed|invalid|quota' /tmp/samp-push.log | tail -n 8 || true; exit 1
+          }
+          echo "SAMPLING_PRIVATE_KERNEL_PUSHED=$KERNEL_REF"
+          echo "OFFICIAL_SUBMISSION=FALSE"
+      - name: Poll existing private kernel only
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=UNKNOWN
+          for attempt in $(seq 1 120); do
+            raw="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            case "$raw" in
+              *KernelWorkerStatus.COMPLETE*) terminal=COMPLETE; break ;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*|*KernelWorkerStatus.CANCELLED*) terminal=ERROR; break ;;
+            esac
+            if (( attempt % 8 == 0 )); then echo "PRIVATE_POLL=$attempt"; fi
+            sleep 75
+          done
+          echo "SAMPLING_KERNEL_TERMINAL=$terminal"
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          [[ "$terminal" == COMPLETE ]]
+      - name: Retrieve actual matched outcomes with failure triage metrics
+        if: steps.poll.outputs.terminal == 'COMPLETE'
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle kernels output "$KERNEL_REF" -p /tmp/samp-results -o >/tmp/samp-result.log 2>&1
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path("/tmp/samp-results/paired_sampling_regime31b_5min_results.json").read_text())
+          rows=d["results"];arms=("champion_5min","sampling_5min")
+          assert d["status"]=="completed" and len(rows)==16
+          idx={(r["instance_id"],r["arm"]):r for r in rows};ids={i for i,_ in idx}
+          assert len(ids)==8 and set(idx)=={(i,a) for i in ids for a in arms}
+          counts={"both":0,"rescue":0,"regression":0,"neither":0}
+          pairs=[]
+          for i in sorted(ids):
+              c,t=(idx[i,a] for a in arms)
+              label="both" if c["resolved"] and t["resolved"] else "regression" if c["resolved"] else "rescue" if t["resolved"] else "neither"
+              counts[label]+=1
+              pairs.append({"outcome":label,"arms":{a:{k:idx[i,a].get(k) for k in ("resolved","has_patch","tool_calls","duration_seconds","status")} for a in arms}})
+          print("SAMPLING_PAIRED_RESULT="+json.dumps({
+              "pairs":8,"evaluations":16,"outcomes":counts,
+              "control_resolved":counts["both"]+counts["regression"],
+              "candidate_resolved":counts["both"]+counts["rescue"],
+              "tool_calls":{a:sum(r.get("tool_calls") or 0 for r in rows if r["arm"]==a) for a in arms},
+              "seconds":{a:round(sum(r.get("duration_seconds") or 0 for r in rows if r["arm"]==a),2) for a in arms},
+              "nonempty_patches":{a:sum(r.get("has_patch") is True for r in rows if r["arm"]==a) for a in arms},
+              "errors":{a:sum(r.get("status")!="completed" for r in rows if r["arm"]==a) for a in arms},
+              "private_final_patches_retained":len(list(Path("/tmp/samp-results").rglob("*.patch"))),
+              "gold_noop_certified":False,"official_submission":False},sort_keys=True),flush=True)
+          print("SAMPLING_SAFE_PAIRS="+json.dumps(sorted(pairs,key=lambda p:json.dumps(p,sort_keys=True)),sort_keys=True),flush=True)
+          PY
+      - name: Clean private runner files
+        if: always()
+        run: rm -rf /tmp/samp-source /tmp/samp-a /tmp/samp-b /tmp/samp-c /tmp/samp-results /tmp/samp-render /tmp/samp-old /tmp/samp-*.log
