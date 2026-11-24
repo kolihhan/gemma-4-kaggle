@@ -50,6 +50,7 @@ GitHub Release data mirrors are infrastructure, not experiment state.
 - Prefer the smallest reproducible experiment that can falsify the current hypothesis.
 - Do not turn a temporary restriction into permanent doctrine. Every major exclusion of a method/model/representation/topology class must have a documented reason, supporting evidence, and pivot trigger as defined in `RESEARCH_DOCTRINE.md`.
 - Maintain both a local next-experiment hypothesis and a global bottleneck/architecture hypothesis. Revisit the global diagnosis after a few meaningful experiments or whenever local improvements stop transferring.
+- Before retiring any low-score or non-improving candidate, apply the mandatory low-score failure triage in `RESEARCH_DOCTRINE.md` §10: verified measurement, paired error partitions, competing causes, discriminating test, partial gains, and an evidence-based decision. A weak recipe is not proof that its research family is invalid.
 
 ## Data handling
 
