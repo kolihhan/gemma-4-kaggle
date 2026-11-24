@@ -1,0 +1,145 @@
+name: Gemma single edit channel FastPath matched private 31B
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-single-edit-channel-private-20261124.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-single-edit-channel-private-once
+  cancel-in-progress: false
+jobs:
+  paired:
+    if: ${{ github.event.head_commit.message == 'GO_SINGLE_EDIT_CHANNEL_31B_PRIVATE_20261124' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 160
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL_REF: kolihhan/gemma4-single-edit-channel-paired-20261124-v1
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Render fresh matched candidate and validate before GPU
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          pip install -q kaggle==2.2.5 six==1.17.0
+          python -m py_compile scripts/render_single_edit_channel31b_20261124.py
+          python - <<'PY'
+          import subprocess, json
+          q=json.loads(subprocess.run(["kaggle","quota","--format","json"],capture_output=True,text=True,check=True,timeout=90).stdout)
+          g=[r for r in q if r.get("resource")=="GPU"]
+          if len(g)!=1:raise RuntimeError("unverified GPU quota")
+          remain=float(str(g[0]["remaining"]).rstrip("h"))
+          print("CLI_REPORTED_GPU_REMAINING_HOURS="+str(remain),flush=True)
+          if remain<6:raise RuntimeError("less than 6h CLI-reported remaining quota")
+          PY
+          if kaggle kernels status "$KERNEL_REF" >/tmp/single-edit-existing.log 2>&1; then
+            echo "STOP_EXACT_PRIVATE_KERNEL_EXISTS"; exit 1
+          fi
+          mkdir -p /tmp/se-source /tmp/se-old-a /tmp/se-old-b /tmp/se-result
+          a=kolihhan/gemma4-behavioral-paired-20261123-v1
+          b=kolihhan/gemma4-edit-grammar-paired-20261124-v1
+          for ref in "$a" "$b"; do
+            status="$(kaggle kernels status "$ref" 2>&1)"
+            [[ "$status" == *KernelWorkerStatus.COMPLETE* ]] || exit 1
+          done
+          kaggle kernels output "$a" -p /tmp/se-old-a -o >/tmp/se-old-a.log 2>&1
+          kaggle kernels output "$b" -p /tmp/se-old-b -o >/tmp/se-old-b.log 2>&1
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p /tmp/se-source -o >/tmp/se-source.log 2>&1
+          python -m scripts.render_single_edit_channel31b_20261124 \
+            --source /tmp/se-source/submission.zip \
+            --out /tmp/se-render \
+            --previous /tmp/se-old-a/paired_behavioral_probe31b_4min_results.json /tmp/se-old-b/paired_edit_grammar31b_5min_results.json
+          python -m py_compile /tmp/se-render/single_edit_channel_runtime.py
+          python - <<'PY'
+          import json, pathlib
+          m=json.loads(pathlib.Path("/tmp/se-render/kernel-metadata.json").read_text())
+          assert m["is_private"] and m["enable_gpu"] and not m["enable_internet"]
+          print("PRIVATE_CONFIGURATION_PASS")
+          PY
+          python - <<'PY'
+          import pathlib, subprocess, tempfile
+          with tempfile.TemporaryDirectory() as d:
+              p=pathlib.Path(d)
+              (p/"example.py").write_text("def answer():\n    return 1\n")
+              subprocess.run(["git","init","-q"],cwd=p,check=True)
+              patch=p/"change.diff"
+              patch.write_text("diff --git a/example.py b/example.py\n--- a/example.py\n+++ b/example.py\n@@ -1,2 +1,2 @@\n def answer():\n-    return 1\n+    return 2\n")
+              for args in [["--check","--recount"],["--recount"]]:
+                  subprocess.run(["git","apply",*args,str(patch)],cwd=p,check=True)
+              assert (p/"example.py").read_text()=="def answer():\n    return 2\n"
+              failed=subprocess.run(["git","apply","--check","--recount",str(patch)],cwd=p,capture_output=True)
+              assert failed.returncode!=0
+              assert (p/"example.py").read_text()=="def answer():\n    return 2\n"
+          print("GIT_APPLY_ATOMIC_CHECK_CPU_PASS")
+          PY
+      - name: Push one private L4 kernel; not an official competition submission
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle kernels push -p /tmp/se-render --accelerator NvidiaL4 -t 7200 >/tmp/se-push.log 2>&1 || {
+            grep -Ei 'error|failed|invalid|quota' /tmp/se-push.log | tail -n 8 || true; exit 1
+          }
+          echo "PRIVATE_KERNEL_PUSHED=$KERNEL_REF"
+          echo "OFFICIAL_SUBMISSION=FALSE"
+      - name: Poll only the existing private kernel
+        id: poll
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=UNKNOWN
+          for attempt in $(seq 1 110); do
+            raw="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            case "$raw" in
+              *KernelWorkerStatus.COMPLETE*) terminal=COMPLETE; break ;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*|*KernelWorkerStatus.CANCELLED*) terminal=ERROR; break ;;
+            esac
+            if (( attempt % 8 == 0 )); then echo "PRIVATE_POLL=$attempt"; fi
+            sleep 75
+          done
+          echo "PRIVATE_KERNEL_TERMINAL=$terminal"
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          [[ "$terminal" == COMPLETE ]]
+      - name: Summarize actual 12 grader evaluations without exporting patches
+        if: steps.poll.outputs.terminal == 'COMPLETE'
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle kernels output "$KERNEL_REF" -p /tmp/se-result -o >/tmp/se-result.log 2>&1
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path("/tmp/se-result/paired_single_edit_channel31b_4min_results.json").read_text())
+          rows=d["results"]
+          arms=("fastpath_4min","single_edit_4min")
+          assert d["status"]=="completed" and len(rows)==12
+          idx={(r["instance_id"],r["arm"]):r for r in rows}
+          ids={i for i,_ in idx}
+          assert len(ids)==6 and len(idx)==12 and set(idx)=={(i,a) for i in ids for a in arms}
+          prior=set()
+          for path in ("/tmp/se-old-a/paired_behavioral_probe31b_4min_results.json","/tmp/se-old-b/paired_edit_grammar31b_5min_results.json"):
+              prior.update(json.loads(Path(path).read_text())["selected_public_dev_ids"])
+          assert not ids.intersection(prior)
+          counts={"both":0,"rescue":0,"regression":0,"neither":0}
+          for i in ids:
+              c=idx[(i,arms[0])]["resolved"] is True
+              t=idx[(i,arms[1])]["resolved"] is True
+              counts["both" if c and t else "regression" if c else "rescue" if t else "neither"]+=1
+          print("SINGLE_EDIT_PAIRED_RESULT="+json.dumps({
+              "pairs":6,"evaluations":12,"outcomes":counts,
+              "control_resolved":counts["both"]+counts["regression"],
+              "candidate_resolved":counts["both"]+counts["rescue"],
+              "tool_calls":{a:sum(r.get("tool_calls") or 0 for r in rows if r["arm"]==a) for a in arms},
+              "seconds":{a:round(sum(r.get("duration_seconds") or 0 for r in rows if r["arm"]==a),2) for a in arms},
+              "nonempty_patches":{a:sum(r.get("has_patch") is True for r in rows if r["arm"]==a) for a in arms},
+              "errors":{a:sum(r.get("status")!="completed" for r in rows if r["arm"]==a) for a in arms},
+              "private_final_patches_retained":len(list(Path("/tmp/se-result").rglob("*.patch"))),
+              "gold_noop_certified":False,"official_submission":False
+          },sort_keys=True))
+          PY
+      - name: Remove runner copies of private artifacts
+        if: always()
+        run: rm -rf /tmp/se-source /tmp/se-old-a /tmp/se-old-b /tmp/se-render /tmp/se-result /tmp/se-*.log /tmp/single-edit-existing.log
