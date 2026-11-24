@@ -1,0 +1,58 @@
+name: Gemma inspect fresh ranked public solutions without executing third party code
+on:
+  push:
+    branches: [research/score-first-public-20261124]
+    paths: [.github/workflows/gemma-score-first-inspect-20261124.yml]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Inspect actual public ZIP configs and license metadata
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0 pyyaml
+          python - <<'PY'
+          import pathlib,subprocess,concurrent.futures,json,zipfile,hashlib,yaml,tempfile,re
+          refs=["bliverrigpdoge/lb-0-22-3-tweaks-40-tool-calls-no-training","ayush04barai/version-1-added-adaptor","leoprovorov/score-to-gemma-4","matterhorn3838/gemma-4-superagent","prvsiyan/gemma-and-the-shape-of-doubt","evgendvorkin/can-gemma-4-become-a-software-engineer","flexonafft/gemma-4-budget-aware-short-prompt"]
+          def inspect(ref):
+              try:
+                  with tempfile.TemporaryDirectory() as tmp:
+                      root=pathlib.Path(tmp)
+                      src=root/"source";out=root/"out";src.mkdir();out.mkdir()
+                      p=subprocess.run(["kaggle","kernels","pull",ref,"-p",str(src),"-m"],capture_output=True,text=True,timeout=80)
+                      q=subprocess.run(["kaggle","kernels","output",ref,"-p",str(out),"-o"],capture_output=True,text=True,timeout=180)
+                      m=src/"kernel-metadata.json"
+                      meta=json.loads(m.read_text()) if m.is_file() else {}
+                      report={"ref":ref,"source_downloaded":p.returncode==0,"output_downloaded":q.returncode==0,"metadata":{k:v for k,v in meta.items() if k in ["id","license","license_name","licenseName","model_sources","kernel_sources","is_private"]},"zips":[]}
+                      for f in sorted(out.rglob("*.zip")):
+                          if f.stat().st_size>300_000_000:continue
+                          try:
+                              with zipfile.ZipFile(f) as z:
+                                  names=z.namelist()
+                                  if not {"agent.yaml","eval_config.yaml"}<=set(names):continue
+                                  if len(names)>400 or any(i.file_size>150_000_000 for i in z.infolist()):continue
+                                  agent=yaml.safe_load(z.read("agent.yaml"))
+                                  cfg=yaml.safe_load(z.read("eval_config.yaml"))
+                                  sampling=yaml.safe_load(z.read("configs/sampling.yaml")) if "configs/sampling.yaml" in names else None
+                                  detail={"file":f.name,"sha256":hashlib.sha256(f.read_bytes()).hexdigest(),"members":names[:35],"agent":agent,"eval":cfg,"sampling":sampling}
+                                  for key in list(detail):
+                                      if len(json.dumps(detail[key],default=str))>5500:detail[key]="TOO_LARGE"
+                                  if "prompts/system.md" in names:
+                                      s=z.read("prompts/system.md").decode(errors="replace")
+                                      detail["prompt_chars"]=len(s)
+                                      detail["prompt_preview"]=s[:2600]
+                                  report["zips"].append(detail)
+                          except Exception as e:report["zip_error"]=type(e).__name__
+                      return report
+              except Exception as e:return {"ref":ref,"error":type(e).__name__}
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+              for r in pool.map(inspect,refs):print("PUBLIC_SOURCE_INSPECT="+json.dumps(r,default=str,ensure_ascii=True),flush=True)
+          PY
