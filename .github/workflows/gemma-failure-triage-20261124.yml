@@ -1,0 +1,130 @@
+name: Gemma failure triage matched traces and official receipt read only
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-failure-triage-20261124.yml]
+permissions: {contents: read}
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read exact competition receipt and completed paired output
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import json
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions
+          for r in authenticated_submissions():
+              if str(r.get("ref")) in {"58808118","58183466","58729456"}:
+                  print("TRIAGE_LEDGER="+json.dumps({k:r.get(k) for k in ("ref","date","status","publicScore")}),flush=True)
+          PY
+          for key in behavior grammar; do
+            if [[ "$key" == behavior ]]; then ref=kolihhan/gemma4-behavioral-paired-20261123-v1; else ref=kolihhan/gemma4-edit-grammar-paired-20261124-v1; fi
+            status="$(kaggle kernels status "$ref" 2>&1)"
+            [[ "$status" == *KernelWorkerStatus.COMPLETE* ]]
+            mkdir -p "/tmp/gemma-triage/$key"
+            kaggle kernels output "$ref" -p "/tmp/gemma-triage/$key" -o >"/tmp/gemma-triage/$key.log" 2>&1
+          done
+      - name: Distinguish mutation failure, incomplete trace events and post-edit testing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,re,hashlib
+          from collections import Counter
+          from pathlib import Path
+          from scripts.audit_gemma_edit_reliability_20261124 import _observe,_arg_shape,EDIT_TOOLS
+
+          # Event evidence only. Never export argument strings, paths, patches,
+          # test commands, issue IDs, or observations. Unknown is not failure.
+          def summarize(trace):
+              events=[]
+              for step in trace.get("steps",[]):
+                  calls=[c for c in (step.get("tool_calls") or []) if isinstance(c,dict)]
+                  for c in calls:
+                      name=c.get("function_name")
+                      args=c.get("arguments")
+                      obs,category=_observe(step.get("observation")) if len(calls)==1 else ("unknown","UNKNOWN")
+                      cmd=args.get("command","") if name=="run_command" and isinstance(args,dict) else ""
+                      cmd=cmd if isinstance(cmd,str) else ""
+                      # Only obvious test-run signatures; opaque shell may hide tests.
+                      test=bool(re.search(r"(?:^|[\s;|&])(?:pytest|python(?:3)?\s+-m\s+(?:pytest|unittest)|unittest)(?:\s|$)",cmd))
+                      digest=hashlib.sha256(json.dumps([name,args,obs,category],sort_keys=True,default=str).encode()).digest()
+                      shape=_arg_shape(name,args)
+                      events.append((name,shape,obs,category,test,digest))
+              ed=[i for i,e in enumerate(events) if e[0] in EDIT_TOOLS]
+              ok=[i for i in ed if events[i][2]=="ok"]
+              anomaly=[i for i in ed if events[i][1]!="apparently_valid"]
+              unknown=[i for i in anomaly if events[i][2]=="unknown"]
+              # An identical signature repeated in the next three events is a
+              # possible duplicate, not proof of one physical invocation.
+              dup=sum(any(events[j][5]==events[i][5] for j in range(i+1,min(i+4,len(events)))) for i in unknown)
+              near_valid=sum(any(events[j][0]==events[i][0] and events[j][1]=="apparently_valid" for j in range(i+1,min(i+4,len(events)))) for i in unknown)
+              tests=[i for i,e in enumerate(events) if e[4]]
+              first=ok[0] if ok else None
+              return dict(
+                  trace_events=len(events),
+                  edit_events=len(ed),
+                  successful_edit_events=len(ok),
+                  confirmed_edit_error_events=sum(events[i][2]=="error" for i in ed),
+                  confirmed_dispatch_error_events=sum(events[i][3]=="DISPATCH_MISSING_ARGS" for i in ed),
+                  anomalous_edit_events=len(anomaly),
+                  anomalous_unknown_events=len(unknown),
+                  unknown_with_near_identical_signature=dup,
+                  unknown_with_near_valid_same_tool=near_valid,
+                  first_confirmed_edit_event=first+1 if first is not None else None,
+                  recognized_test_events=len(tests),
+                  recognized_tests_before_confirmed_edit=sum(i<first for i in tests) if first is not None else None,
+                  recognized_tests_after_confirmed_edit=sum(i>first for i in tests) if first is not None else None,
+                  explicit_submit=any(e[0]=="submit_patch" for e in events),
+              )
+
+          # Synthetic fixtures check that missing args + unknown response
+          # do not become confirmed dispatcher errors, and ordering is retained.
+          def call(name,args,obs=None):
+              return {"tool_calls":[{"function_name":name,"arguments":args}],"observation":obs}
+          example={"steps":[call("edit_file",{"filepath":"p","new_string":"b"}),call("edit_file",{"filepath":"p","old_string":"a","new_string":"b"},{"status":"ok"}),call("run_command",{"command":"python -m pytest tests/test_x.py"},{"status":"ok"})]}
+          f=summarize(example)
+          assert f["anomalous_unknown_events"]==1 and f["confirmed_edit_error_events"]==0
+          assert f["unknown_with_near_valid_same_tool"]==1 and f["recognized_tests_after_confirmed_edit"]==1
+          print("TRIAGE_FIXTURE_PASS",flush=True)
+
+          for key,filename,arms in [
+              ("behavior","paired_behavioral_probe31b_4min_results.json",("champion_4min","behavioral_4min")),
+              ("grammar","paired_edit_grammar31b_5min_results.json",("champion_5min","edit_grammar_5min"))]:
+              root=Path("/tmp/gemma-triage")/key
+              d=json.loads((root/filename).read_text())
+              rows=d["results"]
+              idx={(r["instance_id"],r["arm"]):r for r in rows}
+              ids={i for i,a in idx}
+              assert d["status"]=="completed" and len(rows)==16 and len(ids)==8 and len(idx)==16
+              assert set(idx)=={(i,a) for i in ids for a in arms}
+              records=[]
+              for i in sorted(ids):
+                  c,t=(idx[i,a] for a in arms)
+                  label="both" if c["resolved"] and t["resolved"] else "regression" if c["resolved"] else "rescue" if t["resolved"] else "neither"
+                  pair={"outcome":label,"arms":{}}
+                  for a in arms:
+                      row=idx[i,a]
+                      paths=[p for p in root.rglob("trace_*.json") if p.name=="trace_"+i+".json" and ("public-prompt" in p.relative_to(root).parts)==(a==arms[1])]
+                      assert len(paths)<=1
+                      pair["arms"][a]={"resolved":row["resolved"],"patch_present":row["has_patch"],"scorer_calls":row["tool_calls"],"task_seconds":round(row["duration_seconds"],2),"trace_available":bool(paths)}
+                      if paths:pair["arms"][a].update(summarize(json.loads(paths[0].read_text())))
+                  records.append(pair)
+              # Anonymous rows, outcome only, no task IDs. Shuffle deterministic by metrics,
+              # not original task order.
+              records.sort(key=lambda r:json.dumps(r,sort_keys=True))
+              print("FAILURE_TRIAGE_SAFE="+json.dumps({"pilot":key,"pairs":records,"private_content_exported":False,"limitations":"trace event order not exact call order or wall time; opaque shell tests and missing responses unknown; small exploratory matched pilot; no causal proof"},sort_keys=True),flush=True)
+          PY
+      - name: Remove private runner data
+        if: always()
+        run: rm -rf /tmp/gemma-triage
