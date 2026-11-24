@@ -1,0 +1,32 @@
+name: FastPath submission 58808118 status only
+on:
+  push:
+    branches: [research/score-first-public-20261124]
+    paths: [.github/workflows/fastpath-58808118-status-20261124.yml]
+permissions: {contents: read}
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read authenticated submission and quota only
+        run: |
+          pip install -q kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import json
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions, COMPETITION
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          rows=authenticated_submissions()
+          for r in rows:
+              if str(r.get("ref")) in {"58808118","58183466","58729456"}:
+                  print("VERIFIED_STATUS="+json.dumps({k:r.get(k) for k in ("ref","date","status","publicScore","description")}),flush=True)
+          a=KaggleApi();a.authenticate()
+          q=a.competition_get_submission_limits(COMPETITION)
+          print("VERIFIED_SLOT="+json.dumps({"allowed":q.num_allowed_now,"limited_by_total":q.limited_by_total}),flush=True)
+          PY
