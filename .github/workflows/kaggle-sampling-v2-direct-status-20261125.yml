@@ -35,6 +35,23 @@ jobs:
           s=subprocess.run(["kaggle","kernels","status",ref],capture_output=True,text=True,timeout=40)
           classes=re.findall(r"KernelWorkerStatus\.[A-Z_]+",s.stdout+s.stderr)
           print("KAGGLE_KERNEL_STATUS="+json.dumps({"ref":ref,"status":classes,"exit":s.returncode}),flush=True)
+          if not classes:
+              raw=s.stdout+s.stderr
+              print("KAGGLE_STATUS_ERROR_TYPE="+json.dumps({
+                  "permission":bool(re.search(r"permission|forbidden|403",raw,re.I)),
+                  "not_found":bool(re.search(r"not found|404",raw,re.I)),
+                  "unauthorized":bool(re.search(r"unauthorized|401",raw,re.I)),
+                  "rate_limited":bool(re.search(r"429|rate limit",raw,re.I)),
+                  "timeout":bool(re.search(r"timed out|timeout",raw,re.I)),
+                  "exception_classes":re.findall(r"(?m)(?:^|\s)([A-Za-z_][A-Za-z_.]*(?:Error|Exception)):",raw)
+              }),flush=True)
+              import csv,io
+              for cmd in (["kaggle","kernels","list","--mine","--page-size","100","-v"],["kaggle","kernels","list","--user","kolihhan","--search","sampling-regime","--page-size","100","-v"]):
+                  m=subprocess.run(cmd,capture_output=True,text=True,timeout=45)
+                  hits=[{"ref":r.get("ref"),"title":r.get("title"),"lastRunTime":r.get("lastRunTime")} for r in csv.DictReader(io.StringIO(m.stdout)) if "sampling-regime" in str(r).lower() or "sampling regime" in str(r).lower()]
+                  print("KAGGLE_KERNEL_LIST="+json.dumps({"exit":m.returncode,"matches":hits}),flush=True)
+              # The status endpoint can fail independently of output download.
+              classes=["KernelWorkerStatus.ERROR"]
           if any(x.endswith((".ERROR",".COMPLETE",".FAILED",".CANCELLED")) for x in classes):
               with tempfile.TemporaryDirectory() as td:
                   p=Path(td)
