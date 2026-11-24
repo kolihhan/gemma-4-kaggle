@@ -1,0 +1,67 @@
+name: Kaggle authenticated sampling v2 actual status and output read
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/kaggle-sampling-v2-direct-status-20261125.yml]
+permissions: {contents: read}
+jobs:
+  query:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Query Kaggle not workflow state
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import json,subprocess,re,collections,tempfile
+          from pathlib import Path
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions,COMPETITION
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          api=KaggleApi();api.authenticate()
+          for r in authenticated_submissions():
+              if str(r.get("ref")) in {"58808118","58183466"}:
+                  print("KAGGLE_RECEIPT="+json.dumps({k:r.get(k) for k in ("ref","date","status","publicScore")}),flush=True)
+          q=api.competition_get_submission_limits(COMPETITION)
+          print("KAGGLE_SLOT="+json.dumps({"allowed":q.num_allowed_now,"limited_by_total":q.limited_by_total}),flush=True)
+          ref="kolihhan/gemma4-sampling-regime-paired-20261124-v2"
+          s=subprocess.run(["kaggle","kernels","status",ref],capture_output=True,text=True,timeout=40)
+          classes=re.findall(r"KernelWorkerStatus\.[A-Z_]+",s.stdout+s.stderr)
+          print("KAGGLE_KERNEL_STATUS="+json.dumps({"ref":ref,"status":classes,"exit":s.returncode}),flush=True)
+          if any(x.endswith((".ERROR",".COMPLETE",".FAILED",".CANCELLED")) for x in classes):
+              with tempfile.TemporaryDirectory() as td:
+                  p=Path(td)
+                  d=subprocess.run(["kaggle","kernels","output",ref,"-p",td,"-o"],capture_output=True,text=True,timeout=100)
+                  print("KAGGLE_OUTPUT_EXIT="+str(d.returncode),flush=True)
+                  logs=[f.read_text(errors="replace") for f in p.rglob("*.log") if f.stat().st_size<30_000_000]
+                  for name,pattern in {"selection_shortage":r"not enough untouched tasks overall|not enough untouched tasks in","vllm_ready":r"vLLM ready at","task_started":r"PRIVATE_PAIRED_31B_TASK=","top_k_error":r"(?i)top_k.{0,120}(?:unsupported|unexpected|invalid|not allowed|validation error)","cuda_oom":r"CUDA out of memory|OutOfMemoryError","validation_error":r"ValidationError|validation errors? for","timeout":r"TimeoutError|TimeoutExpired","engine_error":r"Engine core initialization failed|EngineCore.*failed"}.items():
+                      count=sum(len(re.findall(pattern,l)) for l in logs)
+                      if count:print("KAGGLE_DIAGNOSTIC="+json.dumps({"kind":name,"count":count}),flush=True)
+                  for l in logs:
+                      for line in l.splitlines():
+                          for tag in ["SAMPLING_SELECTION_CAPACITY=","SAMPLING_SELECTION_ACTUAL="]:
+                              if tag in line:
+                                  try:
+                                      val=json.JSONDecoder().raw_decode(line.split(tag,1)[1])[0]
+                                      print("KAGGLE_"+tag+json.dumps(val),flush=True)
+                                  except Exception:pass
+                  f=p/"paired_sampling_regime31b_5min_results.json"
+                  if f.exists():
+                      data=json.loads(f.read_text());rows=data.get("results") or []
+                      print("KAGGLE_RESULT_META="+json.dumps({"status":data.get("status"),"rows":len(rows),"error_type":data.get("error_type")}),flush=True)
+                      if data.get("status")=="completed":
+                          arms=("champion_5min","sampling_5min"); idx={(r["instance_id"],r["arm"]):r for r in rows};ids={i for i,a in idx}
+                          assert len(ids)==8 and set(idx)=={(i,a) for i in ids for a in arms}
+                          c=collections.Counter()
+                          for i in ids:
+                              a,b=[idx[i,k].get("resolved") is True for k in arms]
+                              c["both" if a and b else "regression" if a else "rescue" if b else "neither"]+=1
+                          print("KAGGLE_SCORED_RESULT="+json.dumps({"pairs":len(ids),"outcomes":dict(c),"score_by_arm":data.get("score_by_arm"),"seconds":{a:round(sum(r.get("duration_seconds") or 0 for r in rows if r["arm"]==a),2) for a in arms}}),flush=True)
+          PY
