@@ -1,0 +1,65 @@
+name: Gemma score-first inspect literal public candidate configs and strategy
+on:
+  push:
+    branches: [research/score-first-public-20261124]
+    paths: [.github/workflows/gemma-score-first-source-20261124.yml]
+permissions: {contents: read}
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Retrieve public notebook literal source only
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import ast,concurrent.futures,json,pathlib,tempfile,subprocess,hashlib,re
+          refs=[
+              "bliverrigpdoge/lb-0-22-3-tweaks-40-tool-calls-no-training",
+              "ayush04barai/version-1-added-adaptor",
+              "leoprovorov/single-agent-anytime-patch",
+              "leoprovorov/score-to-gemma-4",
+              "matterhorn3838/gemma-4-superagent",
+              "flexonafft/gemma-4-budget-aware-short-prompt"
+          ]
+          def inspect(ref):
+              try:
+                  with tempfile.TemporaryDirectory() as d:
+                      p=pathlib.Path(d)
+                      subprocess.run(["kaggle","kernels","pull",ref,"-p",d,"-m"],check=True,capture_output=True,text=True,timeout=80)
+                      report={"ref":ref,"files":[x.name for x in p.iterdir()],"bundles":[],"relevant_lines":[]}
+                      for nb in p.glob("*.ipynb"):
+                          raw=json.loads(nb.read_text())
+                          report["notebook_sha"]=hashlib.sha256(nb.read_bytes()).hexdigest()
+                          for c in raw.get("cells",[]):
+                              s=c.get("source","")
+                              s="".join(s) if isinstance(s,list) else s
+                              if c.get("cell_type")=="markdown":
+                                  lines=[x.strip()[:350] for x in s.splitlines() if re.search(r'license|Apache|score|0\.(?:1[89]|2\d|3\d)|deadline|minutes|adapter|localiz|parallel|retry|patch|tool.call',x,re.I)]
+                                  report["relevant_lines"].extend(lines[:15])
+                                  continue
+                              try:tree=ast.parse(s)
+                              except SyntaxError:continue
+                              for node in ast.walk(tree):
+                                  if not isinstance(node,ast.Dict):continue
+                                  try:v=ast.literal_eval(node)
+                                  except (TypeError,ValueError,OverflowError,RecursionError):continue
+                                  if isinstance(v,dict) and {"agent.yaml","eval_config.yaml"}<=set(v) and all(isinstance(x,str) for x in v.values()):
+                                      report["bundles"].append({"members":list(v),"sha":hashlib.sha256(json.dumps(v,sort_keys=True).encode()).hexdigest(),"agent":v["agent.yaml"][:3000],"eval":v["eval_config.yaml"][:1200],"sampling":v.get("configs/sampling.yaml","")[:1200],"prompt":v.get("prompts/system.md","")[:3000]})
+                              for l in s.splitlines():
+                                  if re.search(r'max_time_minutes|max_tool_calls|thinking_budget|max_output_tokens|model: gemma|adapter:|AgentTool|ParallelAgent|SequentialAgent',l):
+                                      report["relevant_lines"].append(l.strip()[:350])
+                      report["relevant_lines"]=report["relevant_lines"][:45]
+                      report["bundles"]=report["bundles"][:3]
+                      return report
+              except Exception as e:return {"ref":ref,"error":type(e).__name__}
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+              for r in pool.map(inspect,refs):print("SOURCE_CONFIG="+json.dumps(r,ensure_ascii=True),flush=True)
+          PY
