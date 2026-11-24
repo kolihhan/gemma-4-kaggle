@@ -1,0 +1,77 @@
+name: Gemma sampling error root cause read only
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-sampling-error-triage-20261124.yml]
+permissions: {contents: read}
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Retrieve failed private kernel diagnostic without relaunch
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/sampling-error
+          python - <<'PY'
+          import json,subprocess,re
+          from pathlib import Path
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions
+          ref="kolihhan/gemma4-sampling-regime-paired-20261124-v1"
+          for r in authenticated_submissions():
+              if str(r.get("ref")) in {"58808118","58183466"}:
+                  print("SAMPLING_TRIAGE_RECEIPT="+json.dumps({k:r.get(k) for k in ("ref","status","publicScore","date")}),flush=True)
+          status=subprocess.run(["kaggle","kernels","status",ref],capture_output=True,text=True,timeout=60)
+          print("KERNEL_STATUS_CLASSES="+json.dumps(re.findall(r"KernelWorkerStatus\.[A-Z_]+",status.stdout+status.stderr)),flush=True)
+          root=Path("/tmp/sampling-error")
+          out=subprocess.run(["kaggle","kernels","output",ref,"-p",str(root),"-o"],capture_output=True,text=True,timeout=150)
+          print("OUTPUT_EXIT="+str(out.returncode),flush=True)
+          # Never print raw logs, task text, commands, reference patches or private paths.
+          # Fixed diagnostic signatures + error type counts only.
+          categories={
+              "NO_GPU":r"no visible GPU|no CUDA GPUs|CUDA is not available",
+              "CUDA_OOM":r"CUDA out of memory|OutOfMemoryError",
+              "ENGINE_STARTUP":r"Engine core initialization failed|EngineCore.*failed|Failed to start vLLM|vLLM.*startup.*(?:timeout|failed)",
+              "TOP_K_VALIDATION":r"(?i)top_k.{0,160}(?:not permitted|not supported|invalid|unexpected|not allowed|validation error)|(?:unexpected|unsupported|invalid).{0,80}top_k",
+              "PydanticValidationError":r"ValidationError|validation errors? for ",
+              "IMPORT_FAILURE":r"ModuleNotFoundError|ImportError",
+              "MODEL_WEIGHTS_MISSING":r"model weights not found",
+              "NOT_ENOUGH_UNSEEN_TASKS":r"not enough untouched tasks",
+              "RENDER_SELECTION_INVALID":r"paired selection invalid",
+              "TASK_SCHEMA":r"TypeError|KeyError|AttributeError",
+              "FILE_NOT_FOUND":r"FileNotFoundError",
+              "TIMEOUT":r"TimeoutError|TimeoutExpired|timed out",
+              "RATE_LIMIT_OR_QUOTA":r"quota exceeded|ResourceExhausted|HTTP 429",
+              "SERVER_PROCESS_EXIT":r"CalledProcessError|server process.*exit",
+              "GPU_INCOMPATIBILITY":r"no kernel image is available|invalid device function|unsupported compute capability",
+              "ASSERTION":r"AssertionError",
+              "TASK_STARTED":r"PRIVATE_PAIRED_31B_TASK=",
+              "VLLM_READY":r"vLLM ready at",
+              "SAFE_SUMMARY":r"PRIVATE_PAIRED_31B_SAFE_SUMMARY=",
+          }
+          logfiles=[f for f in root.rglob("*") if f.is_file() and f.suffix.lower() in {".log",".txt"} and f.stat().st_size<20_000_000]
+          print("DIAGNOSTIC_LOG_COUNT="+str(len(logfiles)),flush=True)
+          blobs=[out.stdout,out.stderr]+[f.read_text(errors="replace") for f in logfiles]
+          for k,pattern in categories.items():
+              n=sum(len(re.findall(pattern,b)) for b in blobs)
+              if n:print("DIAGNOSTIC_SIGNATURE="+json.dumps({"category":k,"matches":n}),flush=True)
+          # Include exception class and line numbers only, not exception text.
+          exceptions=[]
+          for b in blobs:
+              for m in re.finditer(r"(?m)(?:^|[\s])((?:[\w.]+\.)?[A-Z][\w]*(?:Error|Exception)):",b):
+                  exceptions.append(m.group(1).split(".")[-1])
+          from collections import Counter
+          print("DIAGNOSTIC_EXCEPTION_CLASSES="+json.dumps(dict(Counter(exceptions)),sort_keys=True),flush=True)
+          print("COMPLETE_RESULT_AVAILABLE="+str(any(root.rglob("paired_sampling_regime31b_5min_results.json"))),flush=True)
+          PY
+      - name: Remove private runner files
+        if: always()
+        run: rm -rf /tmp/sampling-error
