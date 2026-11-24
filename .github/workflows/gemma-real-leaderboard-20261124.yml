@@ -1,0 +1,58 @@
+name: Gemma real leaderboard front-runners and public source discovery
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-real-leaderboard-20261124.yml]
+permissions: {contents: read}
+jobs:
+  leaderboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Download current actual public leaderboard and map public notebooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import json
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions
+          for r in authenticated_submissions():
+              if str(r.get("ref")) in {"58808118","58183466"}:
+                  print("TOP_RESEARCH_RECEIPT="+json.dumps({k:r.get(k) for k in ("ref","date","status","publicScore")}),flush=True)
+          PY
+          mkdir -p /tmp/gemma-lb
+          kaggle competitions leaderboard gemma-4-developer-agent --download -p /tmp/gemma-lb
+          kaggle kernels list --competition gemma-4-developer-agent --sort-by scoreDescending --page-size 100 -v > /tmp/gemma-lb/notebooks.csv
+          python - <<'PY'
+          import csv,json,zipfile,io
+          from pathlib import Path
+          p=Path("/tmp/gemma-lb")
+          files=[f for f in p.iterdir() if f.name!="notebooks.csv"]
+          print("LB_FILES="+json.dumps([f.name for f in files]))
+          board=[]
+          for f in files:
+              if f.suffix==".zip":
+                  with zipfile.ZipFile(f) as z:
+                      for n in z.namelist():
+                          if n.endswith(".csv"):board.extend(csv.DictReader(io.StringIO(z.read(n).decode("utf-8-sig"))))
+              elif f.suffix==".csv":board.extend(csv.DictReader(io.StringIO(f.read_text(encoding="utf-8-sig"))))
+          print("LB_COUNT="+str(len(board)))
+          for r in board[:30]:
+              print("LB_TOP="+json.dumps(r,ensure_ascii=True))
+          for i,r in enumerate(board):
+              if "kolihhan" in json.dumps(r).lower() or "ko lih han" in json.dumps(r).lower():
+                  print("LB_OWN="+json.dumps({"position":i+1,**r},ensure_ascii=True))
+          notes=list(csv.DictReader((p/"notebooks.csv").open()))
+          print("NOTEBOOK_COUNT="+str(len(notes)))
+          for i,n in enumerate(notes[:45],1):print("PUBLIC_CODE="+json.dumps({"listing_position":i,"ref":n.get("ref"),"title":n.get("title")},ensure_ascii=True))
+          PY
+      - name: Clean downloaded leaderboard
+        if: always()
+        run: rm -rf /tmp/gemma-lb
