@@ -145,3 +145,42 @@ WHAT RESULT WOULD CAUSE AN ARCHITECTURE-LEVEL PIVOT?:
 ```
 
 Do not reflexively continue the existing lineage. Do not reflexively redesign it either. Follow the strongest independent evidence available.
+
+
+## 10. Competition failure-triage: low score is evidence, not a stop command (2026-11-24)
+
+**Owner direction:** Never discard a research idea solely because an initial Public Score, private pilot, or local score is low. A failed recipe does not disprove the underlying mechanism. Equally, successful packaging, fewer calls, or a nonempty patch is not proof of competitive strength. Do not reflexively patch or change architectures before identifying the bottleneck.
+
+Adapt the owner's [Name That LLM research doctrine](https://github.com/kolihhan/name-kaggle/blob/main/RESEARCH_DOCTRINE.md) to software repair. Methodological references: [Kaggle Learner](https://github.com/Galaxy-Dawn/claude-scholar), [NVIDIA Kaggle Skill](https://github.com/NVIDIA/nvidia-kaggle), [Hypothesis Testing](https://github.com/rohitg00/skillkit), and [Scientific Critical Thinking](https://github.com/K-Dense-AI/scientific-agent-skills). Use their research principles; do not automatically install or execute external scripts.
+
+### Required diagnosis before retiring a mechanism
+
+1. **Verify measurement:** actual terminal Kaggle status, score/denominator, model, candidate ZIP hash, task IDs, grader and environment, matched budgets, errors and time. Distinguish PENDING, blank score, confirmed timeout and completed low score. Do not conflate CPU validation with model correctness.
+2. **Separate weak implementation from weak idea:** investigate issue understanding, localization, model reasoning, tool-call serialization, missing tools/dependencies, failed mutations, wrong semantic fixes, verification bias, lost edits, termination behavior, task distribution and runtime. A single prompt, adapter or topology does not exhaust a method class.
+3. **Analyze paired errors, not aggregate score alone:** rescues, regressions, both solved, neither solved, patch presence, time to first successful edit, tool errors, patch survival, test result and walltime. Distinguish callback events from physical calls; missing events are not proof that actions never occurred. Where available and lawful, compare actual failed patches with public-development reference patches after evaluation, isolated from all solving agents. Mark missing evidence UNKNOWN.
+4. **Test competing hypotheses:** state at least two plausible causes with evidence for/against, predictions if true and false, and a minimal fixed-control experiment that distinguishes them. Prefer existing traces or a cheap CPU fixture when sufficient; run fresh matched model evaluations when necessary. Update the global bottleneck hypothesis after the result instead of simply creating another prompt or architecture.
+5. **Preserve partial gains:** lower calls or latency, improved localization, valid mutation or patch emission may remain useful even when resolved count falls. Determine whether the improvement is independent and addresses a bottleneck; isolate it on fresh tasks. Never equate a proxy gain to correctness.
+6. **Respect frozen evaluations and constraints:** do not mutate ongoing candidates, tune on spent holdouts, use hidden labels or suppress failures. Record small-sample limitations and gold/no-op certification status. Preserve the Champion, legal submission limits, 12-hour full-batch runtime cap and owner-authorized resource limits. A per-task cap does not guarantee complete Notebook runtime. Do not introduce schedulers or new training merely because a skill recommends them.
+7. **Decision labels:** DIAGNOSE (unresolved root cause), REPAIR_BUG (verified defect), NEW_HYPOTHESIS (evidence-based mechanism change), PARK (resource/evidence limit, state reopening condition), PROMOTE (independent correctness and cost evidence), RETIRE_SPECIFIC_RECIPE (supported negative). REJECT_IDEA_BECAUSE_SCORE_LOW is inadmissible. Retiring a recipe for submission does not retire its research family.
+
+### Apply to current Gemma research
+
+| Observation | Competing explanations | Next discriminating evidence | Decision |
+| --- | --- | --- | --- |
+| Behavioral Verification: 4/8 to 2/8, zero rescues, two regressions ([paired run](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45211599647), [trace audit](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45228018995)) | Probe consumes edit time; malformed arguments or trace serialization; incorrect behavioral hypothesis | Inspect attributable tool results, probe uptake, actual patches and edit chronology. Nineteen malformed recorded edit events concentrate in both regressions; uncertain responses/duplicate callbacks prevent causal claims. | DIAGNOSE; do not promote exact recipe, keep verification family open |
+| Edit Grammar: 2/8 vs 2/8, calls 224 to 208, five nonempty patches each ([paired run](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45256288841), [audit](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45286629098)) | Efficiency improves without better localization/semantic repair; earlier unsuccessful termination; small noisy pilot | Compare per-issue success, edit chronology and timing. Empty-patch tasks have no recorded edits. Identify whether saved calls enable actual repair. | DIAGNOSE; efficiency hypothesis remains open |
+| Evidence-Channel #58729456 COMPLETE, blank score | Timeout, scoring/runtime failure, unavailable result | Obtain actual diagnostics if accessible. Blank is neither confirmed timeout nor zero. | DIAGNOSE |
+| FastPath 40/4 #58808118 last verified PENDING ([receipt](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45317046341), [status](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45393544885)) | Not a completed measurement | Retrieve terminal status before interpreting. | No performance conclusion |
+
+The already-running [Single Edit Channel experiment](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45396076963) stays frozen. Its six paired issues test mutation-interface reliability, not an established gain. Analyze successful and failed patches and actual tool behavior, rather than automatically dropping this idea or opening a replacement architecture.
+
+### Minimum low-score report
+
+- Observed score/status, source and denominator; paired rescues/regressions and partial gains.
+- FACT / INFERENCE / UNKNOWN.
+- H1 and H2, supporting/contradictory evidence and predictions if true/false.
+- Missing evidence and cheapest controlled discriminating test.
+- Runtime, GPU and submission cost.
+- Decision and reopening/falsification condition.
+
+The objective remains independently verified repair correctness and official Public Score >= 0.25, not PR or audit count. After identifying an actionable mechanism, implement and evaluate it under the owner's constraints; do not substitute indefinite analysis for competitive progress.
