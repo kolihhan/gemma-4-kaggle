@@ -1,0 +1,75 @@
+name: Gemma rank2 paired practice evidence and current receipt
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-rank2-paired-evidence-20261124.yml]
+permissions: {contents: read}
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Verify actual receipt and compare matched public practice outcomes
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import json
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions, COMPETITION
+          for r in authenticated_submissions():
+              if str(r.get("ref")) in {"58808118","58183466"}:
+                  print("RESEARCH_LEDGER="+json.dumps({k:r.get(k) for k in ("ref","date","status","publicScore")}),flush=True)
+          a=KaggleApi();a.authenticate()
+          q=a.competition_get_submission_limits(COMPETITION)
+          print("RESEARCH_SLOT="+json.dumps({"allowed":q.num_allowed_now,"limited_by_total":q.limited_by_total}),flush=True)
+          PY
+          mkdir -p /tmp/rank2-paired
+          kaggle datasets download -d muhammedidris28/gemma4-agent-runs -p /tmp/rank2-paired --unzip >/dev/null
+          python - <<'PY'
+          import json,statistics,math,collections,hashlib
+          from pathlib import Path
+          p=Path("/tmp/rank2-paired")
+          rows=[json.loads(l) for l in (p/"runs.jsonl").read_text().splitlines() if l.strip()]
+          groups=collections.defaultdict(list)
+          for r in rows:groups[(r["agent"],r["set"])].append(r)
+          def matched(a,b,s):
+              ra,rb=groups[a,s],groups[b,s]
+              ia={r["task"]:r for r in ra};ib={r["task"]:r for r in rb}
+              if len(ia)!=len(ra) or len(ib)!=len(rb) or set(ia)!=set(ib) or not ia:
+                  return dict(a=a,b=b,set=s,status="not_exactly_matched",n_a=len(ra),n_b=len(rb),overlap=len(set(ia)&set(ib)))
+              c=collections.Counter()
+              empty=collections.Counter()
+              for k in ia:
+                  x,y=ia[k],ib[k]
+                  label="both" if x["resolved"] and y["resolved"] else "regression" if x["resolved"] else "rescue" if y["resolved"] else "neither"
+                  c[label]+=1
+                  if y.get("empty_patch") is True:empty[label]+=1
+              n=c["rescue"]+c["regression"]
+              pv=min(1.,2*sum(math.comb(n,k) for k in range(min(c["rescue"],c["regression"])+1))/2**n) if n else 1.
+              def metric(ix,k):
+                  vals=[r[k] for r in ix.values() if isinstance(r.get(k),(int,float)) and not isinstance(r[k],bool)]
+                  return round(statistics.mean(vals),2) if vals else None
+              return dict(a=a,b=b,set=s,n=len(ia),outcomes=dict(c),candidate_empty_by_outcome=dict(empty),a_resolved=c["both"]+c["regression"],b_resolved=c["both"]+c["rescue"],a_empty=sum(r.get("empty_patch") is True for r in ia.values()),b_empty=sum(r.get("empty_patch") is True for r in ib.values()),a_mean_sec=metric(ia,"seconds"),b_mean_sec=metric(ib,"seconds"),a_mean_calls=metric(ia,"tool_calls"),b_mean_calls=metric(ib,"tool_calls"),exact_mcnemar_two_sided=pv,status="matched_author_reported_practice")
+          # These comparisons have the exact same task IDs or are explicitly rejected.
+          for a,b,s in [("v24","v27","heldout66"),("v24","v29","heldout66"),("v24","v30","heldout66"),("v24","v31","heldout66"),("v24","v32","heldout66"),("v24","v35","heldout66"),("v24","v37","heldout66"),("v30","v31","heldout66"),("v30","v35","heldout66"),("v20_base","v20","dev+dev2")]:
+              print("RANK2_MATCHED="+json.dumps(matched(a,b,s),sort_keys=True),flush=True)
+          # Establish if any matched practice cohort actually tests sampling alone.
+          for s in sorted({k[1] for k in groups if k[0] in {"v19","v24"}}):
+              print("SAMPLING_SOURCE_OVERLAP="+json.dumps(matched("v19","v24",s),sort_keys=True),flush=True)
+          for a,b in [("v19","v24"),("v24","v25"),("v25","v27"),("v24","v31")]:
+              x=p/"agents"/a;y=p/"agents"/b
+              xx={str(f.relative_to(x)):hashlib.sha256(f.read_bytes()).hexdigest() for f in x.rglob("*") if f.is_file()}
+              yy={str(f.relative_to(y)):hashlib.sha256(f.read_bytes()).hexdigest() for f in y.rglob("*") if f.is_file()}
+              print("CONFIG_DIFF="+json.dumps({"a":a,"b":b,"changed":[k for k in sorted(set(xx)|set(yy)) if xx.get(k)!=yy.get(k)]}),flush=True)
+          PY
+      - name: Remove downloaded public research data
+        if: always()
+        run: rm -rf /tmp/rank2-paired
