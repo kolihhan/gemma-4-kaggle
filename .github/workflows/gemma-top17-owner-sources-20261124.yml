@@ -1,0 +1,47 @@
+name: Gemma top 17 owner public notebooks and second-place practice artifacts
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-top17-owner-sources-20261124.yml]
+permissions: {contents: read}
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Find public competition code by actual top ranked owners and documented dataset
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import concurrent.futures,subprocess,csv,io,json
+          owners=["weiyun22021","yoruet","yunmeng6","muhammedidris28","chenshengabc","guowenhua","chizhu2018","pluris","alberthmoreira","tammamalasha","xpinara","takumuhata","petrozendran","serhiimosiiash","lspecian","rathko","sophia0817","ztuser","bgunshui","lionalmedong","trnhip","vinhdang2006","bigbellyjam","chloeeuler"]
+          def query(owner):
+              p=subprocess.run(["kaggle","kernels","list","--user",owner,"--competition","gemma-4-developer-agent","--page-size","50","-v"],capture_output=True,text=True,timeout=65)
+              if p.returncode:return {"owner":owner,"status":"ERROR","exit":p.returncode}
+              rows=list(csv.DictReader(io.StringIO(p.stdout)))
+              return {"owner":owner,"status":"OK","count":len(rows),"notebooks":[{"ref":r.get("ref"),"title":r.get("title")} for r in rows if r.get("ref")]}
+          with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
+              for r in pool.map(query,owners):print("TOP_OWNER_PUBLIC="+json.dumps(r,ensure_ascii=True),flush=True)
+          PY
+          mkdir -p /tmp/idr
+          kaggle datasets download -d muhammedidris28/gemma4-agent-runs -p /tmp/idr --unzip
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          p=Path("/tmp/idr")
+          print("IDRIS_PUBLIC_ARTIFACTS="+json.dumps([{"file":str(f.relative_to(p)),"bytes":f.stat().st_size} for f in sorted(p.rglob("*")) if f.is_file()],ensure_ascii=True),flush=True)
+          for f in sorted(p.rglob("*")):
+              if f.is_file() and f.stat().st_size<=100000 and (f.name.lower().startswith("readme") or f.name.lower() in ("agent.yaml","eval_config.yaml","sampling.yaml")):
+                  print("IDRIS_CONFIG="+json.dumps({"file":str(f.relative_to(p)),"text":f.read_text(errors="replace")[:5000]},ensure_ascii=True),flush=True)
+          PY
+      - name: Remove local research downloads
+        if: always()
+        run: rm -rf /tmp/idr
