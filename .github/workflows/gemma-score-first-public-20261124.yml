@@ -1,0 +1,46 @@
+name: Gemma score-first current public solution discovery and submission slot
+on:
+  push:
+    branches: [research/score-first-public-20261124]
+    paths: [.github/workflows/gemma-score-first-public-20261124.yml]
+permissions: {contents: read}
+jobs:
+  current:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Fetch actual current Kaggle score-sorted public notebook catalog and legal submit slots
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          pip install -q kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import json
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions
+          api=KaggleApi();api.authenticate()
+          comp="gemma-4-developer-agent"
+          q=api.competition_get_submission_limits(comp)
+          rows=authenticated_submissions()
+          active=[r.get("ref") for r in rows if str(r.get("status")).upper().split(".")[-1] in {"PENDING","RUNNING","QUEUED","SCORING","EVALUATING"}]
+          print("OFFICIAL_SLOT="+json.dumps({"allowed_now":q.num_allowed_now,"limited_by_total":q.limited_by_total,"active":active}),flush=True)
+          for r in rows:
+              print("RECEIPT="+json.dumps({k:r.get(k) for k in ("ref","status","publicScore","description")},sort_keys=True),flush=True)
+          PY
+          kaggle kernels list --competition gemma-4-developer-agent --sort-by scoreDescending --page-size 30 -v > /tmp/gemma-score-sorted.csv
+          python - <<'PY'
+          import csv,json
+          from pathlib import Path
+          rows=list(csv.DictReader(Path("/tmp/gemma-score-sorted.csv").open()))
+          print("PUBLIC_NOTEBOOK_COUNT="+str(len(rows)))
+          for i,r in enumerate(rows,1):
+              print("SCORE_SORTED_NOTEBOOK="+json.dumps({"rank_in_listing":i,**{k:v for k,v in r.items() if k.lower() in {"ref","title","lastRunTime".lower(),"totalVotes".lower(),"score","language","kernelType".lower()}}},sort_keys=True))
+          PY
+          rm -f /tmp/gemma-score-sorted.csv
