@@ -1,0 +1,116 @@
+name: Gemma score-first research timing frontier and actual final patch localization
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-timing-semantic-frontier-20261126.yml]
+permissions: {contents: read}
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Actual current Kaggle official receipt and leaderboard
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import json
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions,COMPETITION
+          rows=authenticated_submissions()
+          for r in rows[:5]:
+              print("FRESH_RECEIPT="+json.dumps({k:r.get(k) for k in ("ref","date","status","publicScore","description")}),flush=True)
+          api=KaggleApi();api.authenticate()
+          q=api.competition_get_submission_limits(COMPETITION)
+          print("FRESH_SLOT="+json.dumps({"allowed":q.num_allowed_now,"limited_by_total":q.limited_by_total}),flush=True)
+          PY
+          mkdir -p /tmp/gemma-frontier/lb
+          kaggle competitions leaderboard gemma-4-developer-agent --download -p /tmp/gemma-frontier/lb >/dev/null
+          python - <<'PY'
+          import csv,json,zipfile,io
+          from pathlib import Path
+          rows=[]
+          for p in Path("/tmp/gemma-frontier/lb").iterdir():
+              if p.suffix==".zip":
+                  with zipfile.ZipFile(p) as z:
+                      for n in z.namelist():
+                          if n.endswith(".csv"):rows.extend(csv.DictReader(io.StringIO(z.read(n).decode("utf-8-sig"))))
+              elif p.suffix==".csv":rows.extend(csv.DictReader(io.StringIO(p.read_text(encoding="utf-8-sig"))))
+          assert rows
+          print("FRESH_LEADERBOARD="+json.dumps({"teams":len(rows),"top":rows[:3],"own":[{"rank":i+1,**r} for i,r in enumerate(rows) if "kolihhan" in json.dumps(r).lower() or "ko lih han" in json.dumps(r).lower()]}),flush=True)
+          PY
+      - name: Rank2 same-task actual completion time frontier
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gemma-frontier/public
+          kaggle datasets download -d muhammedidris28/gemma4-agent-runs -p /tmp/gemma-frontier/public --unzip >/dev/null
+          python - <<'PY'
+          import json,collections,statistics
+          from pathlib import Path
+          rows=[json.loads(l) for l in Path("/tmp/gemma-frontier/public/runs.jsonl").read_text().splitlines() if l.strip()]
+          groups=collections.defaultdict(list)
+          for r in rows:groups[r["agent"],r["set"]].append(r)
+          base={r["task"]:r for r in groups["v24","heldout66"]}
+          assert len(base)==66
+          for version in ("v24","v27","v29","v30","v31","v32","v35","v37"):
+              cur={r["task"]:r for r in groups[version,"heldout66"]}
+              assert set(cur)==set(base)
+              # Observed completed successful tasks within horizon, NOT a
+              # counterfactual early-stop score: changing policy changes runs.
+              horizon={}
+              for cap in (240,300,330,360,420,480,600):
+                  b={k for k,r in base.items() if r["resolved"] and r["seconds"]<=cap}
+                  c={k for k,r in cur.items() if r["resolved"] and r["seconds"]<=cap}
+                  horizon[str(cap)]={"v24":len(b),"candidate":len(c),"rescues":len(c-b),"regressions":len(b-c)}
+              print("TIMING_FRONTIER="+json.dumps({"agent":version,"matched":66,"resolved":sum(r["resolved"] for r in cur.values()),"duration_mean":round(statistics.mean(r["seconds"] for r in cur.values()),2),"duration_median":round(statistics.median(r["seconds"] for r in cur.values()),2),"observed_success_by_seconds":horizon},sort_keys=True),flush=True)
+          PY
+      - name: Inspect actual retained final patches from completed single-channel experiment
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gemma-frontier/private
+          ref=kolihhan/gemma4-single-edit-channel-paired-20261124-v1
+          st="$(kaggle kernels status "$ref" 2>&1)"
+          [[ "$st" == *KernelWorkerStatus.COMPLETE* ]]
+          kaggle kernels output "$ref" -p /tmp/gemma-frontier/private -o >/dev/null
+          python - <<'PY'
+          import json,collections
+          from pathlib import Path
+          from scripts.audit_gemma31b_semantic_gap_private_20261120 import diff_evidence,source,load_gold,overlap_hunks
+          root=Path("/tmp/gemma-frontier/private")
+          d=json.loads((root/"paired_single_edit_channel31b_4min_results.json").read_text())
+          rows=d["results"];ids={r["instance_id"] for r in rows}
+          assert d["status"]=="completed" and len(rows)==12 and len(ids)==6
+          gold=load_gold(Path("tasks.jsonl"),ids)
+          stats=collections.defaultdict(collections.Counter)
+          for r in rows:
+              a=r["arm"];t=r["instance_id"];out=stats[a];out["evaluations"]+=1
+              out["resolved"]+=bool(r["resolved"])
+              out["recorded_patch"]+=bool(r["has_patch"])
+              found=[p for p in root.rglob(t+".patch") if p.parent.name==a and "private-final-patches" in p.parts]
+              assert len(found)<=1
+              if not found:
+                  out["artifact_missing"]+=1
+                  continue
+              out["artifact_recovered"]+=1
+              g=diff_evidence(gold[t]["patch"]);m=diff_evidence(found[0].read_text(errors="replace"))
+              gs,ms=source(g),source(m)
+              if gs and ms:
+                  if gs&ms:
+                      out["source_path_overlap"]+=1
+                      out["near_reference_hunk"]+=overlap_hunks(g,m)>0
+                  else:out["no_source_path_overlap"]+=1
+              else:out["source_scope_unknown"]+=1
+          print("OWN_FINAL_PATCH_SCOPE="+json.dumps({"arms":stats,"gold_noop_certified":False,"scope_overlap_not_causal_proof":True,"raw_content_exported":False},sort_keys=True),flush=True)
+          PY
+      - name: Cleanup
+        if: always()
+        run: rm -rf /tmp/gemma-frontier
