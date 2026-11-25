@@ -1,0 +1,54 @@
+name: Rank2 research separate patch emission from semantic repair and efficiency
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-rank2-semantic-rescue-20261125.yml]
+permissions: {contents: read}
+jobs:
+  analysis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Analyze real public matched runs, no model execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/gemma-semantic
+          kaggle datasets download -d muhammedidris28/gemma4-agent-runs -p /tmp/gemma-semantic --unzip >/dev/null
+          python - <<'PY'
+          import collections,json,statistics
+          from pathlib import Path
+          root=Path("/tmp/gemma-semantic")
+          rows=[json.loads(l) for l in (root/"runs.jsonl").read_text().splitlines() if l.strip()]
+          groups=collections.defaultdict(list)
+          for r in rows:groups[r["agent"],r["set"]].append(r)
+          def state(r):
+              if r["resolved"]:return "resolved"
+              return "empty" if r.get("empty_patch") is True else "nonempty_failed"
+          for a,b,s in [("v24","v27","heldout66"),("v24","v30","heldout66"),("v24","v31","heldout66"),("v30","v31","heldout66"),("v20_base","v20","dev+dev2")]:
+              x={r["task"]:r for r in groups[a,s]};y={r["task"]:r for r in groups[b,s]}
+              assert len(x)==len(groups[a,s]) and len(y)==len(groups[b,s]) and set(x)==set(y) and x
+              c=collections.Counter((state(x[k]),state(y[k])) for k in x)
+              metrics={}
+              for label,i in [(a,x),(b,y)]:
+                  resolved=[r for r in i.values() if r["resolved"]]
+                  emitted=[r for r in i.values() if not r.get("empty_patch")]
+                  metrics[label]={"n":len(i),"resolved":len(resolved),"emitted":len(emitted),"conditional_resolve_rate":round(len(resolved)/len(emitted),4),"seconds_per_resolve":round(sum(r["seconds"] for r in i.values())/len(resolved),2),"median_resolved_seconds":round(statistics.median(r["seconds"] for r in resolved),2)}
+              print("SEMANTIC_TRANSITION="+json.dumps({"a":a,"b":b,"set":s,"states":{i+"->"+j:v for (i,j),v in sorted(c.items())},"metrics":metrics},sort_keys=True),flush=True)
+          # A matched budget comparison with exact same prompt/model/tool bundle,
+          # but multiple config values differ, so no individual parameter claim.
+          for a in ["v19","v24","v25","v30","v31"]:
+              p=root/"agents"/a
+              for f in [p/"eval_config.yaml",p/"configs/sampling.yaml"]:
+                  print("PUBLIC_CONFIG="+json.dumps({"agent":a,"file":str(f.relative_to(p)),"contents":f.read_text()}),flush=True)
+          PY
+      - name: Cleanup
+        if: always()
+        run: rm -rf /tmp/gemma-semantic
