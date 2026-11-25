@@ -1,0 +1,83 @@
+name: Submit verified sampling notebook once, owner authorized
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-submit-verified-sampling-20261125.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-20261125-sampling-regime-official-once
+  cancel-in-progress: false
+jobs:
+  submit:
+    if: ${{ github.event.head_commit.message == 'GO_VERIFIED_SAMPLING_SUBMIT_ONCE_20261125' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Verify registered notebook and submit exact existing version
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import hashlib,json,subprocess,tempfile,time,re
+          from pathlib import Path
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions,COMPETITION
+          from datetime import datetime,timezone
+          kernel="kolihhan/gemma4-sampling60-5min-20261125"
+          pinned=kernel+"/1"
+          marker="gemma31-sampling1-topk64-5min60-20261125"
+          digest="6183b58d06209f5a2a0b399b57cfcaa766129ad3615d633ba2e2c9bc2b7fd50a"
+          api=KaggleApi();api.authenticate()
+          def receipt():
+              rows=authenticated_submissions()
+              matches=[r for r in rows if r.get("description")==marker]
+              if len(matches)>1:raise RuntimeError("duplicate marker")
+              return {k:matches[0].get(k) for k in ("ref","date","status","publicScore","description")} if matches else None
+          def gate():
+              if (r:=receipt()):
+                  print("EXISTING_RECEIPT="+json.dumps(r),flush=True)
+                  return False
+              q=api.competition_get_submission_limits(COMPETITION)
+              active=[{k:r.get(k) for k in ("ref","status","date")} for r in authenticated_submissions() if str(r.get("status","")).split(".")[-1].upper() in {"PENDING","RUNNING","SCORING","EVALUATING","QUEUED"}]
+              print("KAGGLE_SLOT="+json.dumps({"allowed":q.num_allowed_now,"limited_by_total":q.limited_by_total,"active":active}),flush=True)
+              if q.num_allowed_now<1 or q.limited_by_total:raise RuntimeError("no legal submission slot")
+              for r in active:
+                  dt=datetime.fromisoformat(r["date"].replace("Z","+00:00"))
+                  if dt.tzinfo is None:dt=dt.replace(tzinfo=timezone.utc)
+                  if str(r["ref"])!="58808118" or str(r["status"]).split(".")[-1]!="PENDING" or (datetime.now(timezone.utc)-dt).total_seconds()<86400:raise RuntimeError("unexpected active submission")
+              return True
+          if not gate():raise SystemExit(0)
+          st=subprocess.run(["kaggle","kernels","status",pinned],capture_output=True,text=True,timeout=40,check=True)
+          assert "KernelWorkerStatus.COMPLETE" in st.stdout+st.stderr
+          with tempfile.TemporaryDirectory() as td:
+              subprocess.run(["kaggle","kernels","output",pinned,"-p",td,"-o"],stdout=subprocess.DEVNULL,check=True,timeout=120)
+              assert hashlib.sha256((Path(td)/"submission.zip").read_bytes()).hexdigest()==digest
+          print("REMOTE_PACKAGE_VERIFIED="+digest,flush=True)
+          if not gate():raise SystemExit(0)
+          print("ONE_OFFICIAL_SUBMIT="+pinned,flush=True)
+          try:
+              response=api.competition_submit_code(file_name="submission.zip",message=marker,competition=COMPETITION,kernel=kernel,kernel_version=1,quiet=True)
+              print("KAGGLE_RESPONSE_TYPE="+type(response).__name__,flush=True)
+          except Exception as e:
+              response=getattr(e,"response",None)
+              status=getattr(response,"status_code",None)
+              if status is None:status=getattr(e,"status",None)
+              body=str(getattr(response,"text","") or getattr(e,"body","") or str(e))
+              # Return only fixed safe diagnostic categories, never headers or raw credentials.
+              tags={k:bool(re.search(v,body,re.I)) for k,v in {"pending_submission":r"pending|currently scoring|in.progress|running submission|already.*submission","quota":r"quota|submission limit|maximum.*submission|too many","permission":r"permission|forbidden|unauthorized","not_found":r"not found","invalid_version":r"version.*invalid|invalid.*version","rule_acceptance":r"accept.*rules|join.*competition","kernel_error":r"notebook|kernel","duplicate":r"duplicate|already submitted","server_error":r"internal server error|unavailable|gateway","bad_request":r"bad request|invalid argument"}.items()}
+              print("KAGGLE_SUBMIT_ERROR="+json.dumps({"type":type(e).__name__,"http_status":status,"categories":tags},default=str),flush=True)
+          for _ in range(6):
+              if (r:=receipt()):
+                  print("AUTHENTICATED_SUBMISSION_RECEIPT="+json.dumps(r),flush=True)
+                  raise SystemExit(0)
+              time.sleep(10)
+          print("KAGGLE_NO_RECEIPT_CONFIRMED",flush=True)
+          raise RuntimeError("submission unconfirmed; no automatic retry")
+          PY
