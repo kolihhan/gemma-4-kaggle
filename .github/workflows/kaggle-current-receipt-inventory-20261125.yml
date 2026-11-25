@@ -45,3 +45,5 @@ jobs:
           if p.returncode==0:
               print("LIVE_KAGGLE_QUOTA="+json.dumps([r for r in json.loads(p.stdout) if r.get("resource")=="GPU"]),flush=True)
           PY
+
+# Fresh authenticated Kaggle ledger check after owner report.
