@@ -25,12 +25,13 @@ jobs:
           from scripts.submit_v2_toolcap60_official_once import authenticated_submissions,COMPETITION
           from kaggle.api.kaggle_api_extended import KaggleApi
           rows=authenticated_submissions()
+          print("LIVE_KAGGLE_SAMPLING_MATCH="+json.dumps([{k:r.get(k) for k in ("ref","date","status","publicScore","description")} for r in rows if r.get("description")=="gemma31-sampling1-topk64-5min60-20261125"]),flush=True)
           for r in rows[:8]:
               print("LIVE_KAGGLE_RECEIPT="+json.dumps({k:r.get(k) for k in ("ref","date","status","publicScore","description")}),flush=True)
           api=KaggleApi();api.authenticate()
           q=api.competition_get_submission_limits(COMPETITION)
           print("LIVE_KAGGLE_SLOT="+json.dumps({"allowed":q.num_allowed_now,"limited_by_total":q.limited_by_total}),flush=True)
-          for ref in ["kolihhan/gemma4-sampling-regime-paired-20261124-v1","kolihhan/gemma4-sampling-regime-paired-20261124-v2"]:
+          for ref in ["kolihhan/gemma4-sampling60-5min-20261125/1","kolihhan/gemma4-sampling-regime-paired-20261124-v1","kolihhan/gemma4-sampling-regime-paired-20261124-v2"]:
               p=subprocess.run(["kaggle","kernels","status",ref],capture_output=True,text=True,timeout=40)
               raw=p.stdout+p.stderr
               print("LIVE_KAGGLE_KERNEL="+json.dumps({"ref":ref,"status":re.findall(r"KernelWorkerStatus\.[A-Z_]+",raw),"exit":p.returncode,"not_found":bool(re.search(r"not found|404",raw,re.I))}),flush=True)
