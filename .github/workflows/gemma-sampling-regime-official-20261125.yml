@@ -1,0 +1,39 @@
+name: Gemma sampling regime owner-authorized single official submission
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-sampling-regime-official-20261125.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-20261125-sampling-regime-official-once
+  cancel-in-progress: false
+jobs:
+  submit:
+    if: ${{ github.event.head_commit.message == 'GO_GEMMA_SAMPLING_ONE_OFFICIAL_SUBMISSION_20261125' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install pinned validator and notebook builder
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN"
+          python -m py_compile scripts/submit_sampling_regime_official_once_20261125.py
+          pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0 nbformat==5.10.4 pyyaml
+          mkdir -p /tmp/gemma-sampling-wheelhouse
+          for wheel in adk_submission-0.2.13-py3-none-any.whl google_adk-1.36.1-py3-none-any.whl adk_eval_core-0.1.0-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse \
+              -f "$wheel" -p /tmp/gemma-sampling-wheelhouse --unzip >/dev/null
+          done
+          pip install -q --disable-pip-version-check /tmp/gemma-sampling-wheelhouse/*.whl
+      - name: Build compile verify exact remote bytes and make at most one official submission
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.submit_sampling_regime_official_once_20261125
