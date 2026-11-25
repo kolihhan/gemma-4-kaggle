@@ -1,0 +1,46 @@
+name: Kaggle current receipt and registered sampling kernels inventory
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/kaggle-current-receipt-inventory-20261125.yml]
+permissions: {contents: read}
+jobs:
+  query:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Query authenticated Kaggle API only
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import subprocess,json,csv,io,re
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions,COMPETITION
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          rows=authenticated_submissions()
+          for r in rows[:8]:
+              print("LIVE_KAGGLE_RECEIPT="+json.dumps({k:r.get(k) for k in ("ref","date","status","publicScore","description")}),flush=True)
+          api=KaggleApi();api.authenticate()
+          q=api.competition_get_submission_limits(COMPETITION)
+          print("LIVE_KAGGLE_SLOT="+json.dumps({"allowed":q.num_allowed_now,"limited_by_total":q.limited_by_total}),flush=True)
+          for ref in ["kolihhan/gemma4-sampling-regime-paired-20261124-v1","kolihhan/gemma4-sampling-regime-paired-20261124-v2"]:
+              p=subprocess.run(["kaggle","kernels","status",ref],capture_output=True,text=True,timeout=40)
+              raw=p.stdout+p.stderr
+              print("LIVE_KAGGLE_KERNEL="+json.dumps({"ref":ref,"status":re.findall(r"KernelWorkerStatus\.[A-Z_]+",raw),"exit":p.returncode,"not_found":bool(re.search(r"not found|404",raw,re.I))}),flush=True)
+          for page in range(1,5):
+              p=subprocess.run(["kaggle","kernels","list","--mine","--page-size","100","--page",str(page),"-v"],capture_output=True,text=True,timeout=50)
+              rows=list(csv.DictReader(io.StringIO(p.stdout)))
+              hits=[{k:r.get(k) for k in ("ref","title","lastRunTime")} for r in rows if any(x in str(r).lower() for x in ("sampling","20261124-v2"))]
+              print("LIVE_KAGGLE_INVENTORY="+json.dumps({"page":page,"rows":len(rows),"exit":p.returncode,"hits":hits}),flush=True)
+              if p.returncode or len(rows)<100:break
+          p=subprocess.run(["kaggle","quota","--format","json"],capture_output=True,text=True,timeout=40)
+          if p.returncode==0:
+              print("LIVE_KAGGLE_QUOTA="+json.dumps([r for r in json.loads(p.stdout) if r.get("resource")=="GPU"]),flush=True)
+          PY
