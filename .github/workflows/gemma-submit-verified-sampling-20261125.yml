@@ -48,10 +48,7 @@ jobs:
               active=[{k:r.get(k) for k in ("ref","status","date")} for r in authenticated_submissions() if str(r.get("status","")).split(".")[-1].upper() in {"PENDING","RUNNING","SCORING","EVALUATING","QUEUED"}]
               print("KAGGLE_SLOT="+json.dumps({"allowed":q.num_allowed_now,"limited_by_total":q.limited_by_total,"active":active}),flush=True)
               if q.num_allowed_now<1 or q.limited_by_total:raise RuntimeError("no legal submission slot")
-              for r in active:
-                  dt=datetime.fromisoformat(r["date"].replace("Z","+00:00"))
-                  if dt.tzinfo is None:dt=dt.replace(tzinfo=timezone.utc)
-                  if str(r["ref"])!="58808118" or str(r["status"]).split(".")[-1]!="PENDING" or (datetime.now(timezone.utc)-dt).total_seconds()<86400:raise RuntimeError("unexpected active submission")
+              if active:raise RuntimeError("active official submission; no submit")
               return True
           if not gate():raise SystemExit(0)
           st=subprocess.run(["kaggle","kernels","status",pinned],capture_output=True,text=True,timeout=40,check=True)
@@ -81,3 +78,5 @@ jobs:
           print("KAGGLE_NO_RECEIPT_CONFIRMED",flush=True)
           raise RuntimeError("submission unconfirmed; no automatic retry")
           PY
+
+# Owner authorized after FastPath 58808118 completed with 0.15.
