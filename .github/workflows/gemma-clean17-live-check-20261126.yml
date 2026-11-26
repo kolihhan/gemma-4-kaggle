@@ -1,0 +1,57 @@
+name: Gemma clean17 direct Kaggle status and score read-only 20261126
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-clean17-live-check-20261126.yml]
+permissions: {contents: read}
+jobs:
+  read_only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Check exact private Kaggle scorer, never push or submit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import subprocess,json
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions
+          k='kolihhan/gemma4-multisurface-clean17-paired-20261126-v1'
+          r=subprocess.run(['kaggle','kernels','status',k],capture_output=True,text=True,timeout=65)
+          raw=((r.stdout or '')+' '+(r.stderr or '')).strip()
+          print('KAGGLE_PRIVATE_KERNEL_DIRECT_STATUS='+json.dumps({'kernel':k,'exit':r.returncode,'status':raw[-700:]}),flush=True)
+          if r.returncode:
+              raise RuntimeError('Kaggle kernel status could not be verified')
+          rows=authenticated_submissions()
+          own=[{q:x.get(q) for q in ('ref','status','date','publicScore','description')}
+                 for x in rows[:5]]
+          print('KAGGLE_RECENT_OFFICIAL_RECEIPTS='+json.dumps(own,default=str),flush=True)
+          PY
+          raw="$(kaggle kernels status kolihhan/gemma4-multisurface-clean17-paired-20261126-v1)"
+          if [[ "$raw" == *KernelWorkerStatus.COMPLETE* ]]; then
+            mkdir -p /tmp/gemma-clean17-live-output
+            kaggle kernels output kolihhan/gemma4-multisurface-clean17-paired-20261126-v1 -p /tmp/gemma-clean17-live-output -o >/dev/null
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.render_multisurface_clean17_20261126 import assess,RESULT
+          path=Path('/tmp/gemma-clean17-live-output')/RESULT
+          if path.is_file():
+              print('KAGGLE_34_EVALUATIONS_DIRECT_RESULT='+json.dumps(assess(json.loads(path.read_text())),sort_keys=True),flush=True)
+          else:
+              print('KAGGLE_34_EVALUATIONS_DIRECT_RESULT=FILE_NOT_PRESENT',flush=True)
+          PY
+          else
+            echo 'KAGGLE_34_EVALUATIONS_DIRECT_RESULT=NOT_COMPLETE'
+          fi
+      - name: Cleanup
+        if: always()
+        run: rm -rf /tmp/gemma-clean17-live-output
