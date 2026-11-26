@@ -1,0 +1,95 @@
+name: Gemma 17 clean matched 31B scorer CPU preflight
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-multisurface-render-smoke-20261126.yml]
+permissions: {contents: read}
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Unit test one-variable agent builder and score gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p test_build_multisurface_scope_20261126.py -v
+          python -m unittest discover -s tests -p test_render_multisurface_clean17_20261126.py -v
+          python -m py_compile scripts/render_multisurface_clean17_20261126.py
+      - name: Reconstruct exact immutable 17-member list from public archive and prior IDs
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          for key in behavior grammar single; do
+            case "$key" in
+              behavior) ref=kolihhan/gemma4-behavioral-paired-20261123-v1 ;;
+              grammar) ref=kolihhan/gemma4-edit-grammar-paired-20261124-v1 ;;
+              single) ref=kolihhan/gemma4-single-edit-channel-paired-20261124-v1 ;;
+            esac
+            st="$(kaggle kernels status "$ref" 2>&1)"
+            [[ "$st" == *KernelWorkerStatus.COMPLETE* ]]
+            mkdir -p "/tmp/gemma17-used/$key"
+            kaggle kernels output "$ref" -p "/tmp/gemma17-used/$key" -o >/dev/null
+          done
+          mkdir -p /tmp/gemma17-public /tmp/gemma17-original
+          python - <<'PY'
+          import urllib.request
+          from pathlib import Path
+          sha="f3b6d3ac4c532a2bf3745872fe171747d0bf3e31"
+          url="https://raw.githubusercontent.com/TechNaom/gemma4-agentic-swe/"+sha+"/experiments/audit-2026-10-15/"
+          for file in ('gold_runs.jsonl','empty_runs.jsonl'):
+            with urllib.request.urlopen(url+file,timeout=45) as response:
+              content=response.read(120000)
+            assert content.count(b'\n')>=120
+            (Path('/tmp/gemma17-public')/file).write_bytes(content)
+          PY
+          python -m scripts.render_fresh17_gold_noop_cpu_20261126 \
+            --previous /tmp/gemma17-used \
+            --gold /tmp/gemma17-public/gold_runs.jsonl \
+            --noop /tmp/gemma17-public/empty_runs.jsonl \
+            --out /tmp/gemma17-frozen-source
+          python - <<'PY'
+          import ast,re,json,hashlib
+          from pathlib import Path
+          content=Path('/tmp/gemma17-frozen-source/main.py').read_text()
+          m=re.findall(r'^SELECTED_IDS = (\[.*\])$',content,flags=re.M)
+          assert len(m)==1
+          ids=ast.literal_eval(m[0])
+          assert len(ids)==len(set(ids))==17
+          sha=hashlib.sha256('|'.join(sorted(ids)).encode()).hexdigest()
+          assert sha=='231db5d504930562c4dc78f696a56009635f02bfcf4a79023531d2a3a7eb8bd2'
+          Path('/tmp/gemma17-frozen-ids.json').write_text(json.dumps(ids))
+          print('FRESH17_MEMBERSHIP_LOCKED_SHA='+sha,flush=True)
+          PY
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 \
+            -p /tmp/gemma17-original -o >/dev/null
+          python -m scripts.render_multisurface_clean17_20261126 \
+            --source /tmp/gemma17-original/submission.zip \
+            --ids-json /tmp/gemma17-frozen-ids.json --out /tmp/gemma17-paired-render
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          folder=Path('/tmp/gemma17-paired-render')
+          meta=json.loads((folder/'kernel-metadata.json').read_text())
+          assert meta['is_private'] and meta['enable_gpu'] and not meta['enable_internet']
+          assert meta['model_sources']==['google/gemma-4/Other/gemma-4-31b-it-qat-w4a16-ct/2']
+          assert meta['id']=='kolihhan/gemma4-multisurface-clean17-paired-20261126-v1'
+          code=(folder/'multisurface31b_clean17_runtime.py').read_text()
+          assert code.count("FROZEN17_PRIVATE_SCORER_IDS_SHA256")==1
+          assert 'if len(records) != 34:' in code
+          assert 'if len(scored) != 17:' in code
+          assert 'treatment_evaluator = Evaluator(treatment_config)' in code
+          assert 'competition_submit_code' not in code
+          compile(code,"multisurface31b_clean17_runtime.py","exec")
+          print('REAL_31B_CLEAN17_CPU_RENDER_PREFLIGHT=PASS',flush=True)
+          PY
+      - name: Secure cleanup no private source retained
+        if: always()
+        run: rm -rf /tmp/gemma17-used /tmp/gemma17-public /tmp/gemma17-original /tmp/gemma17-frozen-source /tmp/gemma17-frozen-ids.json /tmp/gemma17-paired-render
