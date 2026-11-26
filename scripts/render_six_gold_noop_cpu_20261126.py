@@ -19,17 +19,16 @@ KERNEL = "kolihhan/gemma31-six-gold-noop-20261126-v1"
 # control execution, logging and outputs. In particular NO original
 # 'main' is invoked (it can print task IDs or test snippets).
 SAFE_RUNTIME = r"""
-from swegemma.config import EvalConfig
-from swegemma.models import load_tasks
-from swegemma.evaluate import Evaluator
-from swegemma.deduplication import resolve_task_snapshot_paths
-from swegemma.harness.verification import verify_task
-from adk_submission import ModelRegistry
-
 SELECTED_IDS = __SELECTED_IDS__
 RESULT_PATH = Path("/kaggle/working/gemma31_six_gold_noop_safe.json")
 
 async def run_six_safe():
+    from swegemma.config import EvalConfig
+    from swegemma.models import load_tasks
+    from swegemma.evaluate import Evaluator
+    from swegemma.deduplication import resolve_task_snapshot_paths
+    from swegemma.harness.verification import verify_task
+    from adk_submission import ModelRegistry
     original = {task.instance_id: task for task in load_tasks(DATA_DIR / "tasks.jsonl")
                 if task.instance_id in SELECTED_IDS}
     if set(original) != set(SELECTED_IDS):
