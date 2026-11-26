@@ -8,7 +8,7 @@ from scripts.build_multisurface_scope_20261126 import (
 
 def fake_files():
     return {
-      "agent.yaml": "root:\n  model: gemma-4-31b-it-qat-w4a16-ct\n  tools:\n  - run_command\n",
+      "agent.yaml": "root:\n  model: gemma-4-31b-it-qat-w4a16-ct\n  tools:\n  - run_command\n  - read_file\n  - edit_file\n  - submit_patch\n",
       "eval_config.yaml": "evaluation:\n  max_time_minutes: 5\n  max_tool_calls: 60\n  max_turns: 80\n  timeout_seconds: 300\n",
       "configs/sampling.yaml": "temperature: 0.2\ntop_p: 0.95\n",
       "prompts/system.md": "Solve code tasks. Use precise checks and submit_patch.\n",
@@ -35,7 +35,7 @@ class ScopeBuilderTests(unittest.TestCase):
                 files_for_pair(b"x")
 
     def test_prompt_variant_avoids_unconditional_extra_verification(self):
-        self.assertIn("only when", SCOPE_GUIDANCE)
+        self.assertIn("Only when", SCOPE_GUIDANCE)
         self.assertIn("explicitly", SCOPE_GUIDANCE)
         self.assertIn("Do not", SCOPE_GUIDANCE)
         self.assertIn("one additional", SCOPE_GUIDANCE)
