@@ -40,7 +40,7 @@ Of TechNaom's independently gold/noop-valid **68** public tasks, **28** remain u
 
 ## Current-wheelhouse experiment
 
-[Private Kaggle CPU gold/noop control run #45745386035](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45745386035) was started to test the same six actual owner tasks with the official Kaggle wheelhouse's \`verify_task\` path, feeding the original reference patch and an empty patch with **zero model inference**. It writes only anonymous validation counts to a private Kaggle CPU notebook. At the time of this document it has not returned a verified terminal aggregate; **do not claim the result**.
+[Private Kaggle CPU gold/noop control run #45745386035](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45745386035) was started to test the same six actual owner tasks with the official Kaggle wheelhouse's \`verify_task\` path, feeding the original reference patch and an empty patch with **zero model inference**. It writes only anonymous validation counts to a private Kaggle CPU notebook. It has now returned an authenticated terminal COMPLETE result: see the measured addendum below. These controls run our current installed wheelhouse, not an assertion about hidden competition scoring.
 
 ## Next decision rule
 
@@ -51,3 +51,15 @@ Of TechNaom's independently gold/noop-valid **68** public tasks, **28** remain u
 5. Only after repeating a concrete, agent-accessible causal failure across several independent clean tasks should we implement and pair one 31B mechanism against the preserved **0.18 official Champion**, with identical budgets and actual grader resolution. No more sampling/budget bundles or premature official submit.
 
 No exposed task IDs, issue text, reference patches, agent patches, paths or private traces are included in this document. No official submission or GPU was used for the above CPU analyses.
+
+
+## Verified addendum: current Kaggle controls + clean-only patch diagnosis (2026-11-26)
+
+- [Our current Kaggle wheelhouse verifier #45745386035](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45745386035): registered CPU kernel COMPLETE; 6/6 gold-noop pairs executed without unknown status; **gold PASS 2/6, no-op PASS 0/6, discriminating 2/6, non-discriminating 4/6**. Zero solver inference, GPU and contest submissions.
+- [Direct itemwise current-vs-third-party comparison #45748400156](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45748400156): **both-valid 2, neither-valid 4**, so the exact two discriminating tasks match between the independent October source and our current November wheelhouse despite two gold disagreements and two no-op disagreements.
+- [Real own model failures conditioned on those two clean tasks #45748104637](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45748104637): for **each** of FastPath and Single-Edit, 0/2 resolved, one task had no patch and the other produced a patch with **zero source-file overlap** to the reference solution; both tasks had short externally linked issue statements. **Neither task supports an observed explicit-requirement-omission or correct-source-wrong-semantics label**. The four not-valid issues had a mixture of source-overlapping wrong patches, but must not drive a solver score claim.
+- Research decision: **RETIRE these six old paired issues as a semantic-repair treatment gate**; zero passing patches on an invalid-majority cohort cannot diagnose whether semantic patching or narrower prompt changes help. They remain useful only as an illustration of evaluator confounding.
+- [Fresh pool current Kaggle CPU validity check #45748245882](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45748245882): 17 previously unused tasks (selected deterministically from 28 independently valid proxy tasks after excluding short external-link statements), frozen before reading any current-wheelhouse results. The live result must be checked, not assumed; no new agent inference or official submit was authorized by this CPU control.
+- Separately, [Kaggle Staff acknowledged a thinking-history bridge bug](https://www.kaggle.com/competitions/gemma-4-developer-agent/discussion/744354) and said the wheelhouse was patched. Historical official scores across host updates should not be treated as a controlled ablation without same-epoch evaluation; this does **not** imply the staff fix changed our 0.18 vs 0.15 outcomes.
+
+**Next research gate**: only choose genuinely discriminating, previously unseen, information-sufficient tasks under the *current* wheelhouse; distinguish incorrect source selection, missing requirements, and invalid tests before deciding on a single targeted solver change. No untested Frontier Balanced submission.
