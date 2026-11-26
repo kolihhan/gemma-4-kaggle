@@ -1,0 +1,88 @@
+name: Gemma untouched discriminating public-dev task capacity census CPU
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-untouched-valid-pool-20261126.yml]
+permissions: {contents: read}
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read used-ID manifests and completed owner Kaggle experiments only
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          for key in behavior grammar single; do
+            case "$key" in
+              behavior) ref=kolihhan/gemma4-behavioral-paired-20261123-v1 ;;
+              grammar) ref=kolihhan/gemma4-edit-grammar-paired-20261124-v1 ;;
+              single) ref=kolihhan/gemma4-single-edit-channel-paired-20261124-v1 ;;
+            esac
+            st="$(kaggle kernels status "$ref" 2>&1)"
+            [[ "$st" == *KernelWorkerStatus.COMPLETE* ]]
+            mkdir -p "/tmp/gemma-valid-pool/$key"
+            kaggle kernels output "$ref" -p "/tmp/gemma-valid-pool/$key" -o >/dev/null
+          done
+      - name: Match independent gold/noop control labels and flag short external-only specs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,collections,re,urllib.request
+          from pathlib import Path
+          root=Path('/tmp/gemma-valid-pool')
+          manifest=json.loads(Path('experiments/edit-grammar-paired-20261124/manifest.json').read_text())
+          prior=set(manifest['selection']['exclude_instance_ids'])
+          seen=set(prior)
+          for kind,file,expected in [
+            ('behavior','paired_behavioral_probe31b_4min_results.json',8),
+            ('grammar','paired_edit_grammar31b_5min_results.json',8),
+            ('single','paired_single_edit_channel31b_4min_results.json',6)]:
+              x=json.loads((root/kind/file).read_text())
+              ids=set(x['selected_public_dev_ids'])
+              assert x['status']=='completed' and len(ids)==expected and len(x['results'])==2*expected
+              assert not (seen & ids), 'previous task list overlaps'
+              seen |= ids
+          sha='f3b6d3ac4c532a2bf3745872fe171747d0bf3e31'
+          base='https://raw.githubusercontent.com/TechNaom/gemma4-agentic-swe/'+sha+'/experiments/audit-2026-10-15/'
+          def pub(file):
+              with urllib.request.urlopen(base+file,timeout=45) as response:
+                  lines=response.read(120000).decode().splitlines()
+              return {r['instance_id']:r for r in (json.loads(t) for t in lines if t.strip())}
+          gold,noop=pub('gold_runs.jsonl'),pub('empty_runs.jsonl')
+          assert len(gold)==len(noop)==129 and set(gold)==set(noop)
+          valid={i for i in gold if gold[i]['resolved'] and not noop[i]['resolved']}
+          available=valid-seen
+          dev={}
+          for line in Path('tasks.jsonl').open():
+              x=json.loads(line);tid=x['instance_id']
+              if tid in available:dev[tid]=x
+          assert len(dev)==len(available)
+          by_repo=collections.Counter('fastapi' if i.startswith('fastapi_') else 'rich' if i.startswith('rich_') else 'requests' if i.startswith('requests_') else 'other' for i in available)
+          shorturl={i for i,x in dev.items() if len(x.get('problem_statement','').strip())<160 and re.search('https?://',x.get('problem_statement',''))}
+          no_short=available-shorturl
+          print('GEMMA_VALID_UNUSED_PUBLIC_DEV_POOL='+json.dumps({
+            'public_valid_proxy_total':len(valid),
+            'prior_manifest_excluded':len(prior),
+            'newly_explicitly_used':len(seen-prior),
+            'all_used_or_excluded':len(seen),
+            'external_proxy_untouched_valid':len(available),
+            'by_repository':dict(sorted(by_repo.items())),
+            'untouched_short_external_reference_risk':len(shorturl),
+            'untouched_valid_non_short_link':len(no_short),
+            'third_party_evaluator_only':True,
+            'same_environment_qualification':False,
+            'raw_task_ids_issues_patches_exported':False,
+            'new_model_run':False,'competition_submission':False},sort_keys=True),flush=True)
+          PY
+      - name: Purge private scorer outputs
+        if: always()
+        run: rm -rf /tmp/gemma-valid-pool
