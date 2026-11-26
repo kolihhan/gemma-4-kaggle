@@ -1,0 +1,86 @@
+name: Gemma two clean issues real patch mechanism private CPU join
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-clean-two-mechanism-private-20261126.yml]
+permissions: {contents: read}
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read two already-completed private Kaggle outputs only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/gemma-clean-two/scorer /tmp/gemma-clean-two/controls
+          for record in "kolihhan/gemma4-single-edit-channel-paired-20261124-v1" "kolihhan/gemma31-six-gold-noop-20261126-v1"; do
+            st="$(kaggle kernels status "$record" 2>&1)"
+            [[ "$st" == *KernelWorkerStatus.COMPLETE* ]]
+          done
+          kaggle kernels output kolihhan/gemma4-single-edit-channel-paired-20261124-v1 -p /tmp/gemma-clean-two/scorer -o >/dev/null
+          kaggle kernels output kolihhan/gemma31-six-gold-noop-20261126-v1 -p /tmp/gemma-clean-two/controls -o >/dev/null
+      - name: Analyze clean validated issues with actual saved final patch scopes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,collections
+          from pathlib import Path
+          from scripts.audit_requirements_coverage_private_20261126 import (
+              read_selected_tasks,recover_private_patches,patch_evidence,spec_evidence
+          )
+          root=Path('/tmp/gemma-clean-two')
+          x=json.loads((root/'scorer/paired_single_edit_channel31b_4min_results.json').read_text())
+          v=json.loads((root/'controls/gemma31_six_gold_noop_safe.json').read_text())
+          ids=sorted({r['instance_id'] for r in x['results']})
+          assert len(ids)==6 and v['tasks']==6 and len(v['rows'])==6
+          assert v['discriminating']==2 and v['gold_pass']==2 and v['noop_pass']==0
+          controls={ids[r['ordinal']-1]:r for r in v['rows']}
+          clean={i for i in ids if controls[i]['gold_pass'] is True and controls[i]['noop_pass'] is False}
+          assert len(clean)==2
+          tasks=read_selected_tasks(Path('tasks.jsonl'),set(ids))
+          patches=recover_private_patches(root/'scorer',x['results'])
+          total=collections.Counter()
+          by_arm=collections.defaultdict(collections.Counter)
+          for r in x['results']:
+              tid=r['instance_id']
+              t=tasks[tid]
+              group='clean' if tid in clean else 'invalid_or_confounded'
+              arm=r['arm']
+              c=by_arm[(group,arm)]
+              c['n']+=1
+              c['resolved']+=int(r['resolved'])
+              c['scorer_patch']+=int(r['has_patch'])
+              p=patches.get((tid,arm))
+              info=patch_evidence(t['patch'],p)
+              c['patch_recovered']+=int(p is not None)
+              c['source_overlap']+=int((info['source_overlap_count'] or 0)>0)
+              c['near_hunk']+=int(info['near_reference_hunk'] is True)
+              c['wrong_source_proxy']+=int(info['scope_label']=='no_reference_source_overlap')
+              c['artifact_unknown']+=int(info['scope_label']=='patch_artifact_unavailable')
+              spec=spec_evidence(t.get('problem_statement',''))
+              c['short_external_spec']+=int(spec['short_external_reference_risk'])
+              c['has_external_link']+=int(spec['has_external_url'])
+              total[group]+=1
+          assert total['clean']==4 and total['invalid_or_confounded']==8
+          print('CLEAN_TWO_AGENT_FAILURE_REDUCTION='+json.dumps({
+              'clean_issues':2,'other_issues':4,
+              'gold_noop_current_verifier_validated':True,
+              'by_group_arm':{g+'|'+a:dict(sorted(c.items())) for (g,a),c in sorted(by_arm.items())},
+              'source_overlap_not_semantic_correctness':True,
+              'explicit_requirement_omission_unverified':True,
+              'task_ids_or_patch_text_exported':False,
+              'model_inference':False,'gpu':False,'official_submission':False
+          },sort_keys=True),flush=True)
+          PY
+      - name: Purge private Kaggle outputs
+        if: always()
+        run: rm -rf /tmp/gemma-clean-two
