@@ -1,0 +1,37 @@
+name: Gemma frozen17 real31B outcome cost and patch audit readonly 20261126
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-multisurface-outcome-audit-readonly-20261126.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-multisurface17-readonly-research-20261126
+  cancel-in-progress: false
+jobs:
+  analyze:
+    if: github.event.head_commit.message == 'GO_GEMMA_MULTISURFACE17_READONLY_RESEARCH_20261126'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      GPU_KERNEL: kolihhan/gemma4-multisurface-clean17-paired-20261126-v1
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read existing COMPLETE private Kaggle 34-task scorer; aggregate only
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0
+          python -m py_compile scripts/diagnose_multisurface_clean17_20261126.py
+          status="$(kaggle kernels status "$GPU_KERNEL" 2>&1)"
+          [[ "$status" == *KernelWorkerStatus.COMPLETE* ]]
+          mkdir -p /tmp/gemma-multisurface-private-research
+          kaggle kernels output "$GPU_KERNEL" -p /tmp/gemma-multisurface-private-research -o >/dev/null
+          test -f /tmp/gemma-multisurface-private-research/paired_multisurface31b_clean17_results.json
+          python -m scripts.diagnose_multisurface_clean17_20261126 --private-result /tmp/gemma-multisurface-private-research/paired_multisurface31b_clean17_results.json
+      - name: Remove private scorer, patches and traces
+        if: always()
+        run: rm -rf /tmp/gemma-multisurface-private-research
