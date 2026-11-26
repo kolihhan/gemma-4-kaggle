@@ -1,0 +1,159 @@
+name: FORK V1 vs Champion — private 17-pair real Gemma 31B GPU
+on:
+  push:
+    branches: [exp/fork-v1-paired-20261127]
+    paths: [.github/workflows/gemma-fork-v1-paired-20261127.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma31-fork-v1-private-20261127
+  cancel-in-progress: false
+jobs:
+  paired:
+    if: github.event.head_commit.message == 'GO_FORK_V1_PRIVATE_GPU_ONCE_20261127'
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      GPU_KERNEL: kolihhan/gemma4-fork-v1-paired-20261127
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Hard gate on exact verified 0.18 Champion, frozen 17 and actual L4 quota
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p test_fork_checkpoint_20261127.py -v
+          python -m unittest discover -s tests -p test_build_multisurface_scope_20261126.py -v
+          python -m unittest discover -s tests -p test_render_multisurface_clean17_20261126.py -v
+          python -m py_compile scripts/render_fork_v1_20261127.py scripts/render_multisurface_clean17_20261126.py
+          pip install -q kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import subprocess,json
+          info=json.loads(subprocess.run(
+            ["kaggle","quota","--format","json"],capture_output=True,
+            text=True,timeout=75,check=True).stdout)
+          q=[x for x in info if x.get('resource')=='GPU']
+          assert len(q)==1
+          free=float(str(q[0]['remaining']).rstrip('h'))
+          print("FROZEN17_GPU_QUOTA_REMAINING="+str(free),flush=True)
+          if free<5:raise RuntimeError("insufficient Kaggle GPU quota")
+          PY
+          if kaggle kernels status "$GPU_KERNEL" >/tmp/gemma-gpu-old 2>&1; then
+            echo 'EXACT_KERNEL_ALREADY_EXISTS_NO_REPEAT'
+            exit 1
+          fi
+      - name: Deterministically reconstruct the SAME 17 current-gold-noop-valid issues before inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in behavior grammar single; do
+            case "$key" in
+              behavior) ref=kolihhan/gemma4-behavioral-paired-20261123-v1 ;;
+              grammar) ref=kolihhan/gemma4-edit-grammar-paired-20261124-v1 ;;
+              single) ref=kolihhan/gemma4-single-edit-channel-paired-20261124-v1 ;;
+            esac
+            st="$(kaggle kernels status "$ref" 2>&1)"
+            [[ "$st" == *KernelWorkerStatus.COMPLETE* ]]
+            mkdir -p "/tmp/gemma-previous/$key"
+            kaggle kernels output "$ref" -p "/tmp/gemma-previous/$key" -o >/dev/null
+          done
+          mkdir -p /tmp/gemma-public /tmp/gemma-source
+          python - <<'PY'
+          import urllib.request
+          from pathlib import Path
+          b='https://raw.githubusercontent.com/TechNaom/gemma4-agentic-swe/f3b6d3ac4c532a2bf3745872fe171747d0bf3e31/experiments/audit-2026-10-15/'
+          for f in ('gold_runs.jsonl','empty_runs.jsonl'):
+            with urllib.request.urlopen(b+f,timeout=45) as r:
+              blob=r.read(120000)
+            assert blob.count(b'\n')>=120
+            (Path('/tmp/gemma-public')/f).write_bytes(blob)
+          PY
+          python -m scripts.render_fresh17_gold_noop_cpu_20261126 \
+            --previous /tmp/gemma-previous \
+            --gold /tmp/gemma-public/gold_runs.jsonl \
+            --noop /tmp/gemma-public/empty_runs.jsonl \
+            --out /tmp/gemma-prereg-kernel
+          python - <<'PY'
+          import ast,re,json,hashlib
+          from pathlib import Path
+          c=Path('/tmp/gemma-prereg-kernel/main.py').read_text()
+          matches=re.findall(r'^SELECTED_IDS = (\[.*\])$',c,re.M)
+          assert len(matches)==1
+          ids=ast.literal_eval(matches[0])
+          assert len(ids)==len(set(ids))==17
+          h=hashlib.sha256('|'.join(sorted(ids)).encode()).hexdigest()
+          assert h=='231db5d504930562c4dc78f696a56009635f02bfcf4a79023531d2a3a7eb8bd2'
+          Path('/tmp/gemma17-ids.json').write_text(json.dumps(ids))
+          print('FROZEN17_TASK_MEMBERSHIP_SHA256='+h,flush=True)
+          PY
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 \
+            -p /tmp/gemma-source -o >/dev/null
+          python -m scripts.render_fork_v1_20261127 \
+            --source /tmp/gemma-source/submission.zip \
+            --ids-json /tmp/gemma17-ids.json \
+            --out /tmp/gemma31-rendered
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=Path('/tmp/gemma31-rendered')
+          meta=json.loads((d/'kernel-metadata.json').read_text())
+          assert meta['id']=='kolihhan/gemma4-fork-v1-paired-20261127'
+          assert meta['is_private'] and meta['enable_gpu'] and not meta['enable_internet']
+          code=(d/'fork31b_paired_runtime.py').read_text()
+          assert 'if len(records) != 34:' in code
+          assert 'if len(scored) != 17:' in code
+          assert code.count('treatment_evaluator = Evaluator(treatment_config)')==1
+          assert 'competition_submit_code' not in code
+          compile(code,'multisurface_runtime.py','exec')
+          print('REAL31B_PRIVATE_GPU_PREFLIGHT=PASS',flush=True)
+          PY
+      - name: Push ONE genuine Gemma 31B private GPU pair experiment
+        shell: bash
+        run: |
+          set -euo pipefail
+          kaggle kernels push -p /tmp/gemma31-rendered --accelerator NvidiaL4 -t 17000 \
+            >/tmp/gemma31-push.log 2>&1 || {
+              echo 'PRIVATE_GEMMA31B_GPU_PUSH_FAILED'
+              grep -Ei 'failed|error|quota|invalid' /tmp/gemma31-push.log | tail -n 5 || true
+              exit 1
+          }
+          echo 'ONE_PRIVATE_GEMMA31B_KERNEL_PUSH_COMMAND_OK'
+          echo 'NO_OFFICIAL_SUBMISSION_DURING_MEASUREMENT'
+      - name: Check actual Kaggle 34-task scorer terminal
+        shell: bash
+        run: |
+          set -euo pipefail
+          status=UNKNOWN
+          for i in $(seq 1 270); do
+            r="$(kaggle kernels status "$GPU_KERNEL" 2>&1 || true)"
+            case "$r" in
+              *KernelWorkerStatus.COMPLETE*) status=COMPLETE;break ;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*|*KernelWorkerStatus.CANCELLED*) status=ERROR;break ;;
+            esac
+            if (( i % 10 == 0 )); then echo "PRIVATE_GEMMA31B_POLL=$i";fi
+            sleep 60
+          done
+          echo "PRIVATE_GEMMA31B_TERMINAL=$status"
+          test "$status" = COMPLETE
+      - name: Verify full 17-task paired resolution and publish safe aggregate only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gemma31-private
+          kaggle kernels output "$GPU_KERNEL" -p /tmp/gemma31-private -o >/dev/null
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from scripts.render_fork_v1_20261127 import assess,RESULT
+          p=Path('/tmp/gemma31-private')/RESULT
+          assert p.is_file(),"actual Kaggle model scorer file not found"
+          out=assess(json.loads(p.read_text()))
+          print('ACTUAL_17X2_REAL31B_SCORE_GATE='+json.dumps(out,sort_keys=True),flush=True)
+          print('OFFICIAL_COMPETITION_SUBMISSION=FALSE',flush=True)
+          PY
+      - name: Purge private issues, model patches, prompts and logs from CI
+        if: always()
+        run: rm -rf /tmp/gemma-previous /tmp/gemma-public /tmp/gemma-source /tmp/gemma-prereg-kernel /tmp/gemma17-ids.json /tmp/gemma31-rendered /tmp/gemma31-private /tmp/gemma31-push.log /tmp/gemma-gpu-old
+
