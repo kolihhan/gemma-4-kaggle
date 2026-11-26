@@ -1,0 +1,49 @@
+name: Gemma multisurface candidate Champion CPU smoke
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-multisurface-cpu-smoke-20261126.yml]
+permissions: {contents: read}
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Run synthetic unit tests and syntax-check exact new modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p test_build_multisurface_scope_20261126.py -v
+          python -m py_compile scripts/build_multisurface_scope_20261126.py
+      - name: Rebuild verified 0.18 Champion, ensure candidate changes exactly one prompt
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          mkdir -p /tmp/gemma-multisurface-src
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p /tmp/gemma-multisurface-src -o >/dev/null
+          python -m scripts.build_multisurface_scope_20261126 \
+            --source /tmp/gemma-multisurface-src/submission.zip \
+            --output /tmp/gemma-multisurface-pair
+          python - <<'PY'
+          import hashlib,io,json,zipfile
+          from pathlib import Path
+          d=Path('/tmp/gemma-multisurface-pair')
+          control=(d/'control.zip').read_bytes()
+          treatment=(d/'candidate.zip').read_bytes()
+          assert hashlib.sha256(control).hexdigest()=='ff08c10240a38e151a2ea1d0478e999ee5d2f437d2dad5571d912cf12859922b'
+          with zipfile.ZipFile(io.BytesIO(control)) as a,zipfile.ZipFile(io.BytesIO(treatment)) as b:
+            assert set(a.namelist())==set(b.namelist())=={'agent.yaml','eval_config.yaml','configs/sampling.yaml','prompts/system.md'}
+            assert all(a.read(p)==b.read(p) for p in a.namelist() if p!='prompts/system.md')
+            assert b.read('prompts/system.md')!=a.read('prompts/system.md')
+          print('SINGLE_VARIABLE_PROMPT_ONLY=PASS',flush=True)
+          PY
+      - name: Cleanup public source and candidate output
+        if: always()
+        run: rm -rf /tmp/gemma-multisurface-src /tmp/gemma-multisurface-pair
