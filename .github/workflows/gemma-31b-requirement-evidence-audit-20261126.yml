@@ -49,6 +49,40 @@ jobs:
           assert "fastapi_" not in json.dumps(obj) and "rich_" not in json.dumps(obj)
           print("EVIDENCE_AUDIT_SAFE_SCHEMA=PASS")
           PY
+      - name: Independent gold/no-op validity PROXY from pinned public audit (no own environment claim)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import collections,json,urllib.request
+          from pathlib import Path
+          root=Path("/tmp/gemma-requirement-audit")
+          data=json.loads((root/"paired_single_edit_channel31b_4min_results.json").read_text())
+          ids={r["instance_id"] for r in data["results"]}
+          assert len(ids)==6
+          sha="f3b6d3ac4c532a2bf3745872fe171747d0bf3e31"
+          base="https://raw.githubusercontent.com/TechNaom/gemma4-agentic-swe/"+sha+"/experiments/audit-2026-10-15/"
+          def read(file):
+              with urllib.request.urlopen(base+file,timeout=45) as response:
+                  payload=response.read(120000).decode("utf-8")
+              return {r["instance_id"]:r for r in (json.loads(s) for s in payload.splitlines() if s.strip())}
+          gold=read("gold_runs.jsonl")
+          empty=read("empty_runs.jsonl")
+          assert len(gold)==129 and len(empty)==129 and set(ids)<=set(gold)&set(empty)
+          c=collections.Counter()
+          for id in ids:
+              g,e=gold[id],empty[id]
+              c["gold_pass"]+=bool(g["resolved"])
+              c["noop_pass"]+=bool(e["resolved"])
+              c["discriminating_gold_pass_noop_fail"]+=bool(g["resolved"] and not e["resolved"])
+              c["non_discriminating"]+=bool(not g["resolved"] or e["resolved"])
+              c["with_scoring_error"]+=bool(g.get("error") or e.get("error"))
+          print("EXTERNAL_GOLD_NOOP_PROXY="+json.dumps({"source_commit":sha,
+            "original_cohort_tasks":len(ids),
+            "third_party_env_only":True,
+            "current_own_evaluator_validation":False,
+            **c},sort_keys=True),flush=True)
+          PY
       - name: Remove private task source and model results from runner
         if: always()
         run: rm -rf /tmp/gemma-requirement-audit /tmp/gemma-coverage-safe.json
