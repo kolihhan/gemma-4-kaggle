@@ -1,0 +1,96 @@
+name: Gemma six gold noop current wheelhouse private CPU validation
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-six-gold-noop-private-cpu-20261126.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-six-gold-noop-private-cpu-once-20261126
+  cancel-in-progress: false
+jobs:
+  controls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      INPUT_KERNEL: kolihhan/gemma4-single-edit-channel-paired-20261124-v1
+      CPU_KERNEL: kolihhan/gemma31-six-gold-noop-20261126-v1
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read existing paired results and render single private CPU validator
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/render_six_gold_noop_cpu_20261126.py
+          python -m pip install -q kaggle==2.2.5 six==1.17.0
+          st="$(kaggle kernels status "$INPUT_KERNEL" 2>&1)"
+          [[ "$st" == *KernelWorkerStatus.COMPLETE* ]]
+          mkdir -p /tmp/gemma-six-existing
+          kaggle kernels output "$INPUT_KERNEL" -p /tmp/gemma-six-existing -o >/dev/null
+          test -s /tmp/gemma-six-existing/paired_single_edit_channel31b_4min_results.json
+          python -m scripts.render_six_gold_noop_cpu_20261126 \
+            --private-results /tmp/gemma-six-existing/paired_single_edit_channel31b_4min_results.json \
+            --out /tmp/gemma-six-gold-noop-kernel
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          meta=json.loads(Path('/tmp/gemma-six-gold-noop-kernel/kernel-metadata.json').read_text())
+          assert meta["is_private"] and not meta["enable_gpu"] and not meta["enable_tpu"] and not meta["enable_internet"]
+          assert meta["model_sources"]==[] and meta["id"]=="kolihhan/gemma31-six-gold-noop-20261126-v1"
+          source=Path('/tmp/gemma-six-gold-noop-kernel/main.py').read_text()
+          assert source.count('if __name__ == "__main__":')==1
+          assert "competition_submit_code" not in source
+          assert "agent_patch=patch" in source and '"noop",""' in source
+          compile(source,'main.py','exec')
+          print('GOLD_NOOP_PRIVATE_CPU_PREFLIGHT=PASS',flush=True)
+          PY
+      - name: Register one private CPU-only official-wheelhouse control notebook
+        shell: bash
+        run: |
+          set -euo pipefail
+          if kaggle kernels status "$CPU_KERNEL" >/tmp/gemma-six-existing-state 2>&1; then
+            echo 'CPU_KERNEL_ALREADY_EXISTS_NO_RESUBMIT';exit 1
+          fi
+          kaggle kernels push -p /tmp/gemma-six-gold-noop-kernel -t 900 >/tmp/gemma-six-push-result 2>&1 || {
+            echo 'CPU_KERNEL_PUSH_FAILED';exit 1;
+          }
+          echo 'CPU_KERNEL_PUSH_COMMAND_OK'
+      - name: Verify exact Kaggle CPU kernel status; never infer registration from CLI push
+        shell: bash
+        run: |
+          set -euo pipefail
+          state=unknown
+          for i in $(seq 1 105); do
+            raw="$(kaggle kernels status "$CPU_KERNEL" 2>&1 || true)"
+            if [[ "$raw" == *KernelWorkerStatus.COMPLETE* ]]; then state=COMPLETE; break; fi
+            if [[ "$raw" == *KernelWorkerStatus.ERROR* ]]; then state=ERROR; break; fi
+            sleep 20
+          done
+          echo "GOLD_NOOP_CPU_KAGGLE_TERMINAL=$state"
+          test "$state" = COMPLETE
+      - name: Read only anonymous verification aggregates
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gemma-six-gold-noop-safe-output
+          kaggle kernels output "$CPU_KERNEL" -p /tmp/gemma-six-gold-noop-safe-output -o >/dev/null
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          f=Path('/tmp/gemma-six-gold-noop-safe-output/gemma31_six_gold_noop_safe.json')
+          assert f.is_file()
+          d=json.loads(f.read_text())
+          assert d['tasks']==6 and d['competition_submission'] is False
+          assert d['gpu'] is False and d['model_inference'] is False
+          assert d['private_source_material_exported'] is False
+          assert len(d['rows'])==6
+          for row in d['rows']:
+            assert set(row)=={'ordinal','gold_pass','noop_pass','gold_error_type','noop_error_type'}
+          print('OUR_GEMMA_CURRENT_GOLD_NOOP='+json.dumps({k:v for k,v in d.items() if k!='rows'},sort_keys=True),flush=True)
+          PY
+      - name: Purge local private source and verifier traces
+        if: always()
+        run: rm -rf /tmp/gemma-six-existing /tmp/gemma-six-gold-noop-kernel /tmp/gemma-six-gold-noop-safe-output /tmp/gemma-six-push-result /tmp/gemma-six-existing-state
