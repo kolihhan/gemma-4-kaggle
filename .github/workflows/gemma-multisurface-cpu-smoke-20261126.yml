@@ -47,3 +47,5 @@ jobs:
       - name: Cleanup public source and candidate output
         if: always()
         run: rm -rf /tmp/gemma-multisurface-src /tmp/gemma-multisurface-pair
+
+# rerun after synthetic fixture repair
