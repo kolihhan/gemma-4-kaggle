@@ -1,0 +1,54 @@
+name: Gemma gated final notebook and submission SDK CPU preflight only
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-gated-official-cpu-preflight-20261126.yml]
+permissions: {contents: read}
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Test final one-shot packaging exact bytes without inference or submit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/submit_multisurface_score_gated_once_20261126.py
+          pip install -q kaggle==2.2.5 six==1.17.0 nbformat==5.10.4
+          mkdir -p /tmp/gemma-final-sources
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 \
+            -p /tmp/gemma-final-sources -o >/dev/null
+          python -m scripts.submit_multisurface_score_gated_once_20261126 build \
+            --source /tmp/gemma-final-sources/submission.zip \
+            --out /tmp/gemma-final-cpu-kernel
+          python - <<'PY'
+          import ast,base64,hashlib,io,json,re,zipfile
+          from pathlib import Path
+          import nbformat
+          p=Path('/tmp/gemma-final-cpu-kernel')
+          meta=json.loads((p/'kernel-metadata.json').read_text())
+          assert meta['id']=='kolihhan/gemma4-multisurface-clean17-submit-20261126'
+          assert meta['is_private'] and not meta['enable_gpu'] and not meta['enable_internet']
+          assert meta['model_sources']==[]
+          nb=nbformat.read(p/'multisurface.ipynb',as_version=4)
+          nbformat.validate(nb)
+          code=nb.cells[1].source
+          matches=re.findall(r'payload=base64.b64decode\((.+?),validate=True\)',code)
+          assert len(matches)==1
+          raw=base64.b64decode(ast.literal_eval(matches[0]),validate=True)
+          sha=hashlib.sha256(raw).hexdigest()
+          assert sha=='7c8d68a51938595b34fa45168907cbecedee2fefd50fda9ecf487a84efb45781'
+          with zipfile.ZipFile(io.BytesIO(raw)) as z:
+            assert z.testzip() is None
+            assert set(z.namelist())=={'agent.yaml','eval_config.yaml','configs/sampling.yaml','prompts/system.md'}
+          print('GATED_FINAL_REMOTE_NOTEBOOK_PACKAGING_CPU_VALIDATED='+sha,flush=True)
+          PY
+      - name: Wipe candidate ZIP and source
+        if: always()
+        run: rm -rf /tmp/gemma-final-sources /tmp/gemma-final-cpu-kernel
