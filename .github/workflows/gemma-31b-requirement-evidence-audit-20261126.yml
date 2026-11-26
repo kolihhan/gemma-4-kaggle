@@ -1,0 +1,54 @@
+name: Gemma 31B real patch requirements audit existing-only CPU
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths:
+      - .github/workflows/gemma-31b-requirement-evidence-audit-20261126.yml
+      - scripts/audit_requirements_coverage_private_20261126.py
+      - tests/test_audit_requirements_coverage_private_20261126.py
+permissions: {contents: read}
+concurrency:
+  group: gemma-20261126-existing-private-patch-audit
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Unit tests on fully synthetic patches and issue descriptions
+        run: python -m unittest discover -s tests -p 'test_audit_requirements_coverage_private_20261126.py' -v
+      - name: Download only previously completed private development scorer output
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          st="$(kaggle kernels status kolihhan/gemma4-single-edit-channel-paired-20261124-v1 2>&1)"
+          [[ "$st" == *KernelWorkerStatus.COMPLETE* ]]
+          mkdir -p /tmp/gemma-requirement-audit
+          kaggle kernels output kolihhan/gemma4-single-edit-channel-paired-20261124-v1 -p /tmp/gemma-requirement-audit -o >/dev/null
+          test -s /tmp/gemma-requirement-audit/paired_single_edit_channel31b_4min_results.json
+          echo 'EXISTING_PRIVATE_OUTPUT_RECOVERED=TRUE'
+      - name: Audit requirements and actual final-patch source coverage without exposing private content
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.audit_requirements_coverage_private_20261126 --tasks tasks.jsonl --root /tmp/gemma-requirement-audit --out /tmp/gemma-coverage-safe.json
+          python - <<'PY'
+          import json
+          obj=json.load(open('/tmp/gemma-coverage-safe.json'))
+          assert obj["scored_evaluations"]==12 and obj["unique_tasks"]==6
+          assert obj["gold_noop_controls"]=="UNVERIFIED"
+          assert obj["confirmed_explicit_requirement_omissions"] is None
+          assert obj["agent_improvement_demonstrated"] is False
+          assert "fastapi_" not in json.dumps(obj) and "rich_" not in json.dumps(obj)
+          print("EVIDENCE_AUDIT_SAFE_SCHEMA=PASS")
+          PY
+      - name: Remove private task source and model results from runner
+        if: always()
+        run: rm -rf /tmp/gemma-requirement-audit /tmp/gemma-coverage-safe.json
