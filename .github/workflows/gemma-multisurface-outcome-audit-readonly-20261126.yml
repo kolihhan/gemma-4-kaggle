@@ -32,6 +32,42 @@ jobs:
           kaggle kernels output "$GPU_KERNEL" -p /tmp/gemma-multisurface-private-research -o >/dev/null
           test -f /tmp/gemma-multisurface-private-research/paired_multisurface31b_clean17_results.json
           python -m scripts.diagnose_multisurface_clean17_20261126 --private-result /tmp/gemma-multisurface-private-research/paired_multisurface31b_clean17_results.json
+      - name: Read current official receipts for the two pinned builds
+        run: |
+          python - <<'PY'
+          import json
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions
+          rows = authenticated_submissions()
+          print("CLEAN17_OFFICIAL_LEDGER=" + json.dumps([
+              {k: r.get(k) for k in ("ref", "status", "publicScore")}
+              for r in rows if str(r.get("ref")) in {"58183466", "58931890"}
+          ]))
+          PY
+      - name: Compare retained patches and tool traces with the public development reference on CPU
+        run: |
+          set -euo pipefail
+          root=/tmp/gemma-multisurface-private-research
+          mkdir -p "$root/reference"
+          kaggle competitions download -c gemma-4-developer-agent -f tasks.jsonl -p "$root/reference" -q >/dev/null
+          python - <<'PY'
+          import json
+          import zipfile
+          from pathlib import Path
+          from scripts.audit_clean17_saved_patches import analyze
+          root = Path("/tmp/gemma-multisurface-private-research")
+          resources = list((root / "reference").iterdir())
+          if len(resources) != 1:
+              raise ValueError("expected one official task resource")
+          tasks = resources[0]
+          if zipfile.is_zipfile(tasks):
+              with zipfile.ZipFile(tasks) as archive:
+                  names = [n for n in archive.namelist() if Path(n).name == "tasks.jsonl"]
+                  if len(names) != 1:
+                      raise ValueError("missing unique development task resource")
+                  tasks = root / "official-tasks.jsonl"
+                  tasks.write_bytes(archive.read(names[0]))
+          print("CLEAN17_RETAINED_EVIDENCE=" + json.dumps(analyze(root, tasks), sort_keys=True))
+          PY
       - name: Remove private scorer, patches and traces
         if: always()
         run: rm -rf /tmp/gemma-multisurface-private-research
