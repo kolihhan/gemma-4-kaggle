@@ -1,0 +1,122 @@
+name: Gemma pristine 17 current Kaggle gold noop private CPU eligibility gate
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-fresh17-gold-noop-private-cpu-20261126.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-fresh17-cpu-20261126-once
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 72
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      CPU_KERNEL: kolihhan/gemma31-fresh17-gold-noop-20261126-v1
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Verify local renderer compiles; fetch only completed private prior task ID ledgers
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/render_fresh17_gold_noop_cpu_20261126.py
+          python -m pip install -q kaggle==2.2.5 six==1.17.0
+          for key in behavior grammar single; do
+            case "$key" in
+              behavior) ref=kolihhan/gemma4-behavioral-paired-20261123-v1 ;;
+              grammar) ref=kolihhan/gemma4-edit-grammar-paired-20261124-v1 ;;
+              single) ref=kolihhan/gemma4-single-edit-channel-paired-20261124-v1 ;;
+            esac
+            st="$(kaggle kernels status "$ref" 2>&1)"
+            [[ "$st" == *KernelWorkerStatus.COMPLETE* ]]
+            mkdir -p "/tmp/gemma17-used/$key"
+            kaggle kernels output "$ref" -p "/tmp/gemma17-used/$key" -o >/dev/null
+          done
+      - name: Freeze untouched public valid 17 before any current-wheelhouse outcome
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gemma17-public
+          python - <<'PY'
+          import urllib.request
+          from pathlib import Path
+          sha="f3b6d3ac4c532a2bf3745872fe171747d0bf3e31"
+          base="https://raw.githubusercontent.com/TechNaom/gemma4-agentic-swe/"+sha+"/experiments/audit-2026-10-15/"
+          for file in ("gold_runs.jsonl","empty_runs.jsonl"):
+            with urllib.request.urlopen(base+file,timeout=45) as r:
+              content=r.read(120000)
+            assert content.count(b"\n")>=120
+            (Path("/tmp/gemma17-public")/file).write_bytes(content)
+          PY
+          python -m scripts.render_fresh17_gold_noop_cpu_20261126 \
+            --previous /tmp/gemma17-used \
+            --gold /tmp/gemma17-public/gold_runs.jsonl \
+            --noop /tmp/gemma17-public/empty_runs.jsonl \
+            --out /tmp/gemma17-private-kernel
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=Path("/tmp/gemma17-private-kernel")
+          m=json.loads((d/"kernel-metadata.json").read_text())
+          assert m["id"]=="kolihhan/gemma31-fresh17-gold-noop-20261126-v1"
+          assert m["is_private"] and not m["enable_gpu"] and not m["enable_tpu"] and not m["enable_internet"] and m["model_sources"]==[]
+          code=(d/"main.py").read_text()
+          assert code.count('if __name__ == "__main__":')==1
+          assert "competition_submit_code" not in code
+          assert 'agent_patch=patch' in code
+          assert '("noop","")' in code
+          compile(code,"main.py","exec")
+          print("FRESH17_CPU_KERNEL_PREFLIGHT=PASS",flush=True)
+          PY
+      - name: Push only one private CPU notebook, no official submit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if kaggle kernels status "$CPU_KERNEL" >/tmp/gemma17-existing-status 2>&1; then
+            echo 'FRESH17_KERNEL_ALREADY_EXISTS_ABORT';exit 1
+          fi
+          kaggle kernels push -p /tmp/gemma17-private-kernel -t 900 >/tmp/gemma17-push-log 2>&1 || {
+            echo 'FRESH17_CPU_PRIVATE_PUSH_FAILED';exit 1;
+          }
+          echo 'FRESH17_PRIVATE_CPU_PUSH_COMMAND_OK'
+      - name: Poll exact registered Kaggle CPU notebook to terminal
+        shell: bash
+        run: |
+          set -euo pipefail
+          status=UNKNOWN
+          for i in $(seq 1 175); do
+            out="$(kaggle kernels status "$CPU_KERNEL" 2>&1 || true)"
+            if [[ "$out" == *KernelWorkerStatus.COMPLETE* ]]; then status=COMPLETE;break;fi
+            if [[ "$out" == *KernelWorkerStatus.ERROR* ]]; then status=ERROR;break;fi
+            sleep 20
+          done
+          echo "FRESH17_PRIVATE_KAGGLE_TERMINAL=$status"
+          test "$status" = COMPLETE
+      - name: Extract only safe aggregate gold/noop counts from actual Kaggle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gemma17-result
+          kaggle kernels output "$CPU_KERNEL" -p /tmp/gemma17-result -o >/dev/null
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          file=Path("/tmp/gemma17-result/gemma31_fresh17_gold_noop_safe.json")
+          assert file.exists()
+          d=json.loads(file.read_text())
+          assert d["tasks"]==17 and len(d["rows"])==17
+          assert d["competition_submission"] is False and d["model_inference"] is False and d["gpu"] is False
+          assert d["private_source_material_exported"] is False
+          for r in d["rows"]:
+            assert set(r)=={"ordinal","gold_pass","noop_pass","gold_error_type","noop_error_type"}
+          print("FRESH17_CURRENT_KAGGLE_GOLD_NOOP="+json.dumps({
+            k:v for k,v in d.items() if k!="rows"
+          },sort_keys=True),flush=True)
+          PY
+      - name: Purge private source and candidate task identities
+        if: always()
+        run: rm -rf /tmp/gemma17-used /tmp/gemma17-public /tmp/gemma17-private-kernel /tmp/gemma17-result /tmp/gemma17-existing-status /tmp/gemma17-push-log
