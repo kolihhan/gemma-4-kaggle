@@ -1,0 +1,70 @@
+name: Gemma six case current-vs-independent gold noop validity overlap CPU
+on:
+  push:
+    branches: [research/single-edit-channel-20261124]
+    paths: [.github/workflows/gemma-validity-overlap-20261126.yml]
+permissions: {contents: read}
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Compare item-wise valid controls without exposing private task IDs
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          for pair in "kolihhan/gemma4-single-edit-channel-paired-20261124-v1|old" "kolihhan/gemma31-six-gold-noop-20261126-v1|our"; do
+            ref="$(printf '%s' "$pair" | cut -d'|' -f1)"
+            out="$(printf '%s' "$pair" | cut -d'|' -f2)"
+            st="$(kaggle kernels status "$ref" 2>&1)"
+            [[ "$st" == *KernelWorkerStatus.COMPLETE* ]]
+            mkdir -p "/tmp/gemma-validity/$out"
+            kaggle kernels output "$ref" -p "/tmp/gemma-validity/$out" -o >/dev/null
+          done
+          python - <<'PY'
+          import urllib.request,json,collections
+          from pathlib import Path
+          p=Path('/tmp/gemma-validity')
+          ids=sorted({r['instance_id'] for r in json.loads(
+            (p/'old/paired_single_edit_channel31b_4min_results.json').read_text()
+          )['results']})
+          d=json.loads((p/'our/gemma31_six_gold_noop_safe.json').read_text())
+          assert len(ids)==6 and d['tasks']==6 and len(d['rows'])==6
+          ours={ids[r['ordinal']-1]:r for r in d['rows']}
+          base='https://raw.githubusercontent.com/TechNaom/gemma4-agentic-swe/f3b6d3ac4c532a2bf3745872fe171747d0bf3e31/experiments/audit-2026-10-15/'
+          def fetch(name):
+            with urllib.request.urlopen(base+name,timeout=45) as f:
+              lines=f.read(120000).decode().splitlines()
+            return {r['instance_id']:r for r in (json.loads(t) for t in lines if t.strip())}
+          gold,noop=fetch('gold_runs.jsonl'),fetch('empty_runs.jsonl')
+          assert len(gold)==len(noop)==129
+          matrix=collections.Counter()
+          changed=collections.Counter()
+          for id in ids:
+            current=ours[id]['gold_pass'] is True and ours[id]['noop_pass'] is False
+            external=gold[id]['resolved'] is True and noop[id]['resolved'] is False
+            matrix['both_valid' if current and external else
+                   'ours_only' if current else
+                   'independent_only' if external else 'neither_valid']+=1
+            changed['gold_agree' if bool(ours[id]['gold_pass'])==bool(gold[id]['resolved'])
+                    else 'gold_disagree']+=1
+            changed['noop_agree' if bool(ours[id]['noop_pass'])==bool(noop[id]['resolved'])
+                    else 'noop_disagree']+=1
+          print('CROSS_ENVIRONMENT_VALIDITY_OVERLAP='+json.dumps({
+            'n':6,**dict(matrix),**dict(changed),
+            'same_issues_both_evaluators':True,
+            'no_model_inference':True,'no_gpu':True,
+            'task_ids_exported':False,
+            'interpretation':'third-party validity is a proxy; overlap must be checked before using it to prefilter new cases'
+          },sort_keys=True),flush=True)
+          PY
+      - name: Purge downloaded owner private output
+        if: always()
+        run: rm -rf /tmp/gemma-validity
