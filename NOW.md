@@ -1,3 +1,9 @@
+# 2026-11-27 — Budget factorial CPU feasibility, D included
+
+**Design:** [five-arm budget ablation](docs/design/2026-11-27-budget-factorial-ablation.md) includes Champion 60/4096, A 28/4096, B 60/2048, C 60/1024, D 28/2048. A/B/D/control form the 2x2 factorial. Hold exact scored Champion prompt/model/tools/5min/80turns fixed; Semantic Repair remains unimplemented and is not confounded with these treatments. Actual CPU external phase1 900-episode analysis: 186 episodes exposed to >2048 estimated reasoning tokens (6 passes), 104 failed fatal thoughts >2048 with empty patch; 137 tool-budget endings (45 passes), no overlap with >2048 exposure. Observational data at 28-call cap cannot establish causal 60->28 effect or D accuracy; 1024 paired external WT remains 48/150 vs 48/150. No new GPU/model inference or submission. New independent tasks and explicit compute authorization required for actual five-arm paired test.
+
+---
+
 # 2026-11-27 — Architecture checkpoint: verified Champion vs research hypothesis
 
 **Champion:** exact scored .18 31B ZIP (SHA ff08c10240a38e151a2ea1d0478e999ee5d2f437d2dad5571d912cf12859922b), single-agent, 5 min/60 calls/80 turns; historical submission/ folder is E4B, not this exact ZIP. FORK 10/17 vs 10/17 rejected. No new architecture promoted.
