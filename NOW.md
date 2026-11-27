@@ -1,3 +1,18 @@
+# 2026-11-27 — Actual five-arm budget factorial result: C best exploratory, no promotion
+
+[Run #45965152652](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45965152652), job 140391956360 SUCCESS, completed 10:36:09 UTC (18:36 MYT). Actual 30/30 31B evaluations, six deterministically ID-selected issues reused from verified17, cohort SHA 014a264ca83f257e12d8714cfa322f03538771f51366a886d8ddae76764a43a6. Fixed prompt, 5min, 80 turns. No training or official submission.
+| Arm | Calls cap | Thinking | Resolved / 6 | Total calls | Total task seconds | Rescues / regressions |
+|---|---:|---:|---:|---:|---:|---:|
+| Champion | 60 | 4096 | 3 | 119 | 1574.3473 | — |
+| A | 28 | 4096 | 2 | 122 | 1614.4230 | 0/1 |
+| B | 60 | 2048 | 2 | 148 | 1369.9313 | 0/1 |
+| C | 60 | 1024 | 4 | 184 | 1478.4428 | 1/0 |
+| D | 28 | 2048 | 3 | 140 | 1387.2213 | 0/0 |
+
+C +1 correct, +54.62% tool calls, -6.09% summed task duration; D identical per-task resolved outcomes, +17.65% calls, -11.89% duration. All four fail preregistered exploratory promotion gate (net>=2, <=1 regression, <=115% time AND calls). Interaction (D-A)-(B-Champion)=2/6=0.3333, two task-level +1, four zero; exploratory tiny reused sample, not causal generalization or proof of budget optimum. C is the leading accuracy hypothesis, D a wall-time hypothesis; do not claim either is a stronger official solver. External historical 28/1024 did not improve aggregate correctness; the 60/1024 treatment differs. The earlier 35 unused candidate tasks yielded zero valid gold/noop pairs, so independent cohort remains blocked. No duplicate GPU launch, no promotion or official submission authorized by result alone. Last quota before run 4.82h; remaining quota not authenticated after completion. Official best last authenticated .18 remains separate.
+
+---
+
 # 2026-11-27 — Budget factorial eligibility blocked, no GPU consumed
 
 Authorized 50-trial [#45953658964](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45953658964) stopped before execution: 4.82h remaining versus 6h gate. Authorized reduced 30-trial [#45955021946](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45955021946) passed CPU tests and 4h quota gate, recovered prior cohort IDs, and completed actual private CPU qualification: 35 candidate tasks, 35 recorded control pairs, 2 gold passes, 2 noop passes, ZERO discriminating gold-pass/noop-fail and ZERO qualified. Aggregate verifier booleans do not establish the cause of gold failures; no model inference, GPU kernel or official submission. Do not relax eligibility or rerun the exhausted same pool. The previous known valid 17 may support an explicitly exploratory paired budget screen but are NOT independent; substituting them for authorized fresh cases changes the contract and needs owner approval. Alternate independently validated external development tasks require a separate environment and transfer caveat. No new score claim.
