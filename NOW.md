@@ -1,3 +1,13 @@
+# 2026-11-27 — Global research checkpoint after FORK: do not collapse eight variables into one diagnosis
+
+**Decision:** FORK V1 is not promoted: [real GPU 34 evaluations](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45860344733) gave 10/17 vs 10/17, +13.66% calls, +11.10% time. [Completed CPU audit](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45931909460) found 5/17 failures across four arms and identical-Champion A/A +2/-1. No detected FORK checkpoint/reverse requests; 14/17 vs 17/17 retained nonempty patches. These are observations, not causal proof of semantic misunderstanding or model capacity. Official best 0.18 #58183466, #58931890 pending as of 03:03:40 UTC.
+
+**Required continuing research control:** read and update [global variable ledger](docs/research/2026-11-27-global-variable-ledger.md) alongside RESEARCH_DOCTRINE.md and each experiment contract. All eight owner-identified variables plus issue sufficiency, cross-file evidence, mechanism uptake, and capacity remain tracked, with competing explanations, falsifiers, costs and bias. No global budget reduction, new prompt candidate, GPU or official submission authorized by this checkpoint.
+
+**Next CPU research:** blind requirement/visible-evidence review and retained-patch behavior audit of stable failures with solved/mixed contrast cases, not a tuning set. Gold isolated as evaluator-only. Report blocked/unknown and reviewer disagreement. A new intervention requires discriminating evidence and a fresh independently selected matched task cohort; no permanent method exclusion. [Detailed FORK result](docs/research/2026-11-27-fork-v1-result.md).
+
+---
+
 # 2026-11-20 — Genuine 31B patch-vs-gold private CPU audit: target mismatch signal, full semantic outcome HOLD
 
 **Actual completed [CPU Action #44771279117](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/44771279117)** recovered 12/12 real private 31B execution traces (six issues, four different arm/cohort configurations), including 2/12 grader PASS from the SAME `rich_3718` control issue. **No final scored Agent Patch artifacts were retained in either downloaded private output (0/12; 0 `.patch` files), so do not claim a completed code-semantic/root-cause diagnosis.** Explicit edit-tool target paths were recovered on all 12, but opaque shell editing and trace duplication limit causal claims.
