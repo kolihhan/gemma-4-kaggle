@@ -24,3 +24,26 @@ Pre-register a retrospective qualitative and executable audit of five stable fai
 Primary research question: does the solver lack necessary evidence, misunderstand adequate evidence, implement wrong behavior, or fail execution? At least two competing hypotheses with falsifiers before each intervention. For future prospective test, use disjoint fresh tasks, same model/harness/budget unless the budget itself is the treatment, real resolved count and paired rescues/regressions primary. Record uncertainty and runtime. No permanent bans on methods: reopen only when a named bottleneck supports it.
 
 Update this ledger and NOW.md after each meaningful experiment: state evidence changed, what did not change, decision and falsifier. Never describe this ledger as experimental results.
+
+## Evidence update — completed four-arm diagnostic, 2026-11-27
+
+[Action #45934234786](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45934234786) terminal SUCCESS, 68/68 traces and exact retained patch metadata validated. These are repeated measurements on 17 issues, not 68 independent tasks.
+
+| Evidence | Always pass (32 evaluations, 8 issues) | Mixed (16 evaluations, 4 issues) | Always fail (20 evaluations, 5 issues) |
+|---|---:|---:|---:|
+| Explicit read request for any reference source | 32 | 15 | 20 |
+| Explicit read request for all reference source | 30 | 15 | 10 |
+| Final diff touches any reference source | 32 | 6 | 15 |
+| Final diff touches all reference source | 28 | 5 | 5 |
+| Nonempty final patch | 32 | 14 | 16 |
+| Recognizable test/inline assertion requested | 12 | 1 | 3 |
+| At least one structured zero test exit | 10 | 1 | 3 |
+| At least one structured nonzero test exit | 4 | 0 | 0 |
+| Actual grader resolved | 32 | 7 | 0 |
+| Multi-file reference (issue-level) | 1/8 | 1/4 | 4/5 |
+
+Correction: explicit read requests do NOT prove successful reads, complete file content, or comprehension. A reference file need not be touched in an alternative valid fix. Test feedback is a structured exit proxy; command relevance and actual test semantics unverified. Three stable-failure episodes returned a zero test exit, but this does not yet establish false acceptance of the exact final patch because the tested state, target and timing may differ. No independent semantic rubric has been completed. Issue-marker absence is not proof of missing requirements.
+
+Priority update: H2 cross-file evidence and H3 repair logic remain competing hypotheses. H1 issue understanding remains unmeasured. H4 feedback quality remains plausible; compare actual visible targets on no-op/reference/retained variants before introducing any new gate. The current private CPU-only replay [#45936052552](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45936052552) uses only restricted pytest targets previously requested by the agents, no arbitrary shell execution, and removes original grader tests from the witness task. Verify actual target execution, blocked/noop cases, and possible scorer setup behavior before interpreting outcomes. Do not start another equivalent replay while this run is active.
+
+Official authenticated at 03:27:21 UTC: #58183466 COMPLETE .18, #58931890 PENDING. Other variables unchanged. No new GPU or submission; no architecture promotion.
