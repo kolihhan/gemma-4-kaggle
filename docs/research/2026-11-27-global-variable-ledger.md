@@ -47,3 +47,27 @@ Correction: explicit read requests do NOT prove successful reads, complete file 
 Priority update: H2 cross-file evidence and H3 repair logic remain competing hypotheses. H1 issue understanding remains unmeasured. H4 feedback quality remains plausible; compare actual visible targets on no-op/reference/retained variants before introducing any new gate. The current private CPU-only replay [#45936052552](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45936052552) uses only restricted pytest targets previously requested by the agents, no arbitrary shell execution, and removes original grader tests from the witness task. Verify actual target execution, blocked/noop cases, and possible scorer setup behavior before interpreting outcomes. Do not start another equivalent replay while this run is active.
 
 Official authenticated at 03:27:21 UTC: #58183466 COMPLETE .18, #58931890 PENDING. Other variables unchanged. No new GPU or submission; no architecture promotion.
+
+## External coverage confounding check — 2026-11-27
+
+Visible witness replay v1 [#45936052552](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45936052552) selected 5/9 eligible issues (2 stable fail, 2 stable pass, 1 mixed); all five setup TypeError, zero informative tests. V2 [#45938082536](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45938082536) failed before launch during Kaggle output download with HTTP 429 ListKernelSessionOutput. No V2 CPU kernel or valid replay result. Stop repeated API calls and hold witness route, not proof against testing.
+
+Independent retrospective evidence source: Aeterna-Data-AI-ML-Research/Kaggle-Gemma-4-Developer-Agent-Competition, three Git blobs 16e3bbf15fc5f384893207339b3ea5ee520d195a, 0d3853c02d5fefcd3fb0d2479d1c731190e09d25, a033eea0ff4ddc2a3bcf7ffb4d96ccb338ec5dfe. Read complete JSONL via GitHub blob API; 1350 episodes, 150 unique task IDs, exactly 9 episodes each, consistent n_gold_files within each task. Same source already studied; new stratification, not a new independent sample or GPU run. Working-tree pass field, not strict submit pass.
+
+| Evidence | Single reference file | Multiple reference files |
+|---|---:|---:|
+| Tasks | 98 | 52 |
+| Episodes | 882 | 468 |
+| Working tree pass | 329 | 96 |
+| Strict pass | 203 | 45 |
+| No successful episode across 9 | 46 | 36 |
+| All reference files opened | 823 | 177 |
+| Pass among all-open | 328/823 | 62/177 |
+| Wrong nonempty patch among all-open | 210 | 64 |
+| Empty patch among all-open | 285 | 51 |
+| Partial-open pass | N/A | 34/275 |
+| None-open pass | 1/59 | 0/16 |
+
+Important confounding check: within each task with variable full-open status, calculate mean(pass | all-open) minus mean(pass | not-all-open) separately, then average across tasks with equal task weight. Multi-file: 19/52 eligible tasks, 4 positive/3 negative/12 tie, mean difference -0.002192982456140349. Single-file: 7/98, 1 positive/1 negative/5 tie, mean +0.010714285714285716. These contrasts are observational, not randomized; coverage may be downstream of task difficulty, reasoning, policy, or time. Gold-file access is retrospective and not proof of complete context/understanding or a feature for inference. Do not interpret the near-zero contrast as causal equivalence or claim retrieval is irrelevant. Do not pool 1350 episodes as independent observations.
+
+Updated decision: multi-file reference complexity is an observed risk marker but full-file access alone is not established as a causal lever; no promotion of broader retrieval or coverage prompts. 274 all-open episodes had wrong nonempty patches, and 336 all-open episodes had empty patches; this leaves generation, execution/budget, requirement understanding and evidence quality unresolved. The next useful study requires actual issue-visible behavior or source-semantic review, not another gold-overlap statistic. All 12 variables remain active. No new model inference, GPU, training or submission.
