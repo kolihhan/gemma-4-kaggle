@@ -1,3 +1,11 @@
+# 2026-11-27 — Architecture checkpoint: verified Champion vs research hypothesis
+
+**Champion:** exact scored .18 31B ZIP (SHA ff08c10240a38e151a2ea1d0478e999ee5d2f437d2dad5571d912cf12859922b), single-agent, 5 min/60 calls/80 turns; historical submission/ folder is E4B, not this exact ZIP. FORK 10/17 vs 10/17 rejected. No new architecture promoted.
+
+**Research:** [semantic repair design](docs/design/2026-11-27-semantic-repair-hypothesis.md) is a conditional hypothesis, not an implemented solver. [Global ledger](docs/research/2026-11-27-global-variable-ledger.md) retains all 12 variables and the external within-task and early-edit confounding results. Witness v1 [#45936052552](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45936052552) completed but 5/5 setup TypeError; v2 [#45938082536](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45938082536) failed on HTTP429 before CPU launch. Neither yielded actual valid test replay. Do not repeat API calls or add prompt variants blindly. Next discriminating evidence remains private, independent issue-only semantic review against actual model behavior with contrast cases, no gold solver exposure. No GPU, new model or submission in this checkpoint.
+
+---
+
 # 2026-11-27 — Four-arm evidence complete; visible-witness CPU replay active
 
 **Verified:** [#45934234786](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45934234786) returned 68 traces, 17 unique tasks: 8 stable pass, 5 stable fail, 4 mixed. Stable failures: 20/20 explicitly requested at least one reference source file, 10/20 all reference source files, 5/20 final patches cover all reference sources; 16/20 nonempty patches. Three episodes had structured zero test exit, none nonzero. These are proxies, not evidence of successful complete reads, correct semantic understanding or a false-accept of the final patch. 4/5 stable-fail tasks vs 1/8 stable-pass tasks have multifile reference changes. See [global variable ledger](docs/research/2026-11-27-global-variable-ledger.md) for full contrast group and limitations.
