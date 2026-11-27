@@ -1,3 +1,11 @@
+# 2026-11-27 — Four-arm evidence complete; visible-witness CPU replay active
+
+**Verified:** [#45934234786](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45934234786) returned 68 traces, 17 unique tasks: 8 stable pass, 5 stable fail, 4 mixed. Stable failures: 20/20 explicitly requested at least one reference source file, 10/20 all reference source files, 5/20 final patches cover all reference sources; 16/20 nonempty patches. Three episodes had structured zero test exit, none nonzero. These are proxies, not evidence of successful complete reads, correct semantic understanding or a false-accept of the final patch. 4/5 stable-fail tasks vs 1/8 stable-pass tasks have multifile reference changes. See [global variable ledger](docs/research/2026-11-27-global-variable-ledger.md) for full contrast group and limitations.
+
+**Active actual CPU replay** [#45936052552](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45936052552): authenticated artifact download/target preparation passed; private CPU launch-and-poll step in progress at latest inspection. Kaggle kernel acceptance and actual witness outcomes are not yet verified. No GPU or official submission. Stop duplicate experiments; do not modify active contract. The same selected visible targets will compare no-op, evaluator-only reference and retained model variants; distinguish blocked from real failure. Current candidate decision unchanged. The next architecture depends on actual replay results and an independent issue semantic review, not more path proxies.
+
+---
+
 # 2026-11-27 — Global research checkpoint after FORK: do not collapse eight variables into one diagnosis
 
 **Decision:** FORK V1 is not promoted: [real GPU 34 evaluations](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45860344733) gave 10/17 vs 10/17, +13.66% calls, +11.10% time. [Completed CPU audit](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45931909460) found 5/17 failures across four arms and identical-Champion A/A +2/-1. No detected FORK checkpoint/reverse requests; 14/17 vs 17/17 retained nonempty patches. These are observations, not causal proof of semantic misunderstanding or model capacity. Official best 0.18 #58183466, #58931890 pending as of 03:03:40 UTC.
