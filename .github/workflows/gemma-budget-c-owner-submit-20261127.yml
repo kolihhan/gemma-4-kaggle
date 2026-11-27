@@ -1,0 +1,84 @@
+name: Gemma C 31B owner-requested official submission ONCE 20261127
+on:
+  push:
+    branches: [exp/fork-v1-paired-20261127]
+    paths: [.github/workflows/gemma-budget-c-owner-submit-20261127.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-budget-c-owner-submit-20261127
+  cancel-in-progress: false
+jobs:
+  submit:
+    if: github.event.head_commit.message == 'GO_OWNER_BUDGET_C_OFFICIAL_ONCE_20261127'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      SOURCE_KERNEL: lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2
+      CPU_KERNEL: kolihhan/gemma4-budget-c-submit-20261127
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Preflight exact pinned thinking-only candidate and official slot
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KAGGLE_API_TOKEN:-}"
+          pip install -q --disable-pip-version-check kaggle==2.2.5 six==1.17.0 nbformat==5.10.4
+          python -m unittest discover -s tests -p test_budget_factorial_20261127.py -v
+          python -m py_compile scripts/submit_budget_c_official_once_20261127.py
+          python - <<'PY'
+          import json
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          from scripts.submit_budget_c_official_once_20261127 import receipt,ACTIVE,MARKER
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions,COMPETITION
+          api=KaggleApi();api.authenticate()
+          rows=authenticated_submissions()
+          print('LATEST_OFFICIAL_ROWS='+json.dumps([{k:r.get(k) for k in ('ref','date','status','publicScore','description')} for r in rows[:10]],default=str),flush=True)
+          old=receipt(rows)
+          if old:
+              print('ALREADY_SUBMITTED='+json.dumps(old,default=str),flush=True)
+              raise RuntimeError('Exact submission already exists: stop without duplicate')
+          active=[r for r in rows if str(r.get('status','')).split('.')[-1].upper() in ACTIVE]
+          quota=api.competition_get_submission_limits(COMPETITION)
+          print('OWNER_AUTHORIZED_ONE_SHOT_PREFLIGHT='+json.dumps({'marker':MARKER,'allowed':quota.num_allowed_now,'limited_by_total':quota.limited_by_total,'active_count':len(active)}),flush=True)
+          if quota.num_allowed_now<1 or quota.limited_by_total or active:
+              raise RuntimeError('No legal fresh Kaggle submission slot or scorer already active')
+          PY
+      - name: Build exact SHA locked Candidate ZIP as private CPU notebook
+        shell: bash
+        run: |
+          set -euo pipefail
+          if kaggle kernels status "$CPU_KERNEL" >/tmp/gemma-owner-existing 2>&1; then
+            echo 'EXACT_CPU_KERNEL_ALREADY_EXISTS_STOP_NO_OVERWRITE'
+            exit 1
+          fi
+          mkdir -p /tmp/gemma-owner-source
+          kaggle kernels output "$SOURCE_KERNEL" -p /tmp/gemma-owner-source -o >/dev/null
+          python -m scripts.submit_budget_c_official_once_20261127 build --source /tmp/gemma-owner-source/submission.zip --out /tmp/gemma-owner-build
+          kaggle kernels push -p /tmp/gemma-owner-build -t 1200 >/tmp/gemma-owner-push.log 2>&1 || {
+            echo 'OWNER_PRIVATE_CPU_PACKAGE_PUSH_FAILED'
+            grep -Ei 'error|failed|quota' /tmp/gemma-owner-push.log | tail -n 4 || true
+            exit 1
+          }
+          state=UNKNOWN
+          for i in $(seq 1 90); do
+            status="$(kaggle kernels status "$CPU_KERNEL" 2>&1 || true)"
+            if [[ "$status" == *KernelWorkerStatus.COMPLETE* ]]; then state=COMPLETE;break;fi
+            if [[ "$status" == *KernelWorkerStatus.ERROR* || "$status" == *KernelWorkerStatus.FAILED* ]]; then state=ERROR;break;fi
+            sleep 10
+          done
+          echo "OWNER_CPU_KERNEL_TERMINAL=$state"
+          test "$state" = COMPLETE
+      - name: Verify Kaggle remote ZIP exact bytes and submit OFFICIAL once
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gemma-owner-remote
+          kaggle kernels output "$CPU_KERNEL/1" -p /tmp/gemma-owner-remote -o >/dev/null
+          python -m scripts.submit_budget_c_official_once_20261127 submit --remote-zip /tmp/gemma-owner-remote/submission.zip
+      - name: Purge private material and artifacts
+        if: always()
+        run: rm -rf /tmp/gemma-owner-source /tmp/gemma-owner-build /tmp/gemma-owner-remote /tmp/gemma-owner-push.log /tmp/gemma-owner-existing

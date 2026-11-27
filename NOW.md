@@ -1,3 +1,9 @@
+# 2026-11-27 — Owner-requested single official C trial
+
+User requested a submission because GPU access is unavailable. Submit exact evaluated C ZIP SHA 103070674849434a7e7ce93e74d4829996427097f2018a69d1dee0c1bda5df3f, 31B, 5 minutes, 60 calls, 1024 thinking, 80 turns, unchanged prompt. Local exploratory 4/6 vs 3/6, failed promotion gate; this is a single official trial, NOT Champion promotion. CPU-only packaging, authenticated daily-slot and pending/duplicate guard, exact remote bytes, one submit attempt. No new private GPU evaluation, no auto retry, no final-selection change. Receipt not yet confirmed at commit time.
+
+---
+
 # 2026-11-27 — Actual five-arm budget factorial result: C best exploratory, no promotion
 
 [Run #45965152652](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/45965152652), job 140391956360 SUCCESS, completed 10:36:09 UTC (18:36 MYT). Actual 30/30 31B evaluations, six deterministically ID-selected issues reused from verified17, cohort SHA 014a264ca83f257e12d8714cfa322f03538771f51366a886d8ddae76764a43a6. Fixed prompt, 5min, 80 turns. No training or official submission.
