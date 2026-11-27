@@ -1,0 +1,16 @@
+name: Gemma five-arm budget factorial CPU fixtures
+on:
+  push:
+    branches: [exp/fork-v1-paired-20261127]
+    paths: [.github/workflows/gemma-budget-factorial-cpu-20261127.yml]
+permissions: {contents: read}
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m unittest -v tests.test_budget_factorial_20261127 tests.test_build_toolcap60_timeout_recovery
