@@ -1,4 +1,4 @@
-name: Gemma authorized five-arm factorial 10 fresh issues private GPU
+name: Gemma authorized five-arm factorial 6 fresh issues private GPU
 on:
   push:
     branches: [exp/fork-v1-paired-20261127]
@@ -9,13 +9,13 @@ concurrency:
   cancel-in-progress: false
 jobs:
   qualify-and-run:
-    if: github.event.head_commit.message == 'GO_BUDGET_FACTORIAL_50_REAL31B_AUTHORIZED_20261127'
+    if: github.event.head_commit.message == 'GO_BUDGET_FACTORIAL_30_REAL31B_AUTHORIZED_20261127'
     runs-on: ubuntu-latest
     timeout-minutes: 355
     env:
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
-      CPU_KERNEL: kolihhan/gemma4-budget-factorial-eligibility-20261127-v1
-      GPU_KERNEL: kolihhan/gemma4-budget-factorial-31b-20261127-v1
+      CPU_KERNEL: kolihhan/gemma4-budget-factorial-eligibility6-20261127-v1
+      GPU_KERNEL: kolihhan/gemma4-budget-factorial30-31b-20261127-v1
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
@@ -33,7 +33,7 @@ jobs:
           assert len(q)==1
           free=float(str(q[0]["remaining"]).rstrip("h"))
           print("FACTORIAL_GPU_HOURS_REMAINING="+str(free),flush=True)
-          if free<6:raise RuntimeError("GPU quota below six-hour conservative gate")
+          if free<4.0:raise RuntimeError("GPU quota below four-hour gate for 30 trials")
           PY
       - name: Recover only known prior cohort identities and select fresh CPU candidates
         run: |
@@ -85,9 +85,9 @@ jobs:
           from pathlib import Path
           x=json.loads(Path("/tmp/gemma-factorial/eligible/budget_factorial_eligibility.json").read_text())
           print("FACTORIAL_CPU_ELIGIBILITY="+json.dumps({k:v for k,v in x.items() if k not in ("rows","qualified_ids")},sort_keys=True),flush=True)
-          assert x["qualified_count"]==10 and len(set(x["qualified_ids"]))==10
+          assert x["qualified_count"]==6 and len(set(x["qualified_ids"]))==6
           PY
-      - name: Render 50 evaluations from exact scored Champion and passed CPU cohort
+      - name: Render 30 evaluations from exact scored Champion and passed CPU cohort
         run: |
           set -euo pipefail
           root=/tmp/gemma-factorial
@@ -100,16 +100,16 @@ jobs:
           x=json.loads((root/"kernel-metadata.json").read_text())
           assert x["is_private"] and x["enable_gpu"] and not x["enable_internet"] and not x["enable_tpu"]
           q=[x for x in json.loads(subprocess.run(["kaggle","quota","--format","json"],capture_output=True,text=True,timeout=75,check=True).stdout) if x.get("resource")=="GPU"]
-          assert len(q)==1 and float(str(q[0]["remaining"]).rstrip("h"))>=6
+          assert len(q)==1 and float(str(q[0]["remaining"]).rstrip("h"))>=4.0
           PY
       - name: Launch authorized private 31B GPU once, never official submit
         run: |
           set -euo pipefail
           root=/tmp/gemma-factorial
           if kaggle kernels status "$GPU_KERNEL" >/dev/null 2>&1; then echo STOP_DUPLICATE_GPU;exit 1;fi
-          kaggle kernels push -p "$root/gpu" --accelerator NvidiaL4 -t 18000 >"$root/gpu-push.log" 2>&1 || { echo GPU_PUSH_FAILED;exit 1; }
-          echo FACTORIAL_50_PRIVATE_GPU_PUSHED
-          for i in $(seq 1 275); do
+          kaggle kernels push -p "$root/gpu" --accelerator NvidiaL4 -t 13800 >"$root/gpu-push.log" 2>&1 || { echo GPU_PUSH_FAILED;exit 1; }
+          echo FACTORIAL_30_PRIVATE_GPU_PUSHED
+          for i in $(seq 1 240); do
             st="$(kaggle kernels status "$GPU_KERNEL" 2>&1 || true)"
             case "$st" in
               *KernelWorkerStatus.COMPLETE*) mkdir "$root/results";kaggle kernels output "$GPU_KERNEL" -p "$root/results" -o >/dev/null;break ;;

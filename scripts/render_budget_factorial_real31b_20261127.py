@@ -1,4 +1,4 @@
-"""Authorized private budget factorial: qualify 10 unused issues on CPU, then 50 actual model runs.
+"""Authorized private budget factorial: qualify 6 unused issues on CPU, then 30 actual model runs.
 Render only. Never submit to competition. No private raw content in public output.
 """
 from __future__ import annotations
@@ -7,8 +7,8 @@ from pathlib import Path
 from scripts.budget_factorial_20261127 import ARMS,arm_files,schedule,assess
 from scripts.build_behavioral_probe_timeout_safe_20261123 import _source_files,_pack,CHAMPION_SHA256
 from scripts.render_six_gold_noop_cpu_20261126 import SAFE_RUNTIME,TEMPLATE
-CPU="kolihhan/gemma4-budget-factorial-eligibility-20261127-v1"
-GPU="kolihhan/gemma4-budget-factorial-31b-20261127-v1"
+CPU="kolihhan/gemma4-budget-factorial-eligibility6-20261127-v1"
+GPU="kolihhan/gemma4-budget-factorial30-31b-20261127-v1"
 RESULT="budget_factorial_real31b.json"
 MODEL="gemma-4-31b-it-qat-w4a16-ct"
 IMAGE="gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461"
@@ -44,21 +44,21 @@ def cpu_render(previous,tasks,out):
         if t["instance_id"] not in used and s.strip() and not (len(s.strip())<160 and re.search(r"https?://",s)):
             candidates.append(t["instance_id"])
     candidates=sorted(candidates,key=lambda t:hashlib.sha256(("budget-factorial-independent-20261127-v1|"+t).encode()).hexdigest())
-    if len(candidates)<10:raise ValueError("fewer than ten unused non-pointer issues")
+    if len(candidates)<6:raise ValueError("fewer than six unused non-pointer issues")
     src=Path(TEMPLATE).read_text().split('if __name__ == "__main__":',1)[0]
     safe=SAFE_RUNTIME.replace("__SELECTED_IDS__",repr(candidates)).replace("gemma31_six_gold_noop_safe.json","budget_factorial_eligibility.json")
     safe=one(safe,"    rows=[]\n","    rows=[]\n    qualified=[]\n")
     safe=one(safe,'                    record[kind+"_pass"]=bool(v.resolved)','                    record[kind+"_pass"]=bool(v.resolved)\n                    if kind=="noop":record["noop_actual_test_failure"]=getattr(v,"test_exit_code",None)==1')
     safe=one(safe,'        rows.append(record)','        rows.append(record)\n        if record["gold_pass"] is True and record["noop_pass"] is False and record.get("noop_actual_test_failure") is True:\n            qualified.append(task_id)')
-    safe=one(safe,'    complete=[x for x in rows','        if len(qualified)==10:break\n    complete=[x for x in rows')
+    safe=one(safe,'    complete=[x for x in rows','        if len(qualified)==6:break\n    complete=[x for x in rows')
     safe=one(safe,'          "rows":rows,','          "rows":rows,"qualified_ids":qualified,"qualified_count":len(qualified),')
     safe=one(safe,'if k!="rows"','if k not in ("rows","qualified_ids")')
     write(out,src+"\n"+safe,CPU,False)
-    return {"excluded_previous_known":len(used),"candidate_count":len(candidates),"candidate_membership_sha256":hashlib.sha256("|".join(candidates).encode()).hexdigest(),"required_qualified":10,"no_gpu":True}
+    return {"excluded_previous_known":len(used),"candidate_count":len(candidates),"candidate_membership_sha256":hashlib.sha256("|".join(candidates).encode()).hexdigest(),"required_qualified":6,"no_gpu":True}
 def gpu_render(source,qualification,out):
     x=json.loads(qualification.read_text())
     ids=x["qualified_ids"]
-    assert x["qualified_count"]==10 and len(ids)==len(set(ids))==10 and not x["gpu"] and not x["model_inference"]
+    assert x["qualified_count"]==6 and len(ids)==len(set(ids))==6 and not x["gpu"] and not x["model_inference"]
     files=arm_files(_source_files(source.read_bytes()))
     assert hashlib.sha256(_pack(files["champion"])).hexdigest()==CHAMPION_SHA256
     payload=base64.b64encode(json.dumps(files["champion"],sort_keys=True).encode()).decode()
@@ -100,22 +100,22 @@ def gpu_render(source,qualification,out):
     a=src.index("        records: list[dict[str, object]] = []")
     b=src.index("    finally:\n",a)
     src=src[:a]+'''        records=[]
-        assert len(ORDER)==50 and len(set(ORDER))==50
+        assert len(ORDER)==30 and len(set(ORDER))==30
         assert set(ORDER)=={(t,a) for t in holdout_ids for a in arm_dirs}
         for index,(task_id,arm) in enumerate(ORDER,1):
             try:
-                result=run_maybe_async(evaluators[arm].evaluate_task(task=tasks_by_id[task_id],task_index=holdout_ids.index(task_id)+1,total_tasks=10))
+                result=run_maybe_async(evaluators[arm].evaluate_task(task=tasks_by_id[task_id],task_index=holdout_ids.index(task_id)+1,total_tasks=6))
                 record={"instance_id":task_id,"arm":arm,"status":"completed","resolved":bool(result.resolved),"duration_seconds":result.duration_seconds,"tool_calls":result.tool_calls,"has_patch":bool((result.agent_patch or "").strip()),"test_exit_code":result.test_exit_code}
             except BaseException as e:
                 record={"instance_id":task_id,"arm":arm,"status":"error","error_type":type(e).__name__,"resolved":False}
             records.append(record)
             SUMMARY_PATH.write_text(json.dumps({"status":"running","selected_public_dev_ids":holdout_ids,"results":records}))
-            print("FACTORIAL_PROGRESS="+str(index)+"/50",flush=True)
-        assert len(records)==50
+            print("FACTORIAL_PROGRESS="+str(index)+"/30",flush=True)
+        assert len(records)==30
         SUMMARY_PATH.write_text(json.dumps({"status":"completed","selected_public_dev_ids":holdout_ids,"results":records,"official_submission":False,"training":False}))
 '''+src[b:]
     write(out,src,GPU,True)
-    return {"tasks":10,"evaluations":50,"cohort_sha256":hashlib.sha256("|".join(ids).encode()).hexdigest(),"arms":ARMS,"bundle_hashes":{a:hashlib.sha256(_pack(f)).hexdigest() for a,f in files.items()},"official_submission":False}
+    return {"tasks":6,"evaluations":30,"cohort_sha256":hashlib.sha256("|".join(ids).encode()).hexdigest(),"arms":ARMS,"bundle_hashes":{a:hashlib.sha256(_pack(f)).hexdigest() for a,f in files.items()},"official_submission":False}
 def main():
     p=argparse.ArgumentParser();sub=p.add_subparsers(dest="mode",required=True)
     c=sub.add_parser("cpu");c.add_argument("--previous",type=Path,required=True);c.add_argument("--tasks",type=Path,required=True);c.add_argument("--out",type=Path,required=True)
