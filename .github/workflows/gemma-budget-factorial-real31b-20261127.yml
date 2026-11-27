@@ -1,4 +1,4 @@
-name: Gemma authorized five-arm factorial 6 fresh issues private GPU
+name: Gemma authorized five-arm factorial 6 reused valid issues exploratory private GPU
 on:
   push:
     branches: [exp/fork-v1-paired-20261127]
@@ -9,12 +9,11 @@ concurrency:
   cancel-in-progress: false
 jobs:
   qualify-and-run:
-    if: github.event.head_commit.message == 'GO_BUDGET_FACTORIAL_30_REAL31B_AUTHORIZED_20261127'
+    if: github.event.head_commit.message == 'GO_BUDGET_FACTORIAL_30_REUSED6_AUTHORIZED_20261127'
     runs-on: ubuntu-latest
     timeout-minutes: 355
     env:
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
-      CPU_KERNEL: kolihhan/gemma4-budget-factorial-eligibility6-20261127-v1
       GPU_KERNEL: kolihhan/gemma4-budget-factorial30-31b-20261127-v1
     steps:
       - uses: actions/checkout@v4
@@ -35,59 +34,30 @@ jobs:
           print("FACTORIAL_GPU_HOURS_REMAINING="+str(free),flush=True)
           if free<4.0:raise RuntimeError("GPU quota below four-hour gate for 30 trials")
           PY
-      - name: Recover only known prior cohort identities and select fresh CPU candidates
+      - name: Freeze six from previously validated 17 without using outcomes
         run: |
           set -euo pipefail
           root=/tmp/gemma-factorial
-          mkdir -p "$root"/{behavior,grammar,single,fork,public,source}
-          for key in behavior grammar single fork; do
-            case "$key" in
-              behavior) ref=kolihhan/gemma4-behavioral-paired-20261123-v1 ;;
-              grammar) ref=kolihhan/gemma4-edit-grammar-paired-20261124-v1 ;;
-              single) ref=kolihhan/gemma4-single-edit-channel-paired-20261124-v1 ;;
-              fork) ref=kolihhan/gemma4-fork-v1-paired-20261127 ;;
-            esac
-            st="$(kaggle kernels status "$ref" 2>&1)"
-            [[ "$st" == *KernelWorkerStatus.COMPLETE* ]]
-            kaggle kernels output "$ref" -p "$root/$key" -o >/dev/null
-          done
-          kaggle competitions download -c gemma-4-developer-agent -f tasks.jsonl -p "$root/public" -q >/dev/null
+          mkdir -p "$root"/{fork,eligible,source}
+          ref=kolihhan/gemma4-fork-v1-paired-20261127
+          st="$(kaggle kernels status "$ref" 2>&1)"
+          [[ "$st" == *KernelWorkerStatus.COMPLETE* ]]
+          kaggle kernels output "$ref" -p "$root/fork" -o >/dev/null
           python - <<'PY'
+          import hashlib,json
           from pathlib import Path
-          import zipfile
           root=Path("/tmp/gemma-factorial")
-          files=list((root/"public").iterdir());assert len(files)==1
-          f=files[0]
-          if zipfile.is_zipfile(f):
-              with zipfile.ZipFile(f) as z:
-                  names=[n for n in z.namelist() if Path(n).name=="tasks.jsonl"];assert len(names)==1
-                  (root/"tasks.jsonl").write_bytes(z.read(names[0]))
-          else:(root/"tasks.jsonl").write_bytes(f.read_bytes())
+          x=json.loads((root/"fork/paired_fork31b_results.json").read_text())
+          ids=sorted(x["selected_public_dev_ids"])
+          assert x["status"]=="completed" and len(ids)==len(set(ids))==17 and len(x["results"])==34
+          assert hashlib.sha256("|".join(ids).encode()).hexdigest()=="231db5d504930562c4dc78f696a56009635f02bfcf4a79023531d2a3a7eb8bd2"
+          # Deterministic selection by ID only, no score/patch/outcome selection.
+          selected=sorted(ids,key=lambda t:hashlib.sha256(("budget-factorial-exploratory-six-20261127-v1|"+t).encode()).hexdigest())[:6]
+          report={"qualified_count":6,"qualified_ids":selected,"gpu":False,"model_inference":False,"cohort_reused":True,"independent_holdout":False,"qualification_source":"previously verified frozen17"}
+          (root/"eligible/budget_factorial_eligibility.json").write_text(json.dumps(report))
+          print("FACTORIAL_REUSED_COHORT="+json.dumps({"tasks":6,"prior_valid_pool":17,"independent_holdout":False,"cohort_sha256":hashlib.sha256("|".join(selected).encode()).hexdigest()},sort_keys=True),flush=True)
           PY
-          python -m scripts.render_budget_factorial_real31b_20261127 cpu --previous "$root" --tasks "$root/tasks.jsonl" --out "$root/cpu"
-      - name: One private CPU qualification, no inference
-        run: |
-          set -euo pipefail
-          root=/tmp/gemma-factorial
-          if kaggle kernels status "$CPU_KERNEL" >/dev/null 2>&1; then echo STOP_DUPLICATE_CPU;exit 1;fi
-          kaggle kernels push -p "$root/cpu" -t 4200 >"$root/cpu-push.log" 2>&1 || { echo CPU_PUSH_FAILED;exit 1; }
-          echo FACTORIAL_CPU_KERNEL_PUSHED
-          for i in $(seq 1 145); do
-            st="$(kaggle kernels status "$CPU_KERNEL" 2>&1 || true)"
-            case "$st" in
-              *KernelWorkerStatus.COMPLETE*) mkdir "$root/eligible";kaggle kernels output "$CPU_KERNEL" -p "$root/eligible" -o >/dev/null;break ;;
-              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*|*KernelWorkerStatus.CANCELLED*) echo CPU_KERNEL_FAILED;exit 1 ;;
-            esac
-            sleep 30
-          done
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          x=json.loads(Path("/tmp/gemma-factorial/eligible/budget_factorial_eligibility.json").read_text())
-          print("FACTORIAL_CPU_ELIGIBILITY="+json.dumps({k:v for k,v in x.items() if k not in ("rows","qualified_ids")},sort_keys=True),flush=True)
-          assert x["qualified_count"]==6 and len(set(x["qualified_ids"]))==6
-          PY
-      - name: Render 30 evaluations from exact scored Champion and passed CPU cohort
+      - name: Render 30 evaluations from exact scored Champion and previously validated reused cohort
         run: |
           set -euo pipefail
           root=/tmp/gemma-factorial
@@ -127,7 +97,9 @@ jobs:
           q=json.loads((root/"eligible/budget_factorial_eligibility.json").read_text())
           assert x["status"]=="completed" and x["official_submission"] is False and x["training"] is False
           assert x["selected_public_dev_ids"]==q["qualified_ids"]
-          print("FACTORIAL_ACTUAL_SCORE="+json.dumps(assess(x["results"],q["qualified_ids"]),sort_keys=True),flush=True)
+          report=assess(x["results"],q["qualified_ids"])
+          report.update(cohort_reused=True,independent_holdout=False,exploratory_only=True)
+          print("FACTORIAL_ACTUAL_SCORE="+json.dumps(report,sort_keys=True),flush=True)
           PY
       - name: Remove private files
         if: always()
