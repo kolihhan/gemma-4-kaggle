@@ -1,0 +1,134 @@
+name: Gemma authorized five-arm factorial 10 fresh issues private GPU
+on:
+  push:
+    branches: [exp/fork-v1-paired-20261127]
+    paths: [.github/workflows/gemma-budget-factorial-real31b-20261127.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-budget-factorial-real31b-20261127
+  cancel-in-progress: false
+jobs:
+  qualify-and-run:
+    if: github.event.head_commit.message == 'GO_BUDGET_FACTORIAL_50_REAL31B_AUTHORIZED_20261127'
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      CPU_KERNEL: kolihhan/gemma4-budget-factorial-eligibility-20261127-v1
+      GPU_KERNEL: kolihhan/gemma4-budget-factorial-31b-20261127-v1
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: CPU tests and GPU quota gate before any new execution
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.test_budget_factorial_20261127 tests.test_build_toolcap60_timeout_recovery
+          python -m py_compile scripts/render_budget_factorial_real31b_20261127.py
+          pip install -q kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import subprocess,json
+          q=[x for x in json.loads(subprocess.run(["kaggle","quota","--format","json"],capture_output=True,text=True,timeout=75,check=True).stdout) if x.get("resource")=="GPU"]
+          assert len(q)==1
+          free=float(str(q[0]["remaining"]).rstrip("h"))
+          print("FACTORIAL_GPU_HOURS_REMAINING="+str(free),flush=True)
+          if free<6:raise RuntimeError("GPU quota below six-hour conservative gate")
+          PY
+      - name: Recover only known prior cohort identities and select fresh CPU candidates
+        run: |
+          set -euo pipefail
+          root=/tmp/gemma-factorial
+          mkdir -p "$root"/{behavior,grammar,single,fork,public,source}
+          for key in behavior grammar single fork; do
+            case "$key" in
+              behavior) ref=kolihhan/gemma4-behavioral-paired-20261123-v1 ;;
+              grammar) ref=kolihhan/gemma4-edit-grammar-paired-20261124-v1 ;;
+              single) ref=kolihhan/gemma4-single-edit-channel-paired-20261124-v1 ;;
+              fork) ref=kolihhan/gemma4-fork-v1-paired-20261127 ;;
+            esac
+            st="$(kaggle kernels status "$ref" 2>&1)"
+            [[ "$st" == *KernelWorkerStatus.COMPLETE* ]]
+            kaggle kernels output "$ref" -p "$root/$key" -o >/dev/null
+          done
+          kaggle competitions download -c gemma-4-developer-agent -f tasks.jsonl -p "$root/public" -q >/dev/null
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+          root=Path("/tmp/gemma-factorial")
+          files=list((root/"public").iterdir());assert len(files)==1
+          f=files[0]
+          if zipfile.is_zipfile(f):
+              with zipfile.ZipFile(f) as z:
+                  names=[n for n in z.namelist() if Path(n).name=="tasks.jsonl"];assert len(names)==1
+                  (root/"tasks.jsonl").write_bytes(z.read(names[0]))
+          else:(root/"tasks.jsonl").write_bytes(f.read_bytes())
+          PY
+          python -m scripts.render_budget_factorial_real31b_20261127 cpu --previous "$root" --tasks "$root/tasks.jsonl" --out "$root/cpu"
+      - name: One private CPU qualification, no inference
+        run: |
+          set -euo pipefail
+          root=/tmp/gemma-factorial
+          if kaggle kernels status "$CPU_KERNEL" >/dev/null 2>&1; then echo STOP_DUPLICATE_CPU;exit 1;fi
+          kaggle kernels push -p "$root/cpu" -t 4200 >"$root/cpu-push.log" 2>&1 || { echo CPU_PUSH_FAILED;exit 1; }
+          echo FACTORIAL_CPU_KERNEL_PUSHED
+          for i in $(seq 1 145); do
+            st="$(kaggle kernels status "$CPU_KERNEL" 2>&1 || true)"
+            case "$st" in
+              *KernelWorkerStatus.COMPLETE*) mkdir "$root/eligible";kaggle kernels output "$CPU_KERNEL" -p "$root/eligible" -o >/dev/null;break ;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*|*KernelWorkerStatus.CANCELLED*) echo CPU_KERNEL_FAILED;exit 1 ;;
+            esac
+            sleep 30
+          done
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          x=json.loads(Path("/tmp/gemma-factorial/eligible/budget_factorial_eligibility.json").read_text())
+          print("FACTORIAL_CPU_ELIGIBILITY="+json.dumps({k:v for k,v in x.items() if k not in ("rows","qualified_ids")},sort_keys=True),flush=True)
+          assert x["qualified_count"]==10 and len(set(x["qualified_ids"]))==10
+          PY
+      - name: Render 50 evaluations from exact scored Champion and passed CPU cohort
+        run: |
+          set -euo pipefail
+          root=/tmp/gemma-factorial
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p "$root/source" -o >/dev/null
+          python -m scripts.render_budget_factorial_real31b_20261127 gpu --source "$root/source/submission.zip" --qualification "$root/eligible/budget_factorial_eligibility.json" --out "$root/gpu"
+          python - <<'PY'
+          import json,subprocess
+          from pathlib import Path
+          root=Path("/tmp/gemma-factorial/gpu")
+          x=json.loads((root/"kernel-metadata.json").read_text())
+          assert x["is_private"] and x["enable_gpu"] and not x["enable_internet"] and not x["enable_tpu"]
+          q=[x for x in json.loads(subprocess.run(["kaggle","quota","--format","json"],capture_output=True,text=True,timeout=75,check=True).stdout) if x.get("resource")=="GPU"]
+          assert len(q)==1 and float(str(q[0]["remaining"]).rstrip("h"))>=6
+          PY
+      - name: Launch authorized private 31B GPU once, never official submit
+        run: |
+          set -euo pipefail
+          root=/tmp/gemma-factorial
+          if kaggle kernels status "$GPU_KERNEL" >/dev/null 2>&1; then echo STOP_DUPLICATE_GPU;exit 1;fi
+          kaggle kernels push -p "$root/gpu" --accelerator NvidiaL4 -t 18000 >"$root/gpu-push.log" 2>&1 || { echo GPU_PUSH_FAILED;exit 1; }
+          echo FACTORIAL_50_PRIVATE_GPU_PUSHED
+          for i in $(seq 1 275); do
+            st="$(kaggle kernels status "$GPU_KERNEL" 2>&1 || true)"
+            case "$st" in
+              *KernelWorkerStatus.COMPLETE*) mkdir "$root/results";kaggle kernels output "$GPU_KERNEL" -p "$root/results" -o >/dev/null;break ;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*|*KernelWorkerStatus.CANCELLED*) echo GPU_KERNEL_FAILED;exit 1 ;;
+            esac
+            if (( i % 15 == 0 ));then echo FACTORIAL_GPU_POLL="$i";fi
+            sleep 60
+          done
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.budget_factorial_20261127 import assess
+          root=Path("/tmp/gemma-factorial")
+          x=json.loads((root/"results/budget_factorial_real31b.json").read_text())
+          q=json.loads((root/"eligible/budget_factorial_eligibility.json").read_text())
+          assert x["status"]=="completed" and x["official_submission"] is False and x["training"] is False
+          assert x["selected_public_dev_ids"]==q["qualified_ids"]
+          print("FACTORIAL_ACTUAL_SCORE="+json.dumps(assess(x["results"],q["qualified_ids"]),sort_keys=True),flush=True)
+          PY
+      - name: Remove private files
+        if: always()
+        run: rm -rf /tmp/gemma-factorial
