@@ -1,0 +1,73 @@
+name: Gemma visible witness replay schema repair CPU only
+on:
+  push:
+    branches: [exp/fork-v1-paired-20261127]
+    paths: [.github/workflows/gemma-visible-witness-replay-v2-20261127.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-visible-witness-replay-20261127
+  cancel-in-progress: false
+jobs:
+  replay:
+    if: github.event.head_commit.message == 'GO_VISIBLE_WITNESS_REPLAY_V2_CPU_20261127'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL: kolihhan/gemma4-visible-witness-replay-20261127-v2
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read existing private completed model artifacts, select only safe visible pytest targets
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          root=/tmp/gemma-visible-witness
+          mkdir -p "$root/fork" "$root/prior"
+          for k in kolihhan/gemma4-fork-v1-paired-20261127 kolihhan/gemma4-multisurface-clean17-paired-20261126-v1; do
+            status="$(kaggle kernels status "$k" 2>&1)"
+            [[ "$status" == *KernelWorkerStatus.COMPLETE* ]]
+          done
+          kaggle kernels output kolihhan/gemma4-fork-v1-paired-20261127 -p "$root/fork" -o >/dev/null
+          kaggle kernels output kolihhan/gemma4-multisurface-clean17-paired-20261126-v1 -p "$root/prior" -o >/dev/null
+          python -m scripts.prepare_visible_witness_replay_v2_20261127 --fork "$root/fork" --prior "$root/prior" --out "$root/rendered"
+      - name: Run private CPU replay once, only if a stable failure has a safe target
+        run: |
+          set -euo pipefail
+          root=/tmp/gemma-visible-witness
+          if [[ ! -d "$root/rendered" ]]; then echo NO_ELIGIBLE_STABLE_FAILURE_TARGET; exit 0; fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("/tmp/gemma-visible-witness/rendered")
+          m=json.loads((p/"kernel-metadata.json").read_text())
+          assert m["is_private"] and not m["enable_gpu"] and not m["enable_tpu"] and not m["enable_internet"] and not m["model_sources"]
+          compile((p/"main.py").read_text(),"private_cpu_replay.py","exec")
+          PY
+          if kaggle kernels status "$KERNEL" >/tmp/gemma-existing-witness 2>&1; then echo "STOP_DUPLICATE_KERNEL"; exit 1; fi
+          kaggle kernels push -p "$root/rendered" -t 4200 >"$root/push.log" 2>&1 || { echo "PRIVATE_CPU_PUSH_FAILED"; exit 1; }
+          echo "PRIVATE_CPU_KERNEL_PUSHED=$KERNEL"
+          for i in $(seq 1 150); do
+            status="$(kaggle kernels status "$KERNEL" 2>&1 || true)"
+            if [[ "$status" == *KernelWorkerStatus.COMPLETE* ]]; then
+              mkdir -p "$root/result"
+              kaggle kernels output "$KERNEL" -p "$root/result" -o >/dev/null
+              python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("/tmp/gemma-visible-witness/result/visible_witness_replay_safe.json")
+          x=json.loads(p.read_text())
+          assert x["new_gpu"] is False and x["model_inference"] is False and x["official_submission"] is False
+          print("VISIBLE_REPLAY_RESULT="+json.dumps(x,sort_keys=True),flush=True)
+          if x["actual_informative_controls"]==0:raise SystemExit("NO_INFORMATIVE_WITNESS_CONTROLS")
+          PY
+              exit 0
+            elif [[ "$status" == *KernelWorkerStatus.ERROR* || "$status" == *KernelWorkerStatus.FAILED* || "$status" == *KernelWorkerStatus.CANCELLED* ]]; then echo "PRIVATE_CPU_KERNEL_ERROR"; exit 1; fi
+            sleep 25
+          done
+          echo PRIVATE_CPU_REPLAY_STILL_PENDING
+      - name: Remove private files
+        if: always()
+        run: rm -rf /tmp/gemma-visible-witness /tmp/gemma-existing-witness
