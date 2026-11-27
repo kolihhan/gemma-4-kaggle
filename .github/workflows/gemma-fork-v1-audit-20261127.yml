@@ -1,0 +1,70 @@
+name: FORK V1 retrospective CPU audit and live score ledger
+on:
+  push:
+    branches: [exp/fork-v1-paired-20261127]
+    paths: [.github/workflows/gemma-fork-v1-audit-20261127.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-fork-v1-cpu-audit-20261127
+  cancel-in-progress: false
+jobs:
+  audit:
+    if: github.event.head_commit.message == 'GO_FORK_V1_READONLY_CPU_AUDIT_20261127'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Authenticate and check live official scores without submitting
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          python -m py_compile scripts/audit_fork_v1_20261127.py
+          python - <<'PY'
+          import json
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions
+          rows=authenticated_submissions()
+          print("FORK_OFFICIAL_LEDGER="+json.dumps([{k:r.get(k) for k in ("ref","status","publicScore")} for r in rows if str(r.get("ref")) in {"58183466","58931890"}]))
+          PY
+      - name: Read only existing private completed GPU artifacts
+        run: |
+          set -euo pipefail
+          root=/tmp/gemma-fork-cpu-audit
+          mkdir -p "$root/fork" "$root/prior" "$root/reference"
+          for kernel in kolihhan/gemma4-fork-v1-paired-20261127 kolihhan/gemma4-multisurface-clean17-paired-20261126-v1; do
+            status="$(kaggle kernels status "$kernel" 2>&1)"
+            [[ "$status" == *KernelWorkerStatus.COMPLETE* ]]
+          done
+          kaggle kernels output kolihhan/gemma4-fork-v1-paired-20261127 -p "$root/fork" -o >/dev/null
+          kaggle kernels output kolihhan/gemma4-multisurface-clean17-paired-20261126-v1 -p "$root/prior" -o >/dev/null
+          kaggle competitions download -c gemma-4-developer-agent -f tasks.jsonl -p "$root/reference" -q >/dev/null
+      - name: Retrospective patch and trace audit, emit only safe aggregates
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+          from scripts.audit_fork_v1_20261127 import run
+          root=Path("/tmp/gemma-fork-cpu-audit")
+          try:
+              files=list((root/"reference").iterdir())
+              assert len(files)==1
+              tasks=files[0]
+              if zipfile.is_zipfile(tasks):
+                  with zipfile.ZipFile(tasks) as archive:
+                      names=[n for n in archive.namelist() if Path(n).name=="tasks.jsonl"]
+                      assert len(names)==1
+                      tasks=root/"tasks.jsonl"
+                      tasks.write_bytes(archive.read(names[0]))
+              run(root/"fork",tasks,root/"prior")
+          except Exception as e:
+              print("FORK_CPU_AUDIT_ERROR_TYPE="+type(e).__name__)
+              raise SystemExit(1)
+          PY
+      - name: Delete private working files
+        if: always()
+        run: rm -rf /tmp/gemma-fork-cpu-audit
