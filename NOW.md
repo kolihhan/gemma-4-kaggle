@@ -1,3 +1,9 @@
+# 2026-11-29 — CORE6 coherent tool-interface ablation, bounded private pilot
+
+[First CORE6 #46164294983](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/46164294983) stopped before GPU because Champion explicitly references graph tools. Renderer now removes exactly the observed graph-specific instruction plus three graph tool declarations, not a pure YAML-only intervention. [Corrected run #46168358343](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/46168358343) in progress; 4 deterministically selected reused gold/noop-valid issues, 8 matched evaluations, 31B, same 5min/60 calls/80 turns/sampling, private no-training, 2h quota gate, no submission or promotion. No confirmed GPU launch at checkpoint. [Research and limits](docs/research/2026-11-29-directional-localization-review.md). GraphScent notebook structural audit success but no verified scoring-time deployment. Last official Champion .18 and C pending at 22:13 MYT Nov28, no new receipt, Private unknown.
+
+---
+
 # 2026-11-28 — Final-window authenticated receipts; preserve exact Champion
 
 [Read-only #46153549433](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/46153549433) SUCCESS, 14:13 UTC / 22:13 MYT. 22 receipts, 17 numeric Public scores, four COMPLETE blank, one pending. Champion #58183466 .18, Multisurface #58931890 .17, base-evidence-retry #58081411 .17, Budget-Fit #58019162 .17. C #59001063 still PENDING, exact remote ZIP reverified against pinned SHA; only sampling config differs from exact Champion. [Final-window decision](docs/research/2026-11-28-final-window-decision.md). GraphScent localization evidence is not repair evidence; full paper unavailable. No GPU, model, training, new Kaggle kernel, submission or final selection changes. Private unknown. No replacement of frozen failed diagnostic and no duplicate submission while C pending.
