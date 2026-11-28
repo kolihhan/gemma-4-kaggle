@@ -9,7 +9,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   paired:
-    if: github.event.head_commit.message == 'GO_CORE6_VERIFIED_ABSENCE_8_PRIVATE_20261129'
+    if: github.event.head_commit.message == 'GO_CORE6_STRUCTURED_SDK_8_PRIVATE_20261129'
     runs-on: ubuntu-latest
     timeout-minutes: 130
     env:
@@ -42,31 +42,8 @@ jobs:
           print("CORE6_GPU_HOURS_REMAINING="+str(free),flush=True)
           if free<2:raise RuntimeError("less than two hours of GPU quota")
           PY
-          python - <<'PY'
-          import csv,io,json,os,re,subprocess
-          target=os.environ["GPU_KERNEL"].lower()
-          slug=target.split("/",1)[1]
-          def call(args):
-              return subprocess.run(["kaggle",*args],capture_output=True,text=True,timeout=75)
-          status=call(["kernels","status",target])
-          raw=status.stdout+"\n"+status.stderr
-          # Treat actual worker states as existence, even with unexpected exit code.
-          if re.search(r"KernelWorkerStatus\.(COMPLETE|RUNNING|QUEUED|ERROR|FAILED|CANCELLED|PENDING|SUBMITTED)",raw,re.I):
-              raise RuntimeError("CORE6_DUPLICATE_GUARD")
-          # Some CLI versions return an opaque status for an absent slug.
-          # Use the authenticated owner's exact search, not any arbitrary nonzero exit.
-          listing=call(["kernels","list","--mine","--search",slug,"--page","1","--page-size","100","--csv"])
-          if listing.returncode!=0:
-              print("CORE6_ABSENCE_CHECK_BLOCKED="+json.dumps({"status_rc":status.returncode,"list_rc":listing.returncode,"status_404":bool(re.search(r"404|not found|does not exist",raw,re.I))}),flush=True)
-              raise RuntimeError("owner notebook listing unavailable")
-          rows=list(csv.DictReader(io.StringIO(listing.stdout.lstrip("\ufeff"))))
-          header=csv.DictReader(io.StringIO(listing.stdout.lstrip("\ufeff"))).fieldnames or []
-          if "ref" not in header or len(rows)>=100 or any(not r.get("ref") for r in rows):
-              raise RuntimeError("unverified or truncated owner search result")
-          if any(r["ref"].strip().lower()==target for r in rows):
-              raise RuntimeError("CORE6_DUPLICATE_GUARD")
-          print("CORE6_ABSENCE_VERIFIED="+json.dumps({"owner_search_complete":True,"matching_rows":len(rows),"exact_ref_found":False,"status_rc":status.returncode}),flush=True)
-          PY
+          python -m unittest -v tests.test_kaggle_kernel_absence_guard
+          python -m scripts.kaggle_kernel_absence_guard "$GPU_KERNEL"
           kaggle kernels push -p "$root/gpu" --accelerator NvidiaL4 -t 6600 >"$root/push.log" 2>&1 || { echo CORE6_PUSH_BLOCKED;exit 1; }
           echo CORE6_PRIVATE_GPU_PUSH_ACCEPTED
           for i in $(seq 1 115); do
