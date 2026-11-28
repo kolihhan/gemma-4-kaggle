@@ -1,0 +1,36 @@
+name: Gemma pre-edit evidence retrospective CPU only
+on:
+  push:
+    branches: [research/independent-reset-20261128]
+    paths: [.github/workflows/gemma-preedit-evidence-readonly-20261128.yml]
+permissions: {contents: read}
+jobs:
+  audit:
+    if: github.event.head_commit.message == 'GO_PREEDIT_EVIDENCE_READONLY_20261128'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Smoke test before downloading private records
+        run: |
+          set -euo pipefail
+          python -c 'from scripts.audit_preedit_evidence_20261128 import smoke; smoke(); print("SMOKE_PASS")'
+      - name: Read already completed private traces
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          root="$(mktemp -d)"
+          trap 'rm -rf "$root"' EXIT
+          mkdir "$root/fork" "$root/prior"
+          for ref in kolihhan/gemma4-fork-v1-paired-20261127 kolihhan/gemma4-multisurface-clean17-paired-20261126-v1; do
+            st="$(kaggle kernels status "$ref" 2>&1)" || { echo TRACE_STATUS_BLOCKED; exit 1; }
+            [[ "$st" == *KernelWorkerStatus.COMPLETE* ]] || { echo TRACE_NOT_COMPLETE; exit 1; }
+          done
+          kaggle kernels output kolihhan/gemma4-fork-v1-paired-20261127 -p "$root/fork" -o >"$root/fork.log" 2>&1 || { echo FORK_DOWNLOAD_BLOCKED; exit 1; }
+          kaggle kernels output kolihhan/gemma4-multisurface-clean17-paired-20261126-v1 -p "$root/prior" -o >"$root/prior.log" 2>&1 || { echo PRIOR_DOWNLOAD_BLOCKED; exit 1; }
+          python -m scripts.audit_preedit_evidence_20261128 "$root/fork" "$root/prior" 2>"$root/error.log" || { echo PREEDIT_AUDIT_BLOCKED; exit 1; }
