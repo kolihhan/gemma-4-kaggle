@@ -1,0 +1,60 @@
+name: Gemma action recovery and exact callback boundary CPU audit
+on:
+  push:
+    branches: [research/independent-reset-20261128]
+    paths: [.github/workflows/gemma-action-recovery-readonly-20261128.yml]
+permissions: {contents: read}
+jobs:
+  audit:
+    if: github.event.head_commit.message == 'GO_ACTION_RECOVERY_READONLY_20261128'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Verify parser, inspect exact compiler integration, and audit retained action feedback
+        run: |
+          set -euo pipefail
+          python -c 'from scripts.audit_action_recovery_20261128 import smoke; smoke(); print("RECOVERY_SMOKE_PASS")'
+          pip install -q kaggle==2.2.5 six==1.17.0
+          root="$(mktemp -d)"
+          trap 'rm -rf "$root"' EXIT
+          export AUDIT_ROOT="$root"
+          for wheel in adk_submission-0.2.13-py3-none-any.whl swegemma-0.2.11-py3-none-any.whl; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel" -p "$root" --unzip >"$root/wheel.log" 2>&1 || { echo WHEEL_DOWNLOAD_BLOCKED;exit 1; }
+          done
+          python - <<'PY'
+          import ast,hashlib,json,os,zipfile
+          from pathlib import Path
+          root=Path(os.environ["AUDIT_ROOT"])
+          hashes={"adk_submission-0.2.13-py3-none-any.whl":"f156f0bd84580ccb9334726d114d7a5481f16d3a6e2887cc4d276ced0ef8d99d","swegemma-0.2.11-py3-none-any.whl":"9ad876581f3acde8ec3c369858f0834e2b9f41a3cffce3ca42f09cb090aea9d3"}
+          trees={}
+          for filename,sha in hashes.items():
+              p=root/filename
+              assert hashlib.sha256(p.read_bytes()).hexdigest()==sha
+              with zipfile.ZipFile(p) as z:
+                  for name in z.namelist():
+                      if name.endswith(".py") and name.startswith(("swegemma/","adk_submission/")):
+                          trees[name]=ast.parse(z.read(name).decode())
+          def name(n):
+              return n.id if isinstance(n,ast.Name) else n.attr if isinstance(n,ast.Attribute) else ""
+          def calls(tree,symbol):
+              return [x for x in ast.walk(tree) if isinstance(x,ast.Call) and name(x.func)==symbol]
+          runner=trees["swegemma/harness/agent_runner.py"]
+          compiler=trees["adk_submission/compiler.py"]
+          compile_fn=next(x for x in compiler.body if isinstance(x,ast.FunctionDef) and x.name=="compile_submission")
+          compiler_calls=[{"line":x.lineno,"keywords":[k.arg for k in x.keywords],"positional_count":len(x.args)} for x in calls(runner,"compile_submission")]
+          registry_constructions=[{"module":path,"line":x.lineno,"keywords":[k.arg for k in x.keywords],"positional_count":len(x.args)} for path,tree in trees.items() for x in calls(tree,"CallbackRegistry")]
+          defaults={a.arg:ast.unparse(d) if isinstance(d,(ast.Constant,ast.Name)) else type(d).__name__ for a,d in zip(compile_fn.args.kwonlyargs,compile_fn.args.kw_defaults) if d is not None}
+          callback_uses=[{"line":x.lineno,"kind":type(x).__name__} for x in ast.walk(compile_fn) if isinstance(x,ast.Name) and x.id=="callback_registry"]
+          print("EXACT_CALLBACK_BOUNDARY="+json.dumps({"compiler_calls":compiler_calls,"registry_constructions":registry_constructions,"compiler_callback_default":defaults.get("callback_registry","not_keyword_only"),"callback_uses":callback_uses},sort_keys=True),flush=True)
+          assert compiler_calls
+          PY
+          mkdir "$root/fork" "$root/prior"
+          kaggle kernels output kolihhan/gemma4-fork-v1-paired-20261127 -p "$root/fork" -o >"$root/fork.log" 2>&1 || { echo FORK_DOWNLOAD_BLOCKED;exit 1; }
+          kaggle kernels output kolihhan/gemma4-multisurface-clean17-paired-20261126-v1 -p "$root/prior" -o >"$root/prior.log" 2>&1 || { echo PRIOR_DOWNLOAD_BLOCKED;exit 1; }
+          python -m scripts.audit_action_recovery_20261128 "$root/fork" "$root/prior" 2>"$root/recovery.log" || { echo ACTION_AUDIT_BLOCKED;exit 1; }
