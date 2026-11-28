@@ -1,0 +1,53 @@
+name: Gemma Kaggle launch boundary read-only diagnosis
+on:
+  push:
+    branches: [research/independent-reset-20261128]
+    paths: [.github/workflows/gemma-kaggle-launch-boundary-debug-20261129.yml]
+permissions: {contents: read}
+jobs:
+  diagnose:
+    if: github.event.head_commit.message == 'GO_KAGGLE_LAUNCH_BOUNDARY_READONLY_20261129'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import csv,io,inspect,json,subprocess,re
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          from importlib.metadata import version
+          api=KaggleApi();api.authenticate()
+          print("SDK_VERSION="+version("kaggle"),flush=True)
+          for name in ("kernels_status","kernels_list","kernels_list_cli","kernels_status_cli"):
+              method=getattr(api,name,None)
+              if method:
+                  print("SDK_METHOD="+name+" "+str(inspect.signature(method)),flush=True)
+                  print(inspect.getsource(method)[:14000],flush=True)
+          targets={"known_existing":"kolihhan/gemma4-fork-v1-paired-20261127","candidate":"kolihhan/gemma4-core6-structural-paired-20261129-v1"}
+          def run(args):
+              return subprocess.run(["kaggle",*args],capture_output=True,text=True,timeout=75)
+          for label,target in targets.items():
+              for kind,args in (("status",["kernels","status",target]),("list",["kernels","list","--mine","--search",target.split("/",1)[1],"--page","1","--page-size","100","--csv"])):
+                  r=run(args)
+                  # Do not print titles, notebook content, credentials or arbitrary API text.
+                  raw=r.stdout+"\n"+r.stderr
+                  reader=csv.DictReader(io.StringIO(r.stdout.lstrip("\ufeff")))
+                  rows=list(reader)
+                  print("CLI_BOUNDARY="+json.dumps({"label":label,"kind":kind,"rc":r.returncode,"stdout_bytes":len(r.stdout),"stderr_bytes":len(r.stderr),"header":reader.fieldnames if reader.fieldnames and all(re.fullmatch(r"[A-Za-z_ ]+",x) for x in reader.fieldnames) else None,"row_count":len(rows),"exact_ref":sum(target.lower()==str(x.get("ref","")).lower() for x in rows),"worker_state":re.findall(r"KernelWorkerStatus\.[A-Z_]+",raw),"known_error_markers":[x for x in ("404","403","401","not found","No kernels found","No notebooks found","No results","UNKNOWN","None","unrecognized arguments","error") if x.lower() in raw.lower()]}),flush=True)
+              for name in ("kernels_status","kernels_list"):
+                  try:
+                      if name=="kernels_status":obj=api.kernels_status(target)
+                      else:obj=api.kernels_list(mine=True,search=target.split("/",1)[1],page=1,page_size=100)
+                      if isinstance(obj,list):
+                          print("SDK_BOUNDARY="+json.dumps({"label":label,"method":name,"type":type(obj).__name__,"count":len(obj),"exact_ref":sum(str(getattr(x,"ref","")).lower()==target.lower() for x in obj)}),flush=True)
+                      else:
+                          print("SDK_BOUNDARY="+json.dumps({"label":label,"method":name,"type":type(obj).__name__,"fields":sorted(getattr(obj,"__dict__",{}).keys()),"status":str(getattr(obj,"status",None)),"worker_status":str(getattr(obj,"worker_status",None))}),flush=True)
+                  except Exception as e:
+                      resp=getattr(e,"response",None)
+                      print("SDK_BOUNDARY="+json.dumps({"label":label,"method":name,"error_class":type(e).__name__,"http":getattr(resp,"status_code",None),"status":getattr(e,"status",None),"not_found":bool(re.search(r"404|not found|does not exist",str(e),re.I))},default=str),flush=True)
+          PY
