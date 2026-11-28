@@ -1,3 +1,9 @@
+# 2026-11-28 — Final-window authenticated receipts; preserve exact Champion
+
+[Read-only #46153549433](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/46153549433) SUCCESS, 14:13 UTC / 22:13 MYT. 22 receipts, 17 numeric Public scores, four COMPLETE blank, one pending. Champion #58183466 .18, Multisurface #58931890 .17, base-evidence-retry #58081411 .17, Budget-Fit #58019162 .17. C #59001063 still PENDING, exact remote ZIP reverified against pinned SHA; only sampling config differs from exact Champion. [Final-window decision](docs/research/2026-11-28-final-window-decision.md). GraphScent localization evidence is not repair evidence; full paper unavailable. No GPU, model, training, new Kaggle kernel, submission or final selection changes. Private unknown. No replacement of frozen failed diagnostic and no duplicate submission while C pending.
+
+---
+
 # 2026-11-28 — Frozen semantic diagnostic STOP (ineligible control)
 
 [Action #46150790856](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/46150790856) terminal FAILURE: MechanicalSoup #455 noop F2P 0/2 pass, gold 2/2 pass; both P2P 116/117 pass and one missing, upstream resolved=false. Strict eligibility false. Follow preregistered no-replacement gate; do not alter scoring or substitute already-inspected CodeCarbon/LiteLLM. No model request captured or witness constructed for fresh eligible case, no 31B inference, GPU, training, or submission. [Terminal record](docs/research/2026-11-28-semantic-policy-decision.md). CPU audit loop stopped; no deployable improvement established. Last authenticated Public .18, C pending at last check, Private unknown.
