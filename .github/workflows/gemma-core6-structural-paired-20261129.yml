@@ -1,0 +1,65 @@
+name: Gemma CORE6 structural ablation four reused development cases private GPU
+on:
+  push:
+    branches: [research/independent-reset-20261128]
+    paths: [.github/workflows/gemma-core6-structural-paired-20261129.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-core6-structural-20261129
+  cancel-in-progress: false
+jobs:
+  paired:
+    if: github.event.head_commit.message == 'GO_CORE6_STRUCTURAL_8_PRIVATE_20261129'
+    runs-on: ubuntu-latest
+    timeout-minutes: 130
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      GPU_KERNEL: kolihhan/gemma4-core6-structural-paired-20261129-v1
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Freeze exact source and render one paired experiment
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/render_core6_structural_paired_20261129.py
+          pip install -q kaggle==2.2.5 six==1.17.0
+          root=/tmp/gemma-core6
+          mkdir -p "$root"/{source,prior}
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p "$root/source" -o >/dev/null
+          kaggle kernels output kolihhan/gemma4-fork-v1-paired-20261127 -p "$root/prior" -o >/dev/null
+          python -m scripts.render_core6_structural_paired_20261129 --source "$root/source/submission.zip" --previous "$root/prior/paired_fork31b_results.json" --out "$root/gpu"
+      - name: Confirm quota and one-time absence, then launch authorized private pilot
+        run: |
+          set -euo pipefail
+          root=/tmp/gemma-core6
+          python - <<'PY'
+          import json,subprocess
+          q=[x for x in json.loads(subprocess.run(["kaggle","quota","--format","json"],capture_output=True,text=True,timeout=75,check=True).stdout) if x.get("resource")=="GPU"]
+          assert len(q)==1
+          free=float(str(q[0]["remaining"]).rstrip("h"))
+          print("CORE6_GPU_HOURS_REMAINING="+str(free),flush=True)
+          if free<2:raise RuntimeError("less than two hours of GPU quota")
+          PY
+          set +e
+          kaggle kernels status "$GPU_KERNEL" >"$root/status.log" 2>&1
+          rc=$?
+          set -e
+          if (( rc == 0 ));then echo CORE6_DUPLICATE_GUARD;exit 1;fi
+          if ! grep -Eiq '404|not found|does not exist' "$root/status.log";then echo CORE6_STATUS_NOT_CONFIRMED_ABSENT;exit 1;fi
+          kaggle kernels push -p "$root/gpu" --accelerator NvidiaL4 -t 6600 >"$root/push.log" 2>&1 || { echo CORE6_PUSH_BLOCKED;exit 1; }
+          echo CORE6_PRIVATE_GPU_PUSH_ACCEPTED
+          for i in $(seq 1 115); do
+            st="$(kaggle kernels status "$GPU_KERNEL" 2>&1 || true)"
+            case "$st" in
+              *KernelWorkerStatus.COMPLETE*) mkdir "$root/results";kaggle kernels output "$GPU_KERNEL" -p "$root/results" -o >/dev/null;break ;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.FAILED*|*KernelWorkerStatus.CANCELLED*) echo CORE6_KERNEL_FAILED;exit 1 ;;
+            esac
+            if (( i % 10 == 0 ));then echo CORE6_POLL="$i";fi
+            sleep 60
+          done
+          python -m scripts.render_core6_structural_paired_20261129 --previous "$root/prior/paired_fork31b_results.json" --assess "$root/results/core6_structural_paired.json"
+      - name: Remove private data
+        if: always()
+        run: rm -rf /tmp/gemma-core6
