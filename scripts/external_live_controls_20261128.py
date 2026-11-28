@@ -26,9 +26,9 @@ def as_list(v):
     return json.loads(v) if isinstance(v, str) else list(v or [])
 
 
-def select():
+def select(revision=None, count=2, exclude_extra=()):
     # Resolve and pin one dataset revision before selection.
-    revision = HfApi().dataset_info(DATASET).sha
+    revision = revision or HfApi().dataset_info(DATASET).sha
     assert re.fullmatch(r"[0-9a-f]{40}", revision)
     import urllib.request
     url = f"https://raw.githubusercontent.com/lspecian/gemma4-moving-failures/{UPSTREAM}/experiments/unseen100_ids.txt"
@@ -36,6 +36,7 @@ def select():
         old = r.read(100000).decode().splitlines()
     assert len(old) == len(set(old)) == 99
     banned = EXCLUDED | {re.sub(r"-\d+.*$", "", x).replace("__", "/", 1).lower() for x in old}
+    banned |= set(exclude_extra)
     pool = []
     ds = load_dataset(DATASET, split="test", revision=revision)
     for row in ds:
@@ -56,9 +57,9 @@ def select():
     for row in ranked:
         if row["repo"].lower() not in {r["repo"].lower() for r in chosen}:
             chosen.append(row)
-        if len(chosen) == 2:
+        if len(chosen) == count:
             break
-    assert len(chosen) == 2
+    assert len(chosen) == count
     print("EXTERNAL_FROZEN="+json.dumps({"dataset":DATASET,"revision":revision,"pool":len(pool),"selected":[r["instance_id"] for r in chosen],
           "base_commits":[r["base_commit"] for r in chosen],"exclude_repositories":len(banned),"seed":SEED}),flush=True)
     return chosen
@@ -106,6 +107,8 @@ def control(row, spec, image_id, kind):
             targets = as_list(row["FAIL_TO_PASS"])
             counts = {k:sum(str(status.get(t,"MISSING")).upper()==k for t in targets) for k in ("PASSED","FAILED","MISSING","ERROR","SKIPPED")}
             result["f2p_observed"]=counts
+            regression_targets = as_list(row["PASS_TO_PASS"])
+            result["p2p_observed"] = {k:sum(str(status.get(t,"MISSING")).upper()==k for t in regression_targets) for k in ("PASSED","FAILED","MISSING","ERROR","SKIPPED")}
             report = get_eval_report(spec,{"instance_id":row["instance_id"],"model_patch":row["patch"] if kind=="gold" else "","model_name_or_path":"control"},str(log),True)[row["instance_id"]]
             result["upstream_resolved"]=bool(report["resolved"])
             # Require actual observed target failures for noop, full observed target passes and
@@ -115,7 +118,7 @@ def control(row, spec, image_id, kind):
             elif counts["FAILED"]>0:
                 result["status"]="FAIL"
             else:
-                result["phase"]="targets_not_discriminating"
+                result["phase"]="upstream_full_resolution_failed" if all(str(status.get(t,"")).upper()=="PASSED" for t in targets) else "targets_not_discriminating"
             return result
         except subprocess.TimeoutExpired:
             result["phase"]="timeout";return result
@@ -127,8 +130,8 @@ def control(row, spec, image_id, kind):
             result["seconds"]=round(time.monotonic()-started,2)
 
 
-def main():
-    rows = select()
+def main(rows=None):
+    rows = select() if rows is None else rows
     records=[]
     for row in rows:
         spec=make_test_spec(row,namespace="starryzhang")
