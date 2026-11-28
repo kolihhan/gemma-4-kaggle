@@ -1,0 +1,70 @@
+name: Gemma independent CodeCarbon issue-only witness
+on:
+  push:
+    branches: [research/independent-reset-20261128]
+    paths: [.github/workflows/gemma-codecarbon-witness-20261128.yml]
+permissions:
+  contents: read
+jobs:
+  witness:
+    if: github.event.head_commit.message == 'GO_CODECARBON_ISSUE_WITNESS_CPU_20261128'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run frozen witness on base and reference as evaluator-side controls
+        run: |
+          set -euo pipefail
+          python -m pip install -q datasets huggingface_hub
+          python - <<'PY'
+          import json,subprocess,tempfile
+          from pathlib import Path
+          from datasets import load_dataset
+          revision="babb27e45e072219195db7a744bbf0d3c1a36e56"
+          ds=load_dataset("SWE-bench-Live/SWE-bench-Live",split="test",revision=revision)
+          row=next(r for r in ds if r["instance_id"]=="mlco2__codecarbon-831")
+          assert row["base_commit"]=="62bd43400518892c46e0ac29745fc3112bd6c72a"
+          assert "force_cpu_power" in row["problem_statement"]
+          tag="starryzhang/sweb.eval.x86_64.mlco2_1776_codecarbon-831:latest"
+          image="sha256:736b34b8082758bf1b2b5dd0fc36ecc5bbe92a3e3631f9b487a1f7bc6f617881"
+          def call(args,timeout=90):
+              return subprocess.run(args,capture_output=True,text=True,timeout=timeout,check=True).stdout.strip()
+          call(["docker","pull",tag],300)
+          assert call(["docker","image","inspect",tag,"--format","{{.Id}}"])==image
+          script=Path("scripts/witness_codecarbon_830_20261128.py").resolve()
+          results={}
+          for variant in ("base_a","base_b","gold"):
+              c=None
+              with tempfile.TemporaryDirectory() as tmp:
+                  try:
+                      c=call(["docker","create","--network","none","--cap-drop","ALL","--security-opt","no-new-privileges","--pids-limit","256","--memory","5g","--cpus","2","--entrypoint","/bin/bash",image,"-c","sleep infinity"])
+                      call(["docker","start",c])
+                      assert call(["docker","exec","-w","/testbed",c,"git","rev-parse","HEAD"])==row["base_commit"]
+                      if variant=="gold":
+                          p=Path(tmp)/"reference.diff";p.write_text(row["patch"].rstrip("\n")+"\n")
+                          call(["docker","cp",str(p),c+":/tmp/reference.diff"])
+                          call(["docker","exec","-w","/testbed",c,"git","apply","--recount","/tmp/reference.diff"])
+                          call(["docker","exec",c,"rm","/tmp/reference.diff"])
+                      call(["docker","cp",str(script),c+":/tmp/issue_witness.py"])
+                      output=call(["docker","exec",c,"/bin/bash","-lc","source /opt/miniconda3/bin/activate && conda activate testbed && cd /testbed && PYTHONPATH=/testbed python /tmp/issue_witness.py"],60)
+                      lines=[x for x in output.splitlines() if x.startswith("ISSUE_WITNESS=")]
+                      assert len(lines)==1
+                      results[variant]=json.loads(lines[0].split("=",1)[1])
+                  except Exception as e:
+                      results[variant]={"blocked":type(e).__name__}
+                  finally:
+                      if c: subprocess.run(["docker","rm","-f",c],capture_output=True)
+              print("WITNESS_CONTROL="+json.dumps({"variant":variant,"result":results[variant]}),flush=True)
+          def numeric(records,label):
+              return isinstance(records,list) and any(x["input"]==label and x.get("outcome")=="VALUE" and x.get("power")==22.5 for x in records)
+          def failure(records):
+              return isinstance(records,list) and any(x["input"]=="config_file" and x.get("outcome")=="EXCEPTION" and x.get("issue_error_match") is True for x in records)
+          base=results["base_a"];gold=results["gold"]
+          gate=base==results["base_b"] and numeric(base,"constructor") and failure(base) and numeric(gold,"constructor") and numeric(gold,"config_file")
+          print("WITNESS_GATE="+json.dumps({"discriminates":gate,"base_repeat_equal":base==results["base_b"],"manual_issue_only":True,"hidden_tests_used":False,"model_inference":False,"gpu":False,"submission":False}),flush=True)
+          PY
