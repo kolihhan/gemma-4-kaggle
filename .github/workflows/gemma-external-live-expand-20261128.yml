@@ -1,0 +1,41 @@
+name: Gemma external benchmark expansion four independent CPU controls
+on:
+  push:
+    branches: [research/independent-reset-20261128]
+    paths: [.github/workflows/gemma-external-live-expand-20261128.yml]
+permissions:
+  contents: read
+jobs:
+  controls:
+    if: github.event.head_commit.message == 'GO_EXTERNAL_LIVE_EXPAND_CPU_20261128'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        ordinal: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned benchmark harness
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none https://github.com/SWE-bench-Live/SWE-bench-Live.git /tmp/swebench-live
+          git -C /tmp/swebench-live checkout --detach a145aa87c62361532dacaa243398978164b234b7
+          python -m pip install -q /tmp/swebench-live
+      - name: Frozen disjoint four-task cohort, one task per job
+        env:
+          ORDINAL: ${{ matrix.ordinal }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from scripts.external_live_controls_20261128 import select, main
+          rows=select(revision="babb27e45e072219195db7a744bbf0d3c1a36e56",count=4,exclude_extra={"mlco2/codecarbon","huggingface/smolagents"})
+          main([rows[int(os.environ["ORDINAL"])]])
+          PY
