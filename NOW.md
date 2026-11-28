@@ -1,3 +1,9 @@
+# 2026-11-29 — Starter context fidelity confirmed; C still pending
+
+[Receipt #46173600721](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/46173600721) SUCCESS at 02:01 MYT: Champion .18, C #59001063 PENDING, one official slot available, private unknown. [Exact context source audit #46173671180](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/46173671180) SUCCESS: actual current official public starter cell 10 sets interval 15, overlap 2, threshold 14336, retention 5, same as owner verifier runtime; HARNESS_README says 5. No demonstrated hosted mismatch, no runtime change justified. [Research record](docs/research/2026-11-29-context-fidelity.md). No new GPU, model inference, training or submission. Do not rerun CORE6 or tune context interval without actual evidence.
+
+---
+
 # 2026-11-29 — CORE6 completed real GPU trial, no promotion
 
 [Actual #46169165778](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/46169165778) SUCCESS, all 8 evaluations completed, 8 guard unit tests passed, authenticated absence confirmed and GPU push accepted. Four reused qualified tasks: Champion 1/4 vs CORE6 1/4, zero rescues/regressions, calls 68 vs 103 (+51.47%), task seconds 907.1315 vs 921.0862 (+1.54%). No demonstrated advantage, retire CORE6 from promotion; no repeat. Not independent, not public/private predictor. Private GPU inference performed, post-run quota not measured. No training or official submission. [Full record](docs/research/2026-11-29-directional-localization-review.md). Champion .18 last verified; C pending at last official receipt, private unknown. Do not begin another speculative candidate or reopen low-value benchmark audits without genuinely different evidence.
