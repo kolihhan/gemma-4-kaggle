@@ -1,3 +1,9 @@
+# 2026-11-28 — Single fresh semantic diagnostic preparation
+
+[One-case CPU control #46150790856](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/46150790856) running, frozen one new source-disjoint issue, strict full F2P/P2P and upstream resolution gate, no replacement. [Paired request freezer smoke #46150836386](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/46150836386) terminal SUCCESS, SEMANTIC_PAIR_SMOKE=PASS. Script freezes same captured model request and appends control vs issue-only observation; no actual captured request or fresh witness yet, no model runner/injection into official scorer. Synthetic smoke is not evidence of repair strength. Do not widen benchmark or launch inference until separate explicit authorization. [Protocol](docs/research/2026-11-28-semantic-policy-decision.md). No GPU, model inference, training, or submission. Last verified Public .18, Private unknown.
+
+---
+
 # 2026-11-28 — Semantic-policy decision, CPU-only frontier exhausted for now
 
 [New independent studies and decision](docs/research/2026-11-28-semantic-policy-decision.md): 31B recap 47/98 vs 48/98, no measurable gain; E4B fixer-guided localization author-reported 8 vs 6/78 matched but trained and statistically inconclusive, not transferable to 31B. Read actual locfix/data/teacher pipeline docs; raw corpus not acquired, HF dataset search disabled. No credible CPU-packaged improvement justified; preserve Champion and pending C, no invented ZIP. Next useful experiment would be a tightly bounded real-model counterfactual on a fresh eligible issue, using only issue-visible evidence, if explicitly authorized; diagnostic injection is not an official deployment mechanism. No new GPU, inference, training, or official submission. No current leaderboard recheck; .18 last authenticated, C pending last receipt, private score unknown.
