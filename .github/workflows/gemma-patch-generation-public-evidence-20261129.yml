@@ -1,0 +1,52 @@
+name: Gemma public patch-generation evidence source inspection
+on:
+  push:
+    branches: [research/independent-reset-20261128]
+    paths: [.github/workflows/gemma-patch-generation-public-evidence-20261129.yml]
+permissions: {contents: read}
+jobs:
+  inspect:
+    if: github.event.head_commit.message == 'GO_PATCH_GENERATION_PUBLIC_EVIDENCE_READONLY_20261129'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          root="$(mktemp -d)"
+          trap 'rm -rf "$root"' EXIT
+          for slug in gemma-4-agent-what-took-lb-0-12-0-24 gemma-4-agent-run-the-real-evaluator-locally; do
+            mkdir "$root/$slug"
+            if ! kaggle kernels pull "hitarthjain0/$slug" -p "$root/$slug" -m >"$root/$slug/pull.log" 2>&1; then echo "PUBLIC_SOURCE_BLOCKED=$slug"; fi
+          done
+          ROOT="$root" python - <<'PY'
+          import ast,hashlib,json,os,re
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          for folder in sorted(root.iterdir()):
+              files=list(folder.glob("*.ipynb"))
+              if not files:continue
+              assert len(files)==1
+              raw=files[0].read_bytes()
+              nb=json.loads(raw)
+              records=[]
+              for i,c in enumerate(nb["cells"]):
+                  s="".join(c.get("source",[]))
+                  if c["cell_type"]=="markdown":
+                      # Public author-authored methodological headings and short claim excerpts only.
+                      relevant=[l.strip()[:300] for l in s.splitlines() if re.search(r"(?i)0\.24|0\.22|0\.12|patch generation|tool.calls|temperature|thinking|budget|single.agent|graph.tools|verif|repair",l)]
+                      if relevant:records.append({"cell":i,"markdown_claims":relevant[:16]})
+                  elif c["cell_type"]=="code":
+                      try:t=ast.parse(s)
+                      except SyntaxError:t=None
+                      lines=[l.strip()[:200] for l in s.splitlines() if re.search(r"(?i)^\s*(?:[- ]*model:|max_time_minutes:|max_tool_calls:|max_turns:|temperature:|top_p:|top_k:|thinking_budget:|max_output_tokens:|seed:)",l)]
+                      if lines:records.append({"cell":i,"config_lines":lines[:25]})
+                      if t:
+                          funcs=[n.name for n in ast.walk(t) if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))]
+                          if funcs:records.append({"cell":i,"function_names":funcs[:40]})
+              print("PUBLIC_SOURCE="+json.dumps({"slug":folder.name,"sha256":hashlib.sha256(raw).hexdigest(),"records":records,"executed":False,"submission":False}),flush=True)
+          PY
