@@ -9,7 +9,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   paired:
-    if: github.event.head_commit.message == 'GO_CORE6_STRUCTURAL_8_PRIVATE_20261129'
+    if: github.event.head_commit.message == 'GO_CORE6_COHERENT_8_PRIVATE_20261129'
     runs-on: ubuntu-latest
     timeout-minutes: 130
     env:
