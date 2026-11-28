@@ -1,0 +1,57 @@
+name: Gemma semantic counterfactual single fresh CPU control
+on:
+  push:
+    branches: [research/independent-reset-20261128]
+    paths: [.github/workflows/gemma-semantic-counterfactual-single-control-20261128.yml]
+permissions:
+  contents: read
+jobs:
+  qualify_one:
+    if: github.event.head_commit.message == 'GO_SEMANTIC_SINGLE_CONTROL_CPU_20261128'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned benchmark harness
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none https://github.com/SWE-bench-Live/SWE-bench-Live.git /tmp/swebench-live
+          git -C /tmp/swebench-live checkout --detach a145aa87c62361532dacaa243398978164b234b7
+          python -m pip install -q /tmp/swebench-live
+      - name: Qualify exactly one new preselected issue; never replace a failure
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json,re
+          from scripts.external_live_controls_20261128 import select, control, cmd, as_list, make_test_spec
+          revision="babb27e45e072219195db7a744bbf0d3c1a36e56"
+          excluded={"mlco2/codecarbon","huggingface/smolagents","berriai/litellm","stanford-crfm/helm","run-llama/llama_deploy","systran/faster-whisper"}
+          row=select(revision=revision,count=1,exclude_extra=excluded)[0]
+          f,p=len(as_list(row["FAIL_TO_PASS"])),len(as_list(row["PASS_TO_PASS"]))
+          print("SEMANTIC_FROZEN="+json.dumps({"id":row["instance_id"],"repo":row["repo"],"base_commit":row["base_commit"],"issue_sha256":hashlib.sha256(row["problem_statement"].encode()).hexdigest(),"f2p":f,"p2p":p,"revision":revision,"replacement":False}),flush=True)
+          spec=make_test_spec(row,namespace="starryzhang")
+          assert cmd(["docker","pull",spec.instance_image_key],timeout=300).returncode==0
+          image=cmd(["docker","image","inspect",spec.instance_image_key,"--format","{{.Id}}"]).stdout.strip()
+          assert re.fullmatch(r"sha256:[0-9a-f]{64}",image)
+          try:
+              noop=control(row,spec,image,"noop")
+              gold=control(row,spec,image,"gold")
+          finally:
+              cmd(["docker","image","rm",spec.instance_image_key],timeout=120)
+          def complete(counts,expected,total):
+              return counts.get(expected)==total and sum(counts.values())==total
+          eligible=(noop.get("status")=="FAIL" and gold.get("status")=="PASS"
+              and gold.get("upstream_resolved") is True
+              and noop.get("upstream_resolved") is False
+              and complete(noop.get("f2p_observed",{}),"FAILED",f)
+              and complete(gold.get("f2p_observed",{}),"PASSED",f)
+              and complete(noop.get("p2p_observed",{}),"PASSED",p)
+              and complete(gold.get("p2p_observed",{}),"PASSED",p))
+          print("SEMANTIC_CONTROL="+json.dumps({"id":row["instance_id"],"image_id":image,"noop":noop,"gold":gold,"strict_eligible":eligible,"gpu":False,"model_inference":False,"submission":False,"not_official_equivalent":True}),flush=True)
+          assert eligible,"Single frozen diagnostic case did not qualify; no replacement"
+          PY
