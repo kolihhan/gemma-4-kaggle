@@ -1,0 +1,65 @@
+name: Gemma exact context configuration fidelity read-only
+on:
+  push:
+    branches: [research/independent-reset-20261128]
+    paths: [.github/workflows/gemma-context-fidelity-20261129.yml]
+permissions: {contents: read}
+jobs:
+  compare:
+    if: github.event.head_commit.message == 'GO_CONTEXT_FIDELITY_READONLY_20261129'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          root="$(mktemp -d)"
+          trap 'rm -rf "$root"' EXIT
+          kaggle kernels pull ryanholbrook/getting-started-gemma-4-developer-agent -p "$root" -m >/dev/null
+          kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f swegemma-0.2.11-py3-none-any.whl -p "$root" --unzip >/dev/null
+          ROOT="$root" python - <<'PY'
+          import ast,hashlib,json,os,zipfile
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          targets={"EventsCompactionConfig","ContextCacheConfig","EvalConfig","VllmConfig","ModelRetryPlugin"}
+          keys={"compaction_interval","overlap_size","token_threshold","event_retention_size","min_tokens","ttl_seconds","cache_intervals","max_model_len","context_cache_config","events_compaction_config"}
+          def inspect_source(source,label):
+              records=[]
+              try: tree=ast.parse(source)
+              except SyntaxError:
+                  # Notebook magics are not Python; inspect remaining lines, no execution.
+                  try:tree=ast.parse("\n".join("" if l.lstrip().startswith(("%","!")) else l for l in source.splitlines()))
+                  except SyntaxError:return [{"source":label,"parse":"failed"}]
+              for n in ast.walk(tree):
+                  if isinstance(n,ast.Call):
+                      name=n.func.id if isinstance(n.func,ast.Name) else n.func.attr if isinstance(n.func,ast.Attribute) else ""
+                      if name in targets:
+                          vals={k.arg:ast.unparse(k.value)[:160] for k in n.keywords if k.arg in keys}
+                          if vals:records.append({"source":label,"line":n.lineno,"call":name,"values":vals})
+                  if isinstance(n,ast.AnnAssign) and isinstance(n.target,ast.Name) and n.target.id in keys:
+                      records.append({"source":label,"line":n.lineno,"field":n.target.id,"value":ast.unparse(n.value)[:160] if n.value else None})
+              return records
+          notebook=next(root.glob("*.ipynb"))
+          raw=notebook.read_bytes()
+          print("STARTER_SHA="+hashlib.sha256(raw).hexdigest(),flush=True)
+          records=[]
+          for i,c in enumerate(json.loads(raw)["cells"]):
+              if c["cell_type"]=="code": records+=inspect_source("".join(c["source"]),"starter_cell_"+str(i))
+          wheel=next(root.glob("swegemma*.whl"))
+          print("WHEEL_SHA="+hashlib.sha256(wheel.read_bytes()).hexdigest(),flush=True)
+          with zipfile.ZipFile(wheel) as z:
+              for n in z.namelist():
+                  if n.endswith(".py"):
+                      source=z.read(n).decode()
+                      if any(k in source for k in ("EventsCompactionConfig","ContextCacheConfig","compaction_interval")):
+                          records+=inspect_source(source,n)
+          records+=inspect_source(Path("kaggle/verifier_baseline_runtime.py").read_text(),"owner_verifier_runtime")
+          print("CONTEXT_FIDELITY="+json.dumps(records,sort_keys=True),flush=True)
+          print("READ_ONLY_NO_MODEL_NO_GPU_NO_SUBMISSION",flush=True)
+          PY
