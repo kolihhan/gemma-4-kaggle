@@ -178,3 +178,16 @@ Do not reflexively continue the existing lineage. Do not reflexively redesign it
 
 When updating \`NOW.md\`, lead with the **scientific decision** and avoid repeated status-only cycles.
 
+
+
+## 11. Leaderboard transfer and measurement boundaries (owner instruction, 2026-11-28)
+
+The owner explicitly requires that current local benchmark and mechanism results **must not be interpreted as Public Score or Private Score**. Distinguish four evidence levels:
+- CPU gold/noop qualification establishes evaluator discrimination on that exact environment and task only.
+- Issue-only behavioral witness establishes a specific causal observation; not agent repair accuracy.
+- Local paired solver evaluation measures that cohort under its exact protocol; no numerical conversion, promised gain, or direct proxy for either leaderboard split.
+- Authenticated Kaggle Public Score measures only the public-scored partition under that submission/metric epoch. Private Score is independently hidden until officially released; never infer it from public or local performance.
+
+Use local studies to falsify mechanisms and screen engineering feasibility, not to maximize local score. Prefer cross-repository, cross-failure-class transfer; keep diagnostic vs blind confirmation distinct. No overfitting to the reused 17 tasks or repeated public submissions. A locally positive mechanism may fail on public or private; a locally negative small sample is not proof of impossibility. Preserve the last verified champion, separate authorized competition submissions from local research, and explicitly name uncertainty and resource tradeoffs. A passed synthetic/CPU gate is not sufficient evidence to claim a competitive improvement.
+
+**Stop rule:** do not indefinitely optimize evaluator coverage, repeatedly retry minor infrastructure issues, or demand an arbitrarily large local cohort when the next discriminating experiment is a mechanism/feasibility test. Any later change of evaluation or compute authorization must be explicit and must not retroactively weaken a frozen contract. Final competition objective remains unknown-task resolution / official final Private Score, not local benchmark metrics.
