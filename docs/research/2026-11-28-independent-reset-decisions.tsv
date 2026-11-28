@@ -9,3 +9,7 @@ ts	phase	decision	why	evidence	result
 2026-11-28T10:23:02Z	qualification	Recover existing private 35 pairs only	Old aggregate hid failure detail	Actions 46134897473	33 false/false; 2 pass/pass; zero eligible; failure stage unknown
 2026-11-28T10:23:02Z	premise	Downrank static retrieval DEC	External F4/F5 shows delivered tests no robust gain; experiments produced useful observations	Moving Failures Around draft F4-F6; 2026-11-28-executable-evidence-pivot.md	conditional executable evidence hypothesis only
 2026-11-28T10:23:02Z	trace	Separate pre-edit probes from post-edit tests	Need distinguish information acquisition from verification	Actions 46134996523	Smoke passed; real aggregate pending
+2026-11-28T10:25:03Z	trace	Reject pre-edit test absence as distinguishing explanation	All three groups lack recognized pre-edit tests	Actions 46134996523	68 traces complete; relevance unknown
+2026-11-28T10:35:26Z	qualification	Cross-join exact remaining 35 against pinned external controls	Disambiguate shared vs local failure	Actions 46135873077	35/35 agree; zero eligible in both
+2026-11-28T10:35:27Z	calibration	Stop before CPU kernel push	Target absence not confirmed; no duplicate or uncertain retry	Actions 46135873077	preflight passed; no kernel launched
+2026-11-28T10:35:27Z	transfer	Read pinned external unseen99 task list and six outcome CSVs	Need independent pool and avoid repeating static retrieval	lspecian/gemma4-moving-failures@40cc8d4; executable-evidence-pivot report	external evidence only; owner validation not run
