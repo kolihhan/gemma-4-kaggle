@@ -1,0 +1,94 @@
+name: Gemma current compiler delivery boundary audit CPU
+on:
+  push:
+    branches: [research/independent-reset-20261128]
+    paths: [.github/workflows/gemma-delivery-boundary-readonly-20261128.yml]
+permissions: {contents: read}
+jobs:
+  audit:
+    if: github.event.head_commit.message == 'GO_DELIVERY_BOUNDARY_READONLY_20261128'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read official receipts and current wheelhouse metadata without executing participant code
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          root="$(mktemp -d)"
+          trap 'rm -rf "$root"' EXIT
+          export AUDIT_ROOT="$root"
+          python - <<'PY'
+          import json
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions
+          try:
+              rows=authenticated_submissions()
+              keep={"58183466","58931890","59001063"}
+              safe=[{k:r.get(k) for k in ("ref","status","publicScore")} for r in rows if str(r.get("ref")) in keep]
+              print("DELIVERY_LEDGER="+json.dumps(safe,sort_keys=True),flush=True)
+          except Exception as e:
+              print("DELIVERY_LEDGER_BLOCKED="+type(e).__name__,flush=True)
+          PY
+          kaggle datasets files metric/gemma-4-developer-agent-wheelhouse --page-size 200 >"$root/files"
+          python - <<'PY'
+          import os,re
+          from pathlib import Path
+          root=Path(os.environ["AUDIT_ROOT"])
+          lines=root.joinpath("files").read_text()
+          names=sorted(set(re.findall(r"\b(?:adk_submission|swegemma)-[0-9][A-Za-z0-9._-]*\.whl\b",lines)))
+          assert len(names)==2 and {n.split("-")[0] for n in names}=={"adk_submission","swegemma"}, "missing or ambiguous current wheel versions"
+          root.joinpath("selected").write_text("\n".join(names)+"\n")
+          print("DELIVERY_WHEELS="+str(names),flush=True)
+          PY
+          while read -r wheel; do
+            kaggle datasets download -d metric/gemma-4-developer-agent-wheelhouse -f "$wheel" -p "$root" --unzip >"$root/download.log" 2>&1 || { echo WHEEL_DOWNLOAD_BLOCKED;exit 1; }
+          done < "$root/selected"
+          python - <<'PY'
+          import ast,hashlib,json,os,re,zipfile
+          from pathlib import Path
+          root=Path(os.environ["AUDIT_ROOT"])
+          results=[]
+          for wheel in sorted(root.glob("*.whl")):
+              with zipfile.ZipFile(wheel) as z:
+                  for name in z.namelist():
+                      if not name.endswith(".py"):continue
+                      if not name.startswith(("adk_submission/","swegemma/")):continue
+                      if not re.search(r"agent_runner|compiler|registry|schema|config|callback|skill",name):continue
+                      src=z.read(name).decode()
+                      tree=ast.parse(src)
+                      for node in ast.walk(tree):
+                          if not isinstance(node,(ast.ClassDef,ast.FunctionDef,ast.AsyncFunctionDef)):continue
+                          if node.name.startswith("__"):continue
+                          body=ast.get_source_segment(src,node) or ""
+                          tags=[]
+                          for tag,pattern in {
+                            "callback_registry":r"\bCallbackRegistry\b|\bcallback_registry\b",
+                            "callback_registration":r"callback_registry\.register\(",
+                            "before_agent":r"\bbefore_agent_callback\b",
+                            "before_model":r"\bbefore_model_callback\b",
+                            "session_state":r"problem_description|hints_text",
+                            "skill_execution":r"\brun_skill_script\b|\bAdkSandboxCodeExecutor\b",
+                            "custom_import":r"\bimportlib\b",
+                            "compiler_call":r"\bcompile_submission\(",
+                            "code_executor":r"\bcode_executor\b",
+                          }.items():
+                              if re.search(pattern,body):tags.append(tag)
+                          if not tags:continue
+                          # Emit structural metadata and small sanitized names only, not wheel source.
+                          record={"module":name,"symbol":node.name,"line":node.lineno,"tags":tags}
+                          if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):
+                              record["args"]=[a.arg for a in node.args.posonlyargs+node.args.args+node.args.kwonlyargs]
+                          if isinstance(node,ast.ClassDef):
+                              record["fields"]=[n.target.id for n in node.body if isinstance(n,ast.AnnAssign) and isinstance(n.target,ast.Name) and ("callback" in n.target.id or "instruction" in n.target.id)]
+                          if "callback_registration" in tags:
+                              record["registered_literals"]=[n.args[0].value for n in ast.walk(node) if isinstance(n,ast.Call) and isinstance(n.func,ast.Attribute) and n.func.attr=="register" and isinstance(n.func.value,ast.Name) and n.func.value.id=="callback_registry" and n.args and isinstance(n.args[0],ast.Constant) and isinstance(n.args[0].value,str)]
+                          results.append(record)
+              print("WHEEL_SHA="+wheel.name+":"+hashlib.sha256(wheel.read_bytes()).hexdigest(),flush=True)
+          print("DELIVERY_BOUNDARY="+json.dumps(results,sort_keys=True),flush=True)
+          print("DELIVERY_AUDIT_ONLY_NO_MODEL_NO_KERNEL_NO_SUBMISSION",flush=True)
+          PY
