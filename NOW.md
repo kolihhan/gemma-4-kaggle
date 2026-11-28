@@ -1,3 +1,9 @@
+# 2026-11-29 — External patch generation evidence; no scored new candidate
+
+[Public source audit #46174151029](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/46174151029) SUCCESS: Hitarth guide .24 is third-party title, its included exact prompt explicitly unscored; second notebook pull blocked. Independent Pathak & Upadhyay ledger: 26/45 wrong fixes in right file, 3 never located, 6 edited elsewhere, 10 empty; observational only. Official rules one submit/day and up to two final selections. [Evidence and decision](docs/research/2026-11-29-patch-generation-external-evidence.md). No new GPU, inference, training, submission or final selection; last Champion .18 and C pending at 02:01 MYT, private unknown. No speculative copy or repeated retrieval experiment promoted.
+
+---
+
 # 2026-11-29 — Starter context fidelity confirmed; C still pending
 
 [Receipt #46173600721](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/46173600721) SUCCESS at 02:01 MYT: Champion .18, C #59001063 PENDING, one official slot available, private unknown. [Exact context source audit #46173671180](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/46173671180) SUCCESS: actual current official public starter cell 10 sets interval 15, overlap 2, threshold 14336, retention 5, same as owner verifier runtime; HARNESS_README says 5. No demonstrated hosted mismatch, no runtime change justified. [Research record](docs/research/2026-11-29-context-fidelity.md). No new GPU, model inference, training or submission. Do not rerun CORE6 or tune context interval without actual evidence.
