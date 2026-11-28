@@ -1,0 +1,35 @@
+name: Gemma external benchmark CPU controls
+on:
+  push:
+    branches: [research/independent-reset-20261128]
+    paths: [.github/workflows/gemma-external-live-controls-20261128.yml]
+permissions:
+  contents: read
+concurrency:
+  group: gemma-external-live-controls-20261128
+  cancel-in-progress: false
+jobs:
+  calibrate:
+    if: github.event.head_commit.message == 'GO_EXTERNAL_LIVE_CONTROLS_CPU_20261128'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned public benchmark harness
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none https://github.com/SWE-bench-Live/SWE-bench-Live.git /tmp/swebench-live
+          git -C /tmp/swebench-live checkout --detach a145aa87c62361532dacaa243398978164b234b7
+          python -m pip install -q /tmp/swebench-live
+          python -m py_compile scripts/external_live_controls_20261128.py
+          docker version
+          df -h /
+      - name: Execute frozen two-repository gold and noop calibration
+        run: |
+          set -euo pipefail
+          python scripts/external_live_controls_20261128.py
