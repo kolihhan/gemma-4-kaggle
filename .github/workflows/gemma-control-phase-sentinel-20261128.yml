@@ -1,0 +1,78 @@
+name: Gemma control phase sentinel private CPU only
+on:
+  push:
+    branches: [research/independent-reset-20261128]
+    paths: [.github/workflows/gemma-control-phase-sentinel-20261128.yml]
+permissions: {contents: read}
+concurrency:
+  group: gemma-control-phase-sentinel-20261128
+  cancel-in-progress: false
+jobs:
+  calibrate:
+    if: github.event.head_commit.message == 'GO_CONTROL_PHASE_SENTINEL_CPU_20261128'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      CPU_KERNEL: kolihhan/gemma4-control-phase-sentinel-20261128-v1
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Recover exact old selection and outputs, render private sentinel
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          root=/tmp/gemma-sentinel
+          mkdir -p "$root"/{old-source,clean-source,old-output,clean-output}
+          for key in old clean; do
+            case "$key" in
+              old) ref=kolihhan/gemma4-budget-factorial-eligibility6-20261127-v1 ;;
+              clean) ref=kolihhan/gemma31-fresh17-gold-noop-20261126-v1 ;;
+            esac
+            st="$(kaggle kernels status "$ref" 2>&1)" || { echo OLD_CONTROL_STATUS_BLOCKED;exit 1; }
+            [[ "$st" == *KernelWorkerStatus.COMPLETE* ]]
+            kaggle kernels pull "$ref" -p "$root/$key-source" >"$root/pull-$key.log" 2>&1 || { echo OLD_SOURCE_PULL_BLOCKED;exit 1; }
+            kaggle kernels output "$ref" -p "$root/$key-output" -o >"$root/output-$key.log" 2>&1 || { echo OLD_OUTPUT_PULL_BLOCKED;exit 1; }
+          done
+          python - <<'PY'
+          from pathlib import Path
+          import urllib.request
+          base="https://raw.githubusercontent.com/TechNaom/gemma4-agentic-swe/f3b6d3ac4c532a2bf3745872fe171747d0bf3e31/experiments/audit-2026-10-15/"
+          for name in ("gold_runs.jsonl","empty_runs.jsonl"):
+              with urllib.request.urlopen(base+name,timeout=45) as r:
+                  payload=r.read(1000000)
+              (Path("/tmp/gemma-sentinel")/name).write_bytes(payload)
+          PY
+          python -m scripts.render_control_phase_sentinel_20261128 "$root" "$root/private" 2>"$root/render-error.log" || { echo SENTINEL_RENDER_BLOCKED;exit 1; }
+      - name: Launch exactly one private CPU kernel
+        run: |
+          set -euo pipefail
+          root=/tmp/gemma-sentinel
+          if kaggle kernels status "$CPU_KERNEL" >"$root/status.log" 2>&1; then echo DUPLICATE_OR_EXISTING_KERNEL;exit 1;fi
+          if ! grep -Eqi '404|not found' "$root/status.log"; then echo STATUS_NOT_CONFIRMED_ABSENT;exit 1;fi
+          kaggle kernels push -p "$root/private" -t 900 >"$root/push.log" 2>&1 || { echo PRIVATE_PUSH_FAILED;exit 1; }
+          echo SENTINEL_CPU_PUSH_OK
+      - name: Read terminal result
+        run: |
+          set -euo pipefail
+          root=/tmp/gemma-sentinel
+          for i in $(seq 1 80); do
+            st="$(kaggle kernels status "$CPU_KERNEL" 2>&1 || true)"
+            case "$st" in
+              *KernelWorkerStatus.COMPLETE*) mkdir "$root/result";kaggle kernels output "$CPU_KERNEL" -p "$root/result" -o >"$root/result.log" 2>&1;break ;;
+              *KernelWorkerStatus.ERROR*|*KernelWorkerStatus.CANCELLED*|*KernelWorkerStatus.FAILED*) echo SENTINEL_KERNEL_FAILED;exit 1 ;;
+            esac
+            sleep 20
+          done
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path("/tmp/gemma-sentinel/result/control_phase_sentinel_safe.json").read_text())
+          assert r["tasks"]==4 and len(r["rows"])==4 and not r["gpu"] and not r["model_inference"] and not r["competition_submission"] and not r["private_content_exported"]
+          print("SENTINEL_ACTUAL="+json.dumps(r,sort_keys=True))
+          PY
+      - name: Delete private data
+        if: always()
+        run: rm -rf /tmp/gemma-sentinel
