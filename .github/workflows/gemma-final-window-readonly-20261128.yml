@@ -1,0 +1,51 @@
+name: Gemma final-window read-only receipt and exact bundle audit
+on:
+  push:
+    branches: [research/independent-reset-20261128]
+    paths: [.github/workflows/gemma-final-window-readonly-20261128.yml]
+permissions: {contents: read}
+jobs:
+  audit:
+    if: github.event.head_commit.message == 'GO_FINAL_WINDOW_READONLY_20261128'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read receipts only and verify existing candidate bytes
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          root="$(mktemp -d)"
+          trap 'rm -rf "$root"' EXIT
+          python - <<'PY'
+          import json
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions
+          rows=authenticated_submissions()
+          print("FINAL_RECEIPTS="+json.dumps([{k:r.get(k) for k in ("ref","date","status","publicScore","description")} for r in rows],sort_keys=True),flush=True)
+          PY
+          mkdir "$root/source" "$root/c"
+          kaggle kernels output lynnsakurai/gemma-4-budget-fit-agent-w-bounded-rescue/2 -p "$root/source" -o >"$root/source.log" 2>&1 || { echo SOURCE_DOWNLOAD_BLOCKED;exit 1; }
+          kaggle kernels output kolihhan/gemma4-budget-c-submit-20261127/1 -p "$root/c" -o >"$root/c.log" 2>&1 || { echo C_DOWNLOAD_BLOCKED;exit 1; }
+          ROOT="$root" python - <<'PY'
+          import hashlib,io,json,os,zipfile
+          from pathlib import Path
+          from scripts.build_toolcap60_timeout_recovery import build
+          from scripts.submit_budget_c_official_once_20261127 import verified_bytes,CHAMPION_SHA,CANDIDATE_SHA
+          root=Path(os.environ["ROOT"])
+          source=(root/"source/submission.zip").read_bytes()
+          champ=build(source)
+          candidate=verified_bytes(source)
+          actual=(root/"c/submission.zip").read_bytes()
+          assert hashlib.sha256(champ).hexdigest()==CHAMPION_SHA
+          assert hashlib.sha256(actual).hexdigest()==CANDIDATE_SHA and candidate==actual
+          with zipfile.ZipFile(io.BytesIO(champ)) as a,zipfile.ZipFile(io.BytesIO(actual)) as b:
+              assert set(a.namelist())==set(b.namelist())
+              changed=[n for n in a.namelist() if a.read(n)!=b.read(n)]
+              assert changed==["configs/sampling.yaml"]
+          print("FINAL_BUNDLE_AUDIT="+json.dumps({"champion_sha256":CHAMPION_SHA,"c_sha256":CANDIDATE_SHA,"changed":changed,"existing_remote_c_exact":True,"gpu":False,"model_inference":False,"submission":False}),flush=True)
+          PY
