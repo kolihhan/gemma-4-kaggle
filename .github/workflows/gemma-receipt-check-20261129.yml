@@ -1,0 +1,32 @@
+name: Gemma authenticated receipt check 20261129
+on:
+  push:
+    branches: [research/independent-reset-20261128]
+    paths: [.github/workflows/gemma-receipt-check-20261129.yml]
+permissions: {contents: read}
+jobs:
+  receipts:
+    if: github.event.head_commit.message == 'GO_RECEIPT_READONLY_20261129'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          python - <<'PY'
+          import csv,io,json,subprocess
+          from kaggle.api.kaggle_api_extended import KaggleApi
+          r=subprocess.run(["kaggle","competitions","submissions","gemma-4-developer-agent","-v"],capture_output=True,text=True,timeout=75,check=True)
+          rows=list(csv.DictReader(io.StringIO(r.stdout.lstrip("\ufeff"))))
+          assert rows
+          selected=[{k:x.get(k) for k in ("ref","status","publicScore","date")} for x in rows if x.get("ref") in {"58183466","59001063","58931890","58081411","58019162"}]
+          assert len(selected)==5
+          print("RECEIPTS="+json.dumps(selected),flush=True)
+          api=KaggleApi();api.authenticate()
+          q=api.competition_get_submission_limits("gemma-4-developer-agent")
+          print("QUOTA="+json.dumps({"allowed_now":q.num_allowed_now,"limited_by_total":q.limited_by_total}),flush=True)
+          PY
