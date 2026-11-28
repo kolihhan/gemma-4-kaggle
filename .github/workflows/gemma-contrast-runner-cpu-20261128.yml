@@ -1,0 +1,17 @@
+name: Gemma contrast runner CPU unit gate
+on:
+  push:
+    branches: [research/independent-reset-20261128]
+    paths: [.github/workflows/gemma-contrast-runner-cpu-20261128.yml]
+permissions: {contents: read}
+jobs:
+  tests:
+    if: github.event.head_commit.message == 'GO_CONTRAST_RUNNER_CPU_20261128'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m unittest discover -s tests -p test_contrast_probe_runner_20261128.py -v
