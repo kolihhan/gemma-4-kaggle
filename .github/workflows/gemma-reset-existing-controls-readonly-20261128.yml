@@ -1,0 +1,63 @@
+name: Gemma reset read-only existing qualification and score audit
+on:
+  push:
+    branches: [research/independent-reset-20261128]
+    paths: [.github/workflows/gemma-reset-existing-controls-readonly-20261128.yml]
+permissions: {contents: read}
+jobs:
+  audit:
+    if: github.event.head_commit.message == 'GO_RESET_EXISTING_CONTROLS_READONLY_20261128'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read existing records only (no new kernels)
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          root="$(mktemp -d)"
+          trap 'rm -rf "$root"' EXIT
+          export AUDIT_ROOT="$root"
+          python - <<'PY'
+          import json
+          from scripts.submit_v2_toolcap60_official_once import authenticated_submissions
+          try:
+              rows=authenticated_submissions()
+              keep={"58183466","58931890","59001063"}
+              safe=[{k:r.get(k) for k in ("ref","status","publicScore")} for r in rows if str(r.get("ref")) in keep]
+              print("RESET_LEDGER="+json.dumps(safe,sort_keys=True))
+          except Exception as e:
+              print("RESET_LEDGER_BLOCKED="+type(e).__name__)
+          PY
+          ref=kolihhan/gemma4-budget-factorial-eligibility6-20261127-v1
+          st="$(kaggle kernels status "$ref" 2>&1)" || { echo CONTROL_STATUS_BLOCKED; exit 1; }
+          [[ "$st" == *KernelWorkerStatus.COMPLETE* ]] || { echo CONTROL_NOT_COMPLETE; exit 1; }
+          kaggle kernels output "$ref" -p "$root" -o >"$root/download.log" 2>&1 || { echo CONTROL_DOWNLOAD_BLOCKED; exit 1; }
+          python - <<'PY'
+          import json,os,re
+          from collections import Counter
+          from pathlib import Path
+          root=Path(os.environ["AUDIT_ROOT"])
+          files=list(root.rglob("budget_factorial_eligibility.json"))
+          assert len(files)==1
+          d=json.loads(files[0].read_text()); rows=d["rows"]
+          assert len(rows)==35 and len({r["ordinal"] for r in rows})==35
+          assert not d["gpu"] and not d["model_inference"] and d["qualified_count"]==0
+          def reason(x):
+              if x is None: return "NONE"
+              if x in ("verification_error","test_or_patch_failure"): return x
+              if isinstance(x,str) and re.fullmatch(r"(?:SETUP_)?[A-Za-z][A-Za-z0-9_]*(?:Error|Exception)",x): return x
+              return "OTHER_REDACTED"
+          def outcome(r,k):
+              x=r.get(k+"_pass")
+              return "PASS" if x is True else "FALSE" if x is False else "UNKNOWN"
+          pairs=Counter(outcome(r,"gold")+"/"+outcome(r,"noop") for r in rows)
+          result={"rows":len(rows),"pair_counts":dict(pairs),"gold_false_reason":dict(Counter(reason(r.get("gold_error_type")) for r in rows if r.get("gold_pass") is False)),"noop_false_reason":dict(Counter(reason(r.get("noop_error_type")) for r in rows if r.get("noop_pass") is False)),"noop_exit1":sum(r.get("noop_actual_test_failure") is True for r in rows),"gold_exit_codes_retained":sum("gold_test_exit_code" in r for r in rows),"qualified":d["qualified_count"],"new_kernel":False,"new_gpu":False,"submission":False,"note":"error categories are coarse, not causal stage labels; NONE is not proof of assertion failure"}
+          assert sum(pairs.values())==35
+          print("RESET_CONTROL_AUDIT="+json.dumps(result,sort_keys=True))
+          PY
