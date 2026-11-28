@@ -16,18 +16,22 @@ def arms(source):
     control=_source_files(source)
     assert hashlib.sha256(_pack(control)).hexdigest()==CHAMPION_SHA256
     treatment=dict(control)
-    # Fail closed rather than retain instructions referring to unavailable tools.
-    references=[line for line in control["prompts/system.md"].splitlines() if any(t in line for t in GRAPH)]
-    if references:
-        print("CORE6_PROMPT_GRAPH_REFERENCES="+json.dumps(references),flush=True)
-        raise ValueError("explicit graph references require reviewed consistent treatment")
+    # Remove exactly the graph-specific rescue instruction observed in preflight.
+    # No other prompt change; this is a coherent tool-interface ablation,
+    # not a pure agent.yaml-only ablation.
+    graph_line="- Graph retrieval is a rescue lane, not the default. Only after two specific textual localization attempts fail, call `search_similar_code` once with the behavior from the issue. If it returns an exact useful symbol, `get_code_neighbors` may be called once. Do not use `get_code_subgraph`."
+    prompt=control["prompts/system.md"]
+    references=[line for line in prompt.splitlines() if any(t in line for t in GRAPH)]
+    assert references==[graph_line], "unexpected graph prompt references"
+    treatment["prompts/system.md"]=one(prompt,graph_line+"\n","")
+    assert not any(t in treatment["prompts/system.md"] for t in GRAPH)
     cfg=treatment["agent.yaml"]
     for tool in GRAPH:
         cfg=one(cfg,"  - "+tool+"\n","")
     assert all(cfg.count("  - "+tool+"\n")==1 for tool in CORE)
     assert not any(t in cfg for t in GRAPH)
     treatment["agent.yaml"]=cfg
-    assert {k for k in control if treatment[k]!=control[k]}=={"agent.yaml"}
+    assert {k for k in control if treatment[k]!=control[k]}=={"agent.yaml","prompts/system.md"}
     return {"champion":control,"core6":treatment}
 
 def choose(previous):
@@ -94,7 +98,7 @@ def render(source,previous,out):
     return {"tasks":N,"evaluations":2*N,"reused":True,"independent_holdout":False,
             "cohort_sha256":hashlib.sha256("|".join(ids).encode()).hexdigest(),
             "bundle_hashes":{a:hashlib.sha256(_pack(f)).hexdigest() for a,f in files.items()},
-            "only_change":"agent.yaml: remove exactly three graph tools","official_submission":False}
+            "only_change":"remove exactly three graph tools and their sole prompt instruction","official_submission":False}
 
 def assess(data,previous):
     ids=choose(previous)
