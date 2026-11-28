@@ -1,0 +1,43 @@
+name: Gemma GraphScent public reproduction source audit
+on:
+  push:
+    branches: [research/independent-reset-20261128]
+    paths: [.github/workflows/gemma-graphscent-source-readonly-20261129.yml]
+permissions: {contents: read}
+jobs:
+  inspect:
+    if: github.event.head_commit.message == 'GO_GRAPHS_CENT_SOURCE_READONLY_20261129'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Pull public notebook source without execution
+        run: |
+          set -euo pipefail
+          pip install -q kaggle==2.2.5 six==1.17.0
+          root="$(mktemp -d)"
+          trap 'rm -rf "$root"' EXIT
+          kaggle kernels pull rameshln/graphscent-bench-repro -p "$root" -m >"$root/pull.log" 2>&1 || { echo GRAPHSOURCE_PULL_BLOCKED;exit 1; }
+          ROOT="$root" python - <<'PY'
+          import ast,hashlib,json,os,re
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          files=list(root.glob("*.ipynb"))+list(root.glob("*.py"))
+          assert len(files)==1,"unexpected source file membership"
+          p=files[0]; raw=p.read_bytes()
+          cells=[("script",raw.decode())] if p.suffix==".py" else [(str(i),"".join(c.get("source",[]))) for i,c in enumerate(json.loads(raw)["cells"]) if c["cell_type"]=="code"]
+          tags={"model_call":r"(?i)\b(generate|chat\.completions|LLM\(|vllm|AutoModel|from_pretrained)\b","precomputed":r"(?i)\b(read_csv|read_parquet|read_json|json\.load|np\.load|load_dataset)\b","random":r"(?i)\b(random\.|rng\.|default_rng)","graph":r"(?i)\b(graph|llr|propagate|scent|bm25|calibrat\w*)\b","grader":r"(?i)\b(pytest|verify_task|run_evaluation|apply_patch)\b"}
+          result=[]
+          for idx,src in cells:
+              try: tree=ast.parse(src)
+              except SyntaxError: tree=None
+              found={k:len(re.findall(v,src)) for k,v in tags.items()}
+              functions=[n.name for n in ast.walk(tree) if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))] if tree else []
+              result.append({"cell":idx,"lines":len(src.splitlines()),"tags":found,"functions":functions[:30],"ast_parsed":tree is not None})
+          print("GRAPHSOURCE_AUDIT="+json.dumps({"filename":p.name,"sha256":hashlib.sha256(raw).hexdigest(),"cells":result,"source_executed":False,"gpu":False,"submission":False}),flush=True)
+          PY
