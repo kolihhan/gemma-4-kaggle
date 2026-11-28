@@ -1,0 +1,17 @@
+name: Gemma semantic diagnostic pair CPU smoke
+on:
+  push:
+    branches: [research/independent-reset-20261128]
+    paths: [.github/workflows/gemma-semantic-counterfactual-pair-smoke-20261128.yml]
+permissions: {contents: read}
+jobs:
+  smoke:
+    if: github.event.head_commit.message == 'GO_SEMANTIC_PAIR_SMOKE_CPU_20261128'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python scripts/freeze_semantic_counterfactual_20261128.py --smoke
