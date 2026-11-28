@@ -1,3 +1,9 @@
+# 2026-11-28 — Frozen semantic diagnostic STOP (ineligible control)
+
+[Action #46150790856](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/46150790856) terminal FAILURE: MechanicalSoup #455 noop F2P 0/2 pass, gold 2/2 pass; both P2P 116/117 pass and one missing, upstream resolved=false. Strict eligibility false. Follow preregistered no-replacement gate; do not alter scoring or substitute already-inspected CodeCarbon/LiteLLM. No model request captured or witness constructed for fresh eligible case, no 31B inference, GPU, training, or submission. [Terminal record](docs/research/2026-11-28-semantic-policy-decision.md). CPU audit loop stopped; no deployable improvement established. Last authenticated Public .18, C pending at last check, Private unknown.
+
+---
+
 # 2026-11-28 — Single fresh semantic diagnostic preparation
 
 [One-case CPU control #46150790856](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/46150790856) running, frozen one new source-disjoint issue, strict full F2P/P2P and upstream resolution gate, no replacement. [Paired request freezer smoke #46150836386](https://github.com/kolihhan/gemma-4-kaggle/actions/runs/46150836386) terminal SUCCESS, SEMANTIC_PAIR_SMOKE=PASS. Script freezes same captured model request and appends control vs issue-only observation; no actual captured request or fresh witness yet, no model runner/injection into official scorer. Synthetic smoke is not evidence of repair strength. Do not widen benchmark or launch inference until separate explicit authorization. [Protocol](docs/research/2026-11-28-semantic-policy-decision.md). No GPU, model inference, training, or submission. Last verified Public .18, Private unknown.
